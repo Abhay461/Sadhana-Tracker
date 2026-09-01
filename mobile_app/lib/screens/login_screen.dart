@@ -47,6 +47,14 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _passwordController.text.trim(),
       );
       if (credential.user != null) {
+        // Sync user profile with backend (creates if not exists)
+        try {
+          await ApiService.post('/auth/sync', {
+            'name': credential.user!.displayName ?? _emailController.text.trim().split('@')[0],
+            'email': _emailController.text.trim(),
+          });
+        } catch (_) {}
+
         try {
           final profileResponse = await ApiService.get('/users/me');
           if (profileResponse != null && profileResponse is Map) {

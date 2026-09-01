@@ -35,9 +35,19 @@ export class AdminService {
 
   private normalizePhone(rawPhone: string): string {
     try {
-      if (!rawPhone.startsWith('+')) rawPhone = `+${rawPhone}`;
-      const parsed = this.phoneUtil.parseAndKeepRawInput(rawPhone, 'IN');
-      return this.phoneUtil.format(parsed, PhoneNumberFormat.E164);
+      let formatted = rawPhone.trim();
+      if (!formatted.startsWith('+')) {
+        if (/^\d{10}$/.test(formatted)) {
+          formatted = `+91${formatted}`;
+        } else {
+          formatted = `+${formatted}`;
+        }
+      }
+      const parsed = this.phoneUtil.parseAndKeepRawInput(formatted, 'IN');
+      if (this.phoneUtil.isValidNumber(parsed)) {
+        return this.phoneUtil.format(parsed, PhoneNumberFormat.E164);
+      }
+      return formatted;
     } catch (_) {
       return rawPhone.trim();
     }

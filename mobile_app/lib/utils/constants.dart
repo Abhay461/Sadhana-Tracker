@@ -2,7 +2,7 @@
 class Constants {
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:3000/api/v1',
+    defaultValue: 'https://sadhana-tracker-qq6m.onrender.com/api/v1',
   );
 
   static const String oneSignalAppId = String.fromEnvironment(

@@ -688,9 +688,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                                   ),
                                   validator: (value) {
-                                    if (value == null || value.isEmpty) return 'Enter WhatsApp number';
-                                    if (!RegExp(r'^[0-9]{10}$').hasMatch(value)) {
-                                      return 'Enter valid 10-digit number';
+                                    if (value == null || value.trim().isEmpty) return 'Enter WhatsApp number';
+                                    final cleanVal = value.trim();
+                                    if (!RegExp(r'^\+?[0-9]{10,13}$').hasMatch(cleanVal)) {
+                                      return 'Enter valid 10-digit number or +91 format';
                                     }
                                     return null;
                                   },
