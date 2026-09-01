@@ -173,15 +173,18 @@ export class AuthService {
         const nodemailer = require('nodemailer');
         const transporter = nodemailer.createTransport({
           host: 'smtp.gmail.com',
-          port: 465,
-          secure: true,
+          port: 587,
+          secure: false, // TLS via STARTTLS (Required for Render & Cloud servers)
           auth: {
             user: smtpUser.trim(),
             pass: cleanPass,
           },
-          connectionTimeout: 5000,
-          greetingTimeout: 5000,
-          socketTimeout: 8000,
+          tls: {
+            rejectUnauthorized: false,
+          },
+          connectionTimeout: 8000,
+          greetingTimeout: 8000,
+          socketTimeout: 10000,
         });
 
         await transporter.sendMail({
@@ -202,6 +205,7 @@ export class AuthService {
         this.logger.log(`Successfully sent OTP email to ${cleanEmail} via SMTP`);
       } catch (mailErr) {
         this.logger.error(`Failed to send email via Nodemailer: ${mailErr.message}`);
+        throw new BadRequestException(`Email delivery failed: ${mailErr.message}`);
       }
     } else {
       this.logger.warn(`SMTP credentials not set in environment. OTP for ${cleanEmail} logged to console: ${otp}`);
