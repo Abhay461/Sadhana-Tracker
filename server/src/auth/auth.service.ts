@@ -173,37 +173,35 @@ export class AuthService {
     const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
 
     if (smtpUser && smtpPass) {
-      try {
-        const cleanPass = smtpPass.replace(/\s+/g, '');
-        const nodemailer = require('nodemailer');
-        const transporter = nodemailer.createTransport({
-          service: 'gmail',
-          auth: {
-            user: smtpUser.trim(),
-            pass: cleanPass,
-          },
-        });
+      const cleanPass = smtpPass.replace(/\s+/g, '');
+      const nodemailer = require('nodemailer');
+      const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: smtpUser.trim(),
+          pass: cleanPass,
+        },
+      });
 
-        await transporter.sendMail({
-          from: `"Sadhana Tracker" <${smtpUser.trim()}>`,
-          to: cleanEmail,
-          subject: `${otp} is your Sadhana Tracker verification code`,
-          html: `
-            <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
-              <h2 style="color: #6366F1;">Hare Krishna!</h2>
-              <p>Your 6-digit OTP verification code for <strong>Sadhana Tracker</strong> registration is:</p>
-              <div style="background: #F1F5F9; padding: 16px; border-radius: 8px; text-align: center; font-size: 28px; font-weight: bold; letter-spacing: 4px; color: #312E81;">
-                ${otp}
-              </div>
-              <p style="margin-top: 16px; color: #64748B; font-size: 13px;">This code is valid for 10 minutes. If you did not request this, please ignore this email.</p>
+      transporter.sendMail({
+        from: `"Sadhana Tracker" <${smtpUser.trim()}>`,
+        to: cleanEmail,
+        subject: `${otp} is your Sadhana Tracker verification code`,
+        html: `
+          <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+            <h2 style="color: #6366F1;">Hare Krishna!</h2>
+            <p>Your 6-digit OTP verification code for <strong>Sadhana Tracker</strong> registration is:</p>
+            <div style="background: #F1F5F9; padding: 16px; border-radius: 8px; text-align: center; font-size: 28px; font-weight: bold; letter-spacing: 4px; color: #312E81;">
+              ${otp}
             </div>
-          `,
-        });
+            <p style="margin-top: 16px; color: #64748B; font-size: 13px;">This code is valid for 10 minutes. If you did not request this, please ignore this email.</p>
+          </div>
+        `,
+      }).then(() => {
         this.logger.log(`Successfully sent OTP email to ${cleanEmail} via SMTP`);
-      } catch (mailErr) {
+      }).catch((mailErr) => {
         this.logger.error(`Failed to send email via Nodemailer: ${mailErr.message}`);
-        throw new BadRequestException(`Email delivery failed: ${mailErr.message}`);
-      }
+      });
     } else {
       this.logger.warn(`SMTP credentials not set in environment. OTP for ${cleanEmail} logged to console: ${otp}`);
     }

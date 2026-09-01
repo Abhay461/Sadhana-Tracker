@@ -82,7 +82,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
     try {
       final res = await ApiService.post('/auth/send-email-otp', {'email': email})
-          .timeout(const Duration(seconds: 15));
+          .timeout(const Duration(seconds: 45));
       if (!mounted) return;
       setState(() {
         _isLoading = false;
