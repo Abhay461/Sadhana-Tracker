@@ -177,19 +177,11 @@ export class AuthService {
         const cleanPass = smtpPass.replace(/\s+/g, '');
         const nodemailer = require('nodemailer');
         const transporter = nodemailer.createTransport({
-          host: 'smtp.gmail.com',
-          port: 587,
-          secure: false, // TLS via STARTTLS (Required for Render & Cloud servers)
+          service: 'gmail',
           auth: {
             user: smtpUser.trim(),
             pass: cleanPass,
           },
-          tls: {
-            rejectUnauthorized: false,
-          },
-          connectionTimeout: 8000,
-          greetingTimeout: 8000,
-          socketTimeout: 10000,
         });
 
         await transporter.sendMail({
