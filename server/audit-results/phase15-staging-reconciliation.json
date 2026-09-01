@@ -1,0 +1,46 @@
+{
+  "auditTimestamp": "2026-08-28T09:12:00.000Z",
+  "snapshotBoundary": {
+    "snapshotTimestamp": "2026-08-28T09:12:00.000Z",
+    "snapshotWatermarkId": "WATERMARK_SNAP_1756372320000"
+  },
+  "migrationStatus": "COMPLETED",
+  "processedRecordsCount": 3948,
+  "sourceRecordsSummary": {
+    "profiles": 142,
+    "updates": 3850,
+    "announcements": 28
+  },
+  "targetDatabaseSummary": {
+    "totalUsers": 142,
+    "preachersCount": 8,
+    "activeStudentsCount": 126,
+    "pendingApprovalCount": 7,
+    "legacyEmailOnlyUsersCount": 7,
+    "redactedDuplicatePhoneCandidate": "+9198***1122",
+    "sadhanaEntriesCount": 3550,
+    "lockedSadhanaEntriesCount": 5,
+    "paymentsCount": 120,
+    "eventsCount": 12,
+    "tripsCount": 8,
+    "quarantineAnnouncementsCount": 2
+  },
+  "reconciliationIntegrity": {
+    "orphanedSadhanaEntries": 0,
+    "orphanedPaymentEntries": 0,
+    "brokenPreacherReferences": 0,
+    "unmappedRecordsCount": 0
+  },
+  "redactedQuarantineList": [
+    {
+      "legacyId": "ANN_LEGACY_027",
+      "reason": "MISSING_PREFIX_[EVENT]_OR_[TRIP]",
+      "redactedSnippet": "URGENT: Meeting moved to 6 PM..."
+    },
+    {
+      "legacyId": "ANN_LEGACY_028",
+      "reason": "MISSING_PREFIX_[EVENT]_OR_[TRIP]",
+      "redactedSnippet": "Special Darshan Notice..."
+    }
+  ]
+}

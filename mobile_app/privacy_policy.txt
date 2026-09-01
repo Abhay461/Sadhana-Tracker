@@ -1,0 +1,44 @@
+PRIVACY POLICY
+Last updated: July 9, 2026
+
+This privacy policy governs your use of the mobile application "Sadhana Path Tracker" (the "Application") created by the development team. The Application is designed to help students record their daily spiritual activities (sadhana) and share them with their assigned preachers for guidance and progress monitoring.
+
+1. INFORMATION WE COLLECT
+We collect and process the following categories of information to provide the services of the Application:
+- Account & Profile Information: Full Name, Email Address, WhatsApp / Phone Number, and Optional Profile Photo. If applicable, Date of Birth and Joining Date are also stored.
+- Sadhana & Devotional Data: Daily entries of spiritual activities, including chanting rounds, wake-up/sleep times, reading logs, online/temple sessions attended, and volunteer services performed.
+- Screen Time Usage Stats (Optional): On Android devices, if you explicitly grant permission, the Application retrieves the total daily screen time and breakdown of application durations to log screen time statistics as part of the daily schedule overview.
+
+2. PERMISSIONS REQUIRED
+To provide full functionality, the Application may request the following device permissions:
+- Photo Gallery / Storage Access: Used exclusively to allow you to select and upload a profile photo.
+- Notification Permissions: Used to send you daily reminders to log your sadhana and updates regarding event bookings.
+- Usage Stats Access (Android Screen Time): An optional permission that retrieves application usage statistics to automatically format and log screen time details.
+
+3. HOW WE USE YOUR INFORMATION
+The collected information is used solely for the following purposes:
+- To set up and manage your user account.
+- To display and track your spiritual progress over time.
+- To share your sadhana logs with your explicitly assigned preacher for spiritual counseling and mentorship.
+- To enable accommodation, trip, or event bookings organized by the preacher administration.
+
+4. DATA SHARING AND DISCLOSURE
+We do not sell, rent, trade, or distribute your personal data to any third-party commercial entities. Your information is only shared within the Application context as follows:
+- With Your Preacher: Your assigned preacher can view your profile, name, WhatsApp number, and daily sadhana history to guide you.
+- With Backend Providers: Your data is transmitted and stored securely using our primary infrastructure provider (Supabase) and image hosting services (Cloudinary).
+
+5. SECURITY OF YOUR DATA
+We are committed to protecting your personal information. All communication with our servers is encrypted using Industry Standard SSL/TLS protocols. User profiles and application databases are securely maintained on cloud databases equipped with strict Row-Level Security (RLS) policies to prevent unauthorized data access.
+
+6. DATA RETENTION AND DELETION RIGHTS
+We retain your personal data for as long as your account remains active. You have the right to request the deletion of your account and associated records at any time. To request deletion, please contact us at the email provided below, and we will purge your personal records from our databases within 7 business days.
+
+7. CHILDREN'S PRIVACY
+Our services do not target children under the age of 13. If you are a parent or guardian and discover that your child has provided us with personal information without consent, please contact us immediately so we can remove the data from our servers.
+
+8. CONTACT US
+If you have any questions, feedback, or data deletion requests regarding this Privacy Policy, please contact us at:
+Email: abhaykumarsalempur8521@gmail.com
+
+---
+© 2026 Sadhana Path Tracker. All rights reserved.

@@ -1,0 +1,85 @@
+{
+  "timestamp": "2026-08-31T16:35:00.000Z",
+  "phase": "PHASE_20_FINAL_DECOMMISSION",
+  "status": "DECOMMISSIONED_SUCCESSFULLY",
+  "finalDecommissionGate": "PASSED",
+  "preDecommissionDependencyCount": {
+    "mobile": 24,
+    "server": 0
+  },
+  "finalDependencyCount": {
+    "mobile": 0,
+    "server": 0
+  },
+  "productionMongoDBCounts": {
+    "users": 142,
+    "preachers": 8,
+    "activeStudents": 126,
+    "pendingApproval": 7,
+    "legacyEmailOnlyAccounts": 7,
+    "sadhanaEntries": 3995,
+    "payments": 135,
+    "accommodations": 80,
+    "screenTimeLogs": 100,
+    "events": 12,
+    "trips": 8,
+    "announcements": 28,
+    "quarantineAnnouncements": 2,
+    "migrationConflicts": 1,
+    "orphanedRecords": 0,
+    "brokenPreacherReferences": 0,
+    "unexplainedDataLoss": 0
+  },
+  "backupVerificationResults": {
+    "postgreSQLBackup": {
+      "file": "supabase_prod_dump_20260831_152000.sql.gz",
+      "path": "d:/work update app/server/backups/supabase_prod_dump_20260831_152000.sql.gz",
+      "exists": true,
+      "readable": true,
+      "nonZeroSize": true,
+      "status": "VERIFIED"
+    },
+    "mongoDBBackup": {
+      "file": "WATERMARK_SNAP_1756372320000.json",
+      "path": "d:/work update app/server/backups/WATERMARK_SNAP_1756372320000.json",
+      "exists": true,
+      "readable": true,
+      "nonZeroSize": true,
+      "status": "VERIFIED"
+    }
+  },
+  "firebaseVerification": {
+    "status": "VERIFIED",
+    "providers": [
+      "Google Sign-In",
+      "Email/Password"
+    ],
+    "phoneOTP": "DEFERRED / HIDDEN FROM UI"
+  },
+  "fcmVerification": {
+    "status": "VERIFIED",
+    "foreground": "TESTED AND WORKING",
+    "backgroundTerminated": "NOT EXECUTED"
+  },
+  "productionHealthResults": {
+    "healthEndpoint": 200,
+    "healthDbEndpoint": 200,
+    "status": "HEALTHY"
+  },
+  "productionTrafficVerification": {
+    "activeRoute": "Flutter -> Firebase Auth -> NestJS Production API -> MongoDB Atlas",
+    "supabaseTraffic": "0% (DECOMMISSIONED)"
+  },
+  "exactDecommissionOperationsPerformed": [
+    "Removed legacy Supabase anon and service keys from application environment runtime configs.",
+    "Refactored 24 Flutter mobile app files to rely on ApiService and Firebase Auth.",
+    "Decommissioned legacy Supabase REST/Realtime database connection from production traffic.",
+    "Preserved PostgreSQL database dump (supabase_prod_dump_20260831_152000.sql.gz) and MongoDB watermark snapshot (WATERMARK_SNAP_1756372320000)."
+  ],
+  "unrelatedProductionSystemsModified": false,
+  "warnings": [
+    "Phone OTP remains deferred until physical carrier SMS gateway testing occurs.",
+    "Background/terminated FCM push notification delivery remains classified as NOT EXECUTED."
+  ],
+  "rollbackLimitations": "Supabase application traffic cutover is complete. Rolling back requires re-enabling legacy Supabase keys in mobile_app/constants.dart."
+}

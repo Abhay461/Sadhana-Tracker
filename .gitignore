@@ -1,0 +1,24 @@
+# Ignore zip archives
+*.zip
+*.tar.gz
+*.rar
+
+# Node / NestJS dependencies & build
+node_modules/
+dist/
+.env
+.env.production
+.env.staging
+
+# Flutter / Android build files
+mobile_app/.dart_tool/
+mobile_app/.pub/
+mobile_app/build/
+mobile_app/*.apk
+mobile_app/*.aab
+
+# IDE & OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

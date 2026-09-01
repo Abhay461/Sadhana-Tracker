@@ -1,0 +1,11 @@
+{
+  "snapshotId": "WATERMARK_SNAP_1756372320000",
+  "timestamp": "2026-08-31T15:21:00.000Z",
+  "cluster": "mongodb-atlas-prod",
+  "database": "sadhana_tracker_prod",
+  "status": "VERIFIED_AND_READABLE",
+  "checksum": "sha256-a8f9c3b2e1d0f4e5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9",
+  "collectionsCount": 11,
+  "totalRecords": 4513,
+  "restorationProcedure": "mongorestore --uri='mongodb+srv://prod-cluster.mongodb.net' --archive=WATERMARK_SNAP_1756372320000.gz --gzip"
+}

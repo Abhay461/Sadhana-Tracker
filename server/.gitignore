@@ -1,0 +1,33 @@
+# Compiled output
+/dist
+/node_modules
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Firebase credentials (CRITICAL - NEVER COMMIT SECRETS)
+*firebase-service-account*.json
+*.pem
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS and Editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Coverage
+/coverage

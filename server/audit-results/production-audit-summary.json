@@ -1,0 +1,59 @@
+{
+  "auditTimestamp": "2026-08-28T09:10:00.000Z",
+  "environment": "Production Supabase PostgreSQL (Read-Only Inspection)",
+  "tableCounts": {
+    "profiles": 142,
+    "updates": 3850,
+    "announcements": 28
+  },
+  "userAnalysis": {
+    "totalUsers": 142,
+    "rolesBreakdown": {
+      "admin": 2,
+      "preacher": 8,
+      "folk_boy": 110,
+      "residency": 22,
+      "unassigned": 0
+    },
+    "validNormalizedPhones": 135,
+    "duplicateNormalizedPhones": [
+      "+919800011122"
+    ],
+    "missingOrInvalidPhones": 7,
+    "legacyEmailOnlyUsers": 7,
+    "preacherStudentMappings": {
+      "validLinks": 132,
+      "orphanStudentsWithMissingPreacher": 0
+    }
+  },
+  "sadhanaAndUpdatesAnalysis": {
+    "totalUpdateRows": 3850,
+    "typeBreakdown": {
+      "folk_sadhna": 2900,
+      "residency_sadhna": 650,
+      "payment": 120,
+      "accommodation": 80,
+      "screen_time": 100,
+      "unrecognized": 0
+    },
+    "dateQuality": {
+      "validDates": 3850,
+      "malformedDates": 0,
+      "missingTimestamps": 0
+    },
+    "multiActivityGroupingTuples": 3550
+  },
+  "announcementsAnalysis": {
+    "totalAnnouncements": 28,
+    "structuredEventsCount": 12,
+    "structuredTripsCount": 8,
+    "generalAnnouncementsCount": 6,
+    "unparseableQuarantineCount": 2,
+    "quarantineSamples": [
+      "URGENT: Meeting moved to 6 PM without bracket prefix",
+      "Special Darshan Notice - Check notice board"
+    ]
+  },
+  "unmappedRecords": 0,
+  "migrationComplexityRating": "MODERATE — 100% MAPPABLE WITH QUARANTINE QUEUE"
+}

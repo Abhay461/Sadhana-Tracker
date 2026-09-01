@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "257202442254",
+    "project_id": "sadhana-tracker-e0af3",
+    "storage_bucket": "sadhana-tracker-e0af3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:257202442254:android:69d5dade4e79b50ad16c5f",
+        "android_client_info": {
+          "package_name": "com.sadhana.tracker"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAsVvaviG66Gg6velZFZJpzyShuD6oghTI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

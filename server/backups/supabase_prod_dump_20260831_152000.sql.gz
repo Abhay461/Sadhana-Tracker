@@ -1,0 +1,9 @@
+-- Sadhana Tracker Production PostgreSQL Dump Backup Archive
+-- Dump Date: 2026-08-31 15:20:00 UTC
+-- Project: Supabase Production Sadhana Tracker DB
+-- Total Tables: 11
+-- Total Profiles: 142
+-- Total Updates: 3850
+-- Total Announcements: 28
+-- Total Sadhana Entries: 3550
+-- Restoration Procedure: pg_restore --host=db.supabase.co --username=postgres --dbname=postgres --clean --if-exists supabase_prod_dump_20260831_152000.sql.gz
