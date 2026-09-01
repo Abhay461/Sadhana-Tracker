@@ -28,7 +28,7 @@ export class Payment {
   @Prop({ type: String, default: 'MANUAL' }) // 'MANUAL', 'RAZORPAY', 'STRIPE', 'UPI'
   paymentProvider: string;
 
-  @Prop({ type: String, sparse: true, index: true, default: null }) // Provider Payment / Order ID
+  @Prop({ type: String, sparse: true, default: null }) // Provider Payment / Order ID
   transactionReferenceId: string;
 
   @Prop({ type: String, default: '' })

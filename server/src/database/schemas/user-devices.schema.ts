@@ -20,7 +20,7 @@ export class UserDevice {
   @Prop({ type: String, default: '1.0.0' })
   appVersion: string;
 
-  @Prop({ type: Date, default: Date.now, index: true })
+  @Prop({ type: Date, default: Date.now })
   lastSeenAt: Date;
 }
 
