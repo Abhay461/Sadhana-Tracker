@@ -169,6 +169,7 @@ export class AuthService {
     this.otpStore.set(cleanEmail, { otp, expiresAt });
     this.logger.log(`[EMAIL OTP GENERATED] Email: ${cleanEmail} -> OTP: ${otp}`);
 
+    const brevoApiKey = process.env.BREVO_API_KEY;
     const resendApiKey = process.env.RESEND_API_KEY;
     const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
     const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
@@ -184,7 +185,30 @@ export class AuthService {
       </div>
     `;
 
-    if (resendApiKey) {
+    if (brevoApiKey) {
+      // 1. Send via Brevo API (100% Free to ANY Email address, 300 emails/day)
+      try {
+        fetch('https://api.brevo.com/v3/smtp/email', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'api-key': brevoApiKey.trim(),
+          },
+          body: JSON.stringify({
+            sender: { name: 'Sadhana Tracker', email: smtpUser?.trim() || 'sadhanatracker@gmail.com' },
+            to: [{ email: cleanEmail }],
+            subject: `${otp} is your Sadhana Tracker verification code`,
+            htmlContent: htmlContent,
+          }),
+        }).then(res => res.json()).then(data => {
+          this.logger.log(`Successfully sent OTP email to ${cleanEmail} via Brevo API: ${JSON.stringify(data)}`);
+        }).catch(err => {
+          this.logger.error(`Failed to send email via Brevo API: ${err.message}`);
+        });
+      } catch (err) {
+        this.logger.error(`Brevo API Error: ${err.message}`);
+      }
+    } else if (resendApiKey) {
       try {
         fetch('https://api.resend.com/emails', {
           method: 'POST',
