@@ -30,4 +30,20 @@ export class UsersService {
     }
     return user;
   }
+
+  async getPublicPreachers() {
+    const preachers = await this.userModel
+      .find({ role: 'preacher', status: 'ACTIVE' })
+      .select('_id name email preacherCode photoUrl')
+      .sort({ name: 1 });
+
+    return preachers.map((p) => ({
+      id: p._id.toString(),
+      _id: p._id.toString(),
+      name: p.name,
+      email: p.email,
+      preacherCode: p.preacherCode,
+      photoUrl: p.photoUrl,
+    }));
+  }
 }
