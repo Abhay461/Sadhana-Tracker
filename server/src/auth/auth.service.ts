@@ -169,10 +169,45 @@ export class AuthService {
     this.otpStore.set(cleanEmail, { otp, expiresAt });
     this.logger.log(`[EMAIL OTP GENERATED] Email: ${cleanEmail} -> OTP: ${otp}`);
 
+    const resendApiKey = process.env.RESEND_API_KEY;
     const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
     const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
 
-    if (smtpUser && smtpPass) {
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+        <h2 style="color: #6366F1;">Hare Krishna!</h2>
+        <p>Your 6-digit OTP verification code for <strong>Sadhana Tracker</strong> registration is:</p>
+        <div style="background: #F1F5F9; padding: 16px; border-radius: 8px; text-align: center; font-size: 28px; font-weight: bold; letter-spacing: 4px; color: #312E81;">
+          ${otp}
+        </div>
+        <p style="margin-top: 16px; color: #64748B; font-size: 13px;">This code is valid for 10 minutes. If you did not request this, please ignore this email.</p>
+      </div>
+    `;
+
+    if (resendApiKey) {
+      try {
+        fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${resendApiKey.trim()}`,
+          },
+          body: JSON.stringify({
+            from: 'onboarding@resend.dev',
+            to: [cleanEmail],
+            subject: `${otp} is your Sadhana Tracker verification code`,
+            html: htmlContent,
+          }),
+        }).then(res => res.json()).then(data => {
+          this.logger.log(`Successfully sent OTP email to ${cleanEmail} via Resend API: ${JSON.stringify(data)}`);
+        }).catch(err => {
+          this.logger.error(`Failed to send email via Resend API: ${err.message}`);
+        });
+      } catch (err) {
+        this.logger.error(`Resend API Error: ${err.message}`);
+      }
+    } else if (smtpUser && smtpPass) {
+      // 2. Fallback to Gmail Nodemailer SMTP
       const cleanPass = smtpPass.replace(/\s+/g, '');
       const nodemailer = require('nodemailer');
       const transporter = nodemailer.createTransport({
@@ -187,16 +222,7 @@ export class AuthService {
         from: `"Sadhana Tracker" <${smtpUser.trim()}>`,
         to: cleanEmail,
         subject: `${otp} is your Sadhana Tracker verification code`,
-        html: `
-          <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
-            <h2 style="color: #6366F1;">Hare Krishna!</h2>
-            <p>Your 6-digit OTP verification code for <strong>Sadhana Tracker</strong> registration is:</p>
-            <div style="background: #F1F5F9; padding: 16px; border-radius: 8px; text-align: center; font-size: 28px; font-weight: bold; letter-spacing: 4px; color: #312E81;">
-              ${otp}
-            </div>
-            <p style="margin-top: 16px; color: #64748B; font-size: 13px;">This code is valid for 10 minutes. If you did not request this, please ignore this email.</p>
-          </div>
-        `,
+        html: htmlContent,
       }).then(() => {
         this.logger.log(`Successfully sent OTP email to ${cleanEmail} via SMTP`);
       }).catch((mailErr) => {
