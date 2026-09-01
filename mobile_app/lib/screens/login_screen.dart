@@ -56,18 +56,7 @@ class _LoginScreenState extends State<LoginScreen> {
         } catch (_) {}
 
         try {
-          final profileResponse = await ApiService.get('/users/me');
-          if (profileResponse != null && profileResponse is Map) {
-            final status = profileResponse['status'] ?? 'ACTIVE';
-            if (status == 'PENDING_APPROVAL') {
-              await FirebaseAuth.instance.signOut();
-              setState(() {
-                _errorMessage = 'Your account is pending preacher approval.';
-                _isLoading = false;
-              });
-              return;
-            }
-          }
+          await ApiService.get('/users/me');
         } catch (_) {}
 
         if (mounted) {

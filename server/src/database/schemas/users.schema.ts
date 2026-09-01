@@ -28,7 +28,7 @@ export class User {
   @Prop({
     type: String,
     enum: ['ACTIVE', 'PENDING_APPROVAL', 'BLOCKED', 'DEACTIVATED'],
-    default: 'PENDING_APPROVAL',
+    default: 'ACTIVE',
     index: true,
   })
   status: string;

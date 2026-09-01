@@ -111,7 +111,7 @@ export class AuthService {
           name: dto.name,
           email: email ? email.toLowerCase().trim() : null,
           role: assignedRole,
-          status: 'PENDING_APPROVAL',
+          status: 'ACTIVE',
           preacherId,
           photoUrl: dto.photoUrl || null,
         });

@@ -89,7 +89,7 @@ class _SignupScreenState extends State<SignupScreen> {
       if (user != null) {
         await ApiService.post('/auth/sync', {
           'name': _nameController.text.trim(),
-          'role': 'pending_$_role',
+          'role': _role,
           'preacherId': _selectedPreacher?['id'] ?? _selectedPreacher?['_id'],
           'phoneNumber': formattedWhatsappWithDates,
           'email': _emailController.text.trim(),
@@ -100,7 +100,7 @@ class _SignupScreenState extends State<SignupScreen> {
       setState(() {
         _isLoading = false;
         _successMessage =
-            'Registration successful! Your account is pending preacher approval. Please wait for your preacher to approve your account before logging in.';
+            'Registration successful! Your account is active. You can now log in.';
       });
     } catch (e) {
       setState(() {

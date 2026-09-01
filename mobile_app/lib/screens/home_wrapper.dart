@@ -55,21 +55,11 @@ class _HomeWrapperState extends State<HomeWrapper> {
     try {
       // Sync or fetch user profile from NestJS API
       final response = await ApiService.get('/users/me').timeout(const Duration(seconds: 15));
-      final role = (response is Map ? response['role'] : null) ?? 'folk_boy';
-
-      if (role.toString().startsWith('pending_')) {
-        await FirebaseAuth.instance.signOut();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Your account is pending preacher approval.')),
-          );
-          Navigator.pushReplacementNamed(context, '/login');
-        }
-        return;
-      }
+      final rawRole = (response is Map ? response['role'] : null) ?? 'folk_boy';
+      final role = rawRole.toString().replaceAll('pending_', '');
 
       if (mounted) {
-        _navigateToRole(role.toString());
+        _navigateToRole(role);
       }
     } catch (e) {
       debugPrint('HOME_WRAPPER API Error: $e');
