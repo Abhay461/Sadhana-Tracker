@@ -157,7 +157,12 @@ export class AuthService {
   private readonly otpStore = new Map<string, { otp: string; expiresAt: number }>();
 
   async sendEmailOtp(emailStr: string) {
-    const cleanEmail = emailStr.toLowerCase().trim();
+    const cleanEmail = (emailStr || '').toLowerCase().trim();
+    const emailRegex = /^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/;
+    if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+      throw new BadRequestException('Please enter a valid email address.');
+    }
+
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
 

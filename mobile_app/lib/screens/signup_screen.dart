@@ -91,8 +91,8 @@ class _SignupScreenState extends State<SignupScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _isLoading = false;
-        _errorMessage = e.toString().replaceAll('Exception: ', '');
+        final String errStr = e is ApiException ? e.message : e.toString().replaceAll('Exception: ', '');
+        _errorMessage = errStr;
       });
     }
   }
@@ -199,7 +199,7 @@ class _SignupScreenState extends State<SignupScreen> {
                             } catch (err) {
                               setModalState(() {
                                 isVerifying = false;
-                                modalError = err.toString().replaceAll('Exception: ', '');
+                                modalError = err is ApiException ? err.message : err.toString().replaceAll('Exception: ', '');
                               });
                             }
                           },
@@ -681,7 +681,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
         // Complete Registration Button
         AuthPrimaryButton(
-          label: 'Send SMS OTP',
+          label: 'Send Email OTP',
           isLoading: _isLoading,
           onPressed: () {
             if (!_formKey.currentState!.validate()) return;
