@@ -7,7 +7,6 @@ import 'screens/signup_screen.dart';
 import 'screens/home_wrapper.dart';
 import 'screens/folk_boy_dashboard.dart';
 import 'screens/preacher_dashboard.dart';
-import 'screens/residency_dashboard.dart';
 import 'screens/admin_dashboard.dart';
 import 'screens/reset_password_screen.dart';
 
@@ -53,7 +52,7 @@ class MyApp extends StatelessWidget {
         '/signup': (context) => const SignupScreen(),
         '/reset-password': (context) => const ResetPasswordScreen(),
         '/folk-boy': (context) => const FolkBoyDashboard(),
-        '/residency': (context) => const ResidencyDashboard(),
+        '/residency': (context) => const FolkBoyDashboard(),
         '/preacher': (context) => const PreacherDashboard(),
         '/admin-control-panel': (context) => const AdminDashboard(),
       },

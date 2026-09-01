@@ -43,6 +43,9 @@ class _SignupScreenState extends State<SignupScreen> {
     _fetchPreachers();
   }
 
+  final _otpController = TextEditingController();
+  String? _verificationId;
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -52,6 +55,7 @@ class _SignupScreenState extends State<SignupScreen> {
     _whatsappController.dispose();
     _dobController.dispose();
     _joiningDateController.dispose();
+    _otpController.dispose();
     super.dispose();
   }
 
@@ -74,38 +78,202 @@ class _SignupScreenState extends State<SignupScreen> {
       _successMessage = null;
     });
 
-    try {
-      final String rawWhatsapp = _whatsappController.text.trim();
-      final String dobStr = _selectedDob != null ? DateFormat('yyyy-MM-dd').format(_selectedDob!) : 'N/A';
-      final String joinStr = _selectedJoiningDate != null ? DateFormat('yyyy-MM-dd').format(_selectedJoiningDate!) : 'N/A';
-      final String formattedWhatsappWithDates = '$rawWhatsapp | DOB:$dobStr | JOIN:$joinStr';
+    final String email = _emailController.text.trim();
 
-      final credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
+    try {
+      final res = await ApiService.post('/auth/send-email-otp', {'email': email});
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
+      _showOtpDialog(email);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = e.toString().replaceAll('Exception: ', '');
+      });
+    }
+  }
+
+  void _showOtpDialog(String email) {
+    _otpController.clear();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            bool isVerifying = false;
+            String? modalError;
+
+            return Container(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+                top: 24,
+                left: 24,
+                right: 24,
+              ),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(AppRadius.sheet),
+                  topRight: Radius.circular(AppRadius.sheet),
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFCBD5E1),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Enter 6-Digit Email OTP',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'We sent a 6-digit verification code to your email:\n$email',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 13,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  if (modalError != null) ...[
+                    Text(
+                      modalError!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.red, fontSize: 12),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  AuthTextField(
+                    controller: _otpController,
+                    label: '6-Digit OTP',
+                    hintText: 'e.g. 482910',
+                    keyboardType: TextInputType.number,
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: isVerifying
+                        ? null
+                        : () async {
+                            final otpCode = _otpController.text.trim();
+                            if (otpCode.length != 6) {
+                              setModalState(() {
+                                modalError = 'Please enter 6-digit OTP code';
+                              });
+                              return;
+                            }
+                            setModalState(() {
+                              isVerifying = true;
+                              modalError = null;
+                            });
+                            try {
+                              await ApiService.post('/auth/verify-email-otp', {
+                                'email': email,
+                                'otp': otpCode,
+                              });
+                              Navigator.pop(context);
+                              await _completeRegistration();
+                            } catch (err) {
+                              setModalState(() {
+                                isVerifying = false;
+                                modalError = err.toString().replaceAll('Exception: ', '');
+                              });
+                            }
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: isVerifying
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text(
+                            'Verify OTP & Register',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _completeRegistration() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final email = _emailController.text.trim();
+      final password = _passwordController.text.trim();
+
+      final userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
       );
 
-      final user = credential.user;
+      final user = userCredential.user;
+
       if (user != null) {
+        final String rawWhatsapp = _whatsappController.text.trim();
+        final String dobStr = _selectedDob != null ? DateFormat('yyyy-MM-dd').format(_selectedDob!) : 'N/A';
+        final String joinStr = _selectedJoiningDate != null ? DateFormat('yyyy-MM-dd').format(_selectedJoiningDate!) : 'N/A';
+        final String formattedWhatsappWithDates = '$rawWhatsapp | DOB:$dobStr | JOIN:$joinStr';
+
         await ApiService.post('/auth/sync', {
           'name': _nameController.text.trim(),
           'role': _role,
           'preacherId': _selectedPreacher?['id'] ?? _selectedPreacher?['_id'],
           'phoneNumber': formattedWhatsappWithDates,
-          'email': _emailController.text.trim(),
+          'email': email,
         });
       }
 
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _successMessage =
-            'Registration successful! Your account is active. You can now log in.';
+        _successMessage = 'Email verified & registration successful!';
+      });
+
+      Future.delayed(const Duration(seconds: 1), () {
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/home');
+        }
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _errorMessage = e.toString().replaceAll('Exception: ', '');
         _isLoading = false;
+        _errorMessage = e.toString().replaceAll('Exception: ', '');
       });
     }
   }
@@ -418,27 +586,6 @@ class _SignupScreenState extends State<SignupScreen> {
             ),
             const SizedBox(height: AppSpacing.md + 4),
 
-            // Registration Type Label & Segmented Selector (No Decorative Icons)
-            const Text(
-              'Registration Type',
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF475569),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.sm + 2),
-            AuthRoleSelector(
-              selectedRole: _role,
-              onRoleChanged: (newRole) {
-                setState(() {
-                  _role = newRole;
-                });
-              },
-            ),
-            const SizedBox(height: AppSpacing.md + 4),
-
             // Assigned Preacher Trigger Tile
             const Text(
               'Assigned Preacher',
@@ -533,7 +680,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
         // Complete Registration Button
         AuthPrimaryButton(
-          label: 'Complete Registration',
+          label: 'Send SMS OTP',
           isLoading: _isLoading,
           onPressed: () {
             if (!_formKey.currentState!.validate()) return;

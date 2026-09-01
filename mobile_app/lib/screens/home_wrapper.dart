@@ -32,8 +32,6 @@ class _HomeWrapperState extends State<HomeWrapper> {
   void _navigateToRole(String role) {
     if (role == 'preacher') {
       Navigator.pushReplacementNamed(context, '/preacher');
-    } else if (role == 'residency') {
-      Navigator.pushReplacementNamed(context, '/residency');
     } else if (role == 'admin') {
       Navigator.pushReplacementNamed(context, '/admin-control-panel');
     } else {

@@ -104,11 +104,9 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       profileData['preacher_id'] ??= profileData['preacherId'];
 
       final role = profileData['role'] as String?;
-      if (role != 'folk_boy' && role != 'admin') {
+      if (role != 'folk_boy' && role != 'residency' && role != 'admin') {
         if (mounted) {
-          if (role == 'residency') {
-            Navigator.pushReplacementNamed(context, '/residency');
-          } else if (role == 'preacher') {
+          if (role == 'preacher') {
             Navigator.pushReplacementNamed(context, '/preacher');
           } else {
             Navigator.pushReplacementNamed(context, '/home');
@@ -139,7 +137,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   }
 
   Future<void> _fetchUpdates() async {
-    if (_profile == null) return;
+    if (_profile == null || supabase == null) return;
     try {
       final data = await supabase
           .from('updates')
@@ -185,6 +183,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   }
 
   Future<void> _processClientSignals(List<dynamic> rawUpdates) async {
+    if (supabase == null) return;
     bool didChange = false;
     for (var u in rawUpdates) {
       final category = u['category'];
@@ -798,9 +797,10 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   }
 
   Future<void> _autoSyncScreenTime() async {
-    if (_profile == null || !Platform.isAndroid) return;
-
+    if (supabase == null) return;
     try {
+      if (!Platform.isAndroid || _profile == null) return;
+
       final bool hasPermission = await _screenTimeChannel.invokeMethod('checkPermission');
       if (!hasPermission) {
         debugPrint('AutoSyncScreenTime: Permission not granted. Skipping.');
@@ -2786,7 +2786,9 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         'points': points,
       };
 
-      await supabase.from('updates').insert(updateData);
+      if (supabase != null) {
+        await supabase.from('updates').insert(updateData);
+      }
       NotificationHelper.sendUpdateNotification(updateData).catchError((_) {});
 
       if (mounted) {

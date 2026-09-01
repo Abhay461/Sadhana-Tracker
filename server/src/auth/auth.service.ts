@@ -153,4 +153,83 @@ export class AuthService {
     this.logger.log(`Verified legacy email ${dto.legacyEmail} linked to firebaseUid ${firebaseUid}`);
     return legacyUser;
   }
+
+  private readonly otpStore = new Map<string, { otp: string; expiresAt: number }>();
+
+  async sendEmailOtp(emailStr: string) {
+    const cleanEmail = emailStr.toLowerCase().trim();
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+    this.otpStore.set(cleanEmail, { otp, expiresAt });
+    this.logger.log(`[EMAIL OTP GENERATED] Email: ${cleanEmail} -> OTP: ${otp}`);
+
+    const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
+    const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
+
+    if (smtpUser && smtpPass) {
+      try {
+        const nodemailer = require('nodemailer');
+        const transporter = nodemailer.createTransport({
+          service: 'gmail',
+          auth: {
+            user: smtpUser,
+            pass: smtpPass,
+          },
+        });
+
+        await transporter.sendMail({
+          from: `"Sadhana Tracker" <${smtpUser}>`,
+          to: cleanEmail,
+          subject: `${otp} is your Sadhana Tracker verification code`,
+          html: `
+            <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+              <h2 style="color: #6366F1;">Hare Krishna!</h2>
+              <p>Your 6-digit OTP verification code for <strong>Sadhana Tracker</strong> registration is:</p>
+              <div style="background: #F1F5F9; padding: 16px; border-radius: 8px; text-align: center; font-size: 28px; font-weight: bold; letter-spacing: 4px; color: #312E81;">
+                ${otp}
+              </div>
+              <p style="margin-top: 16px; color: #64748B; font-size: 13px;">This code is valid for 10 minutes. If you did not request this, please ignore this email.</p>
+            </div>
+          `,
+        });
+        this.logger.log(`Successfully sent OTP email to ${cleanEmail} via SMTP`);
+      } catch (mailErr) {
+        this.logger.error(`Failed to send email via Nodemailer: ${mailErr.message}`);
+      }
+    } else {
+      this.logger.warn(`SMTP credentials not set in environment. OTP for ${cleanEmail} logged to console: ${otp}`);
+    }
+
+    return {
+      success: true,
+      message: `Verification code sent to ${cleanEmail}`,
+    };
+  }
+
+  async verifyEmailOtp(emailStr: string, otpCode: string) {
+    const cleanEmail = emailStr.toLowerCase().trim();
+    const record = this.otpStore.get(cleanEmail);
+
+    if (!record) {
+      throw new BadRequestException('No verification code requested for this email address.');
+    }
+
+    if (Date.now() > record.expiresAt) {
+      this.otpStore.delete(cleanEmail);
+      throw new BadRequestException('Verification code has expired. Please request a new code.');
+    }
+
+    if (record.otp !== otpCode.trim()) {
+      throw new BadRequestException('Invalid 6-digit OTP code. Please check your email and try again.');
+    }
+
+    this.otpStore.delete(cleanEmail);
+    this.logger.log(`[EMAIL OTP VERIFIED SUCCESS] ${cleanEmail}`);
+
+    return {
+      success: true,
+      message: 'Email OTP verified successfully.',
+    };
+  }
 }
