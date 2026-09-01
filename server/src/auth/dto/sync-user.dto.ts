@@ -12,6 +12,21 @@ export class SyncUserDto {
   @IsEmail()
   email?: string;
 
+  @ApiProperty({ description: 'User role', required: false })
+  @IsOptional()
+  @IsString()
+  role?: string;
+
+  @ApiProperty({ description: 'Selected Preacher ID', required: false })
+  @IsOptional()
+  @IsString()
+  preacherId?: string;
+
+  @ApiProperty({ description: 'Phone / WhatsApp number', required: false })
+  @IsOptional()
+  @IsString()
+  phoneNumber?: string;
+
   @ApiProperty({ description: 'Assigned Preacher Code', required: false, example: 'PRCH-X8K92A' })
   @IsOptional()
   @IsString()

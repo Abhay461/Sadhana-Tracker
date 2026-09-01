@@ -84,7 +84,9 @@ export class AuthService {
       } else {
         // 3. New User Provisioning
         let preacherId = null;
-        if (dto.preacherCode) {
+        if (dto.preacherId) {
+          preacherId = dto.preacherId;
+        } else if (dto.preacherCode) {
           const preacher = await this.userModel.findOne({
             preacherCode: dto.preacherCode.toUpperCase().trim(),
             role: 'preacher',
@@ -94,14 +96,21 @@ export class AuthService {
           }
         }
 
-        const phoneToStore = normalizedPhone || `TEMP_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+        let assignedRole = 'folk_boy';
+        if (dto.role) {
+          if (dto.role.includes('residency')) assignedRole = 'residency';
+          else if (dto.role.includes('preacher')) assignedRole = 'preacher';
+          else assignedRole = 'folk_boy';
+        }
+
+        const phoneToStore = normalizedPhone || (dto.phoneNumber ? dto.phoneNumber.trim() : null) || `TEMP_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
 
         user = await this.userModel.create({
           firebaseUid,
           phoneNumber: phoneToStore,
           name: dto.name,
           email: email ? email.toLowerCase().trim() : null,
-          role: 'folk_boy',
+          role: assignedRole,
           status: 'PENDING_APPROVAL',
           preacherId,
           photoUrl: dto.photoUrl || null,
