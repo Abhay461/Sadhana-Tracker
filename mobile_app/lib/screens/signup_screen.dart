@@ -81,7 +81,8 @@ class _SignupScreenState extends State<SignupScreen> {
     final String email = _emailController.text.trim();
 
     try {
-      final res = await ApiService.post('/auth/send-email-otp', {'email': email});
+      final res = await ApiService.post('/auth/send-email-otp', {'email': email})
+          .timeout(const Duration(seconds: 15));
       if (!mounted) return;
       setState(() {
         _isLoading = false;

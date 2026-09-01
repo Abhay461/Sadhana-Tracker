@@ -169,17 +169,23 @@ export class AuthService {
 
     if (smtpUser && smtpPass) {
       try {
+        const cleanPass = smtpPass.replace(/\s+/g, '');
         const nodemailer = require('nodemailer');
         const transporter = nodemailer.createTransport({
-          service: 'gmail',
+          host: 'smtp.gmail.com',
+          port: 465,
+          secure: true,
           auth: {
-            user: smtpUser,
-            pass: smtpPass,
+            user: smtpUser.trim(),
+            pass: cleanPass,
           },
+          connectionTimeout: 5000,
+          greetingTimeout: 5000,
+          socketTimeout: 8000,
         });
 
         await transporter.sendMail({
-          from: `"Sadhana Tracker" <${smtpUser}>`,
+          from: `"Sadhana Tracker" <${smtpUser.trim()}>`,
           to: cleanEmail,
           subject: `${otp} is your Sadhana Tracker verification code`,
           html: `

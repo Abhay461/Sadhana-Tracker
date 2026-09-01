@@ -58,6 +58,7 @@ class _OnlineSessionTabState extends State<OnlineSessionTab> {
   }
 
   Future<void> _fetchOnlineSession() async {
+    if (widget.supabase == null) return;
     try {
       final sessionData = await widget.supabase
           .from('online_announcements')

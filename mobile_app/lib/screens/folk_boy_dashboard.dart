@@ -278,6 +278,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   }
 
   Future<void> _fetchAnnouncements() async {
+    if (supabase == null) return;
     try {
       // 1. Fetch Online Session
       final sessionData = await supabase
