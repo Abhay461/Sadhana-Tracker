@@ -169,8 +169,9 @@ export class AuthService {
     this.otpStore.set(cleanEmail, { otp, expiresAt });
     this.logger.log(`[EMAIL OTP GENERATED] Email: ${cleanEmail} -> OTP: ${otp}`);
 
-    const brevoApiKey = process.env.BREVO_API_KEY;
     const resendApiKey = process.env.RESEND_API_KEY;
+    const resendFromEmail = process.env.RESEND_FROM_EMAIL || process.env.EMAIL_FROM || process.env.SENDER_EMAIL;
+    const brevoApiKey = process.env.BREVO_API_KEY;
     const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
     const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
 
@@ -185,8 +186,37 @@ export class AuthService {
       </div>
     `;
 
-    if (brevoApiKey) {
-      // 1. Send via Brevo API (100% Free to ANY Email address, 300 emails/day)
+    if (resendApiKey && resendApiKey.trim()) {
+      // 1. Send via Resend API (Supports Custom Domain e.g. noreply@yourdomain.com)
+      const sender = resendFromEmail?.trim() || 'Sadhana Tracker <onboarding@resend.dev>';
+      try {
+        fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${resendApiKey.trim()}`,
+          },
+          body: JSON.stringify({
+            from: sender,
+            to: [cleanEmail],
+            subject: `${otp} is your Sadhana Tracker verification code`,
+            html: htmlContent,
+          }),
+        }).then(async (res) => {
+          const data = await res.json();
+          if (!res.ok) {
+            this.logger.error(`Resend API Error (${res.status}): ${JSON.stringify(data)}`);
+          } else {
+            this.logger.log(`Successfully sent OTP email to ${cleanEmail} via Resend API (from: ${sender}): ${JSON.stringify(data)}`);
+          }
+        }).catch((err) => {
+          this.logger.error(`Failed to send email via Resend API: ${err.message}`);
+        });
+      } catch (err) {
+        this.logger.error(`Resend API Execution Error: ${err.message}`);
+      }
+    } else if (brevoApiKey && brevoApiKey.trim()) {
+      // 2. Send via Brevo API (100% Free to ANY Email address, 300 emails/day)
       try {
         fetch('https://api.brevo.com/v3/smtp/email', {
           method: 'POST',
@@ -208,30 +238,8 @@ export class AuthService {
       } catch (err) {
         this.logger.error(`Brevo API Error: ${err.message}`);
       }
-    } else if (resendApiKey) {
-      try {
-        fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${resendApiKey.trim()}`,
-          },
-          body: JSON.stringify({
-            from: 'onboarding@resend.dev',
-            to: [cleanEmail],
-            subject: `${otp} is your Sadhana Tracker verification code`,
-            html: htmlContent,
-          }),
-        }).then(res => res.json()).then(data => {
-          this.logger.log(`Successfully sent OTP email to ${cleanEmail} via Resend API: ${JSON.stringify(data)}`);
-        }).catch(err => {
-          this.logger.error(`Failed to send email via Resend API: ${err.message}`);
-        });
-      } catch (err) {
-        this.logger.error(`Resend API Error: ${err.message}`);
-      }
     } else if (smtpUser && smtpPass) {
-      // 2. Fallback to Gmail Nodemailer SMTP
+      // 3. Fallback to Gmail / Custom SMTP Nodemailer
       const cleanPass = smtpPass.replace(/\s+/g, '');
       const nodemailer = require('nodemailer');
       const transporter = nodemailer.createTransport({
@@ -253,7 +261,7 @@ export class AuthService {
         this.logger.error(`Failed to send email via Nodemailer: ${mailErr.message}`);
       });
     } else {
-      this.logger.warn(`SMTP credentials not set in environment. OTP for ${cleanEmail} logged to console: ${otp}`);
+      this.logger.warn(`No email provider API credentials set in environment. OTP for ${cleanEmail} logged to console: ${otp}`);
     }
 
     return {

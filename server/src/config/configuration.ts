@@ -21,4 +21,8 @@ export default () => ({
     apiKey: process.env.CLOUDINARY_API_KEY || '',
     apiSecret: process.env.CLOUDINARY_API_SECRET || '',
   },
+  resend: {
+    apiKey: process.env.RESEND_API_KEY || '',
+    fromEmail: process.env.RESEND_FROM_EMAIL || process.env.EMAIL_FROM || process.env.SENDER_EMAIL || '',
+  },
 });
