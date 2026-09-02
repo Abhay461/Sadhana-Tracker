@@ -1,13 +1,9 @@
 import { Controller, Post, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import { SyncUserDto } from './dto/sync-user.dto';
-import { VerifyLegacyDto } from './dto/verify-legacy.dto';
+import { SendEmailOtpDto, VerifyEmailOtpDto, SyncUserDto, VerifyLegacyDto } from './dto';
 import { FirebaseAuthGuard } from '../common/guards/firebase-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-
-import { SendEmailOtpDto } from './dto/send-email-otp.dto';
-import { VerifyEmailOtpDto } from './dto/verify-email-otp.dto';
 
 @ApiTags('Authentication')
 @Controller('auth')
