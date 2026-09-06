@@ -27,6 +27,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   Map<String, dynamic>? _preacher;
   List<dynamic> _updates = [];
   List<Map<String, dynamic>> _announcements = [];
+  Map<String, dynamic>? _todayDarshan;
   bool _isLoadingProfile = true;
   bool _isAutoPromoting = false; // Guard against infinite recursion (Bug 4)
 
@@ -73,6 +74,22 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     super.initState();
     _loadProfileAndData();
     _fetchAnnouncements();
+    _fetchDailyDarshan();
+  }
+
+  Future<void> _fetchDailyDarshan() async {
+    try {
+      final response = await ApiService.get('/daily-darshan/today');
+      if (response != null && response is Map<String, dynamic>) {
+        if (mounted) {
+          setState(() {
+            _todayDarshan = response;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching daily darshan: $e');
+    }
   }
 
   @override
@@ -1147,21 +1164,21 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   Widget build(BuildContext context) {
     if (_isLoadingProfile) {
       return const Scaffold(
-        backgroundColor: Color(0xFFFAF8F5),
+        backgroundColor: Color(0xFFF8FAFC),
         body: Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_profile == null) {
       return Scaffold(
-        backgroundColor: const Color(0xFFFAF8F5),
+        backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
-          title: const Text('Folk Boy Dashboard', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-          backgroundColor: const Color(0xFF3F1200),
+          title: const Text('Folk Boy Dashboard', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+          backgroundColor: Colors.white,
           elevation: 0,
           actions: [
             IconButton(
-              icon: const Icon(Icons.logout, color: Colors.white70),
+              icon: const Icon(Icons.logout, color: Color(0xFF64748B)),
               onPressed: () {
                 try {
                   supabase.auth.signOut().catchError((_) {});
@@ -1195,36 +1212,32 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                 onPressed: () async {
                   setState(() => _isLoadingProfile = true);
                   try {
-                    final user = supabase.auth.currentUser;
+                    final user = FirebaseAuth.instance.currentUser;
                     if (user != null) {
-                      final metadata = user.userMetadata ?? {};
-                      await supabase.from('profiles').upsert({
-                        'id': user.id,
-                        'name': metadata['name'] ?? user.email?.split('@').first ?? 'User',
-                        'role': metadata['role'] ?? 'folk_boy',
-                        'preacher_id': metadata['preacher_id'],
-                        'whatsapp_number': metadata['whatsapp_number'] ?? 'Not provided',
+                      await ApiService.post('/auth/sync', {
+                        'name': user.displayName ?? user.email?.split('@').first ?? 'User',
                         'email': user.email,
+                        'photoUrl': user.photoURL,
                       });
                     }
                   } catch (e) {
-                    debugPrint('Auto-recover insert failed: $e');
+                    debugPrint('Auto-recover sync failed: $e');
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text('Error fixing profile: $e', style: const TextStyle(color: Colors.white)),
                           backgroundColor: Colors.red,
-                          duration: const Duration(seconds: 10),
+                          duration: const Duration(seconds: 5),
                         ),
                       );
                     }
                   }
-                  _loadProfileAndData();
+                  await _loadProfileAndData();
                 },
                 icon: const Icon(Icons.refresh),
                 label: const Text('Retry / Fix Profile'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF3F1200),
+                  backgroundColor: const Color(0xFF0F172A),
                   foregroundColor: Colors.white,
                 ),
               ),
@@ -1235,13 +1248,15 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFAF8F5),
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: _selectedIndex == 0
           ? AppBar(
               automaticallyImplyLeading: false,
-              backgroundColor: const Color(0xFF3F1200),
-              elevation: 0.5,
-              toolbarHeight: 80,
+              backgroundColor: Colors.white,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              shape: const Border(bottom: BorderSide(color: Color(0xFFF1F5F9), width: 1)),
+              toolbarHeight: 70,
               systemOverlayStyle: const SystemUiOverlayStyle(
                 statusBarColor: Colors.white,
                 statusBarIconBrightness: Brightness.dark,
@@ -1253,18 +1268,18 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                 child: Row(
                   children: [
                     CircleAvatar(
-                      radius: 24,
+                      radius: 22,
                       backgroundImage: _profile?['photo_url'] != null
                           ? NetworkImage(_profile!['photo_url'])
                           : null,
-                      backgroundColor: const Color(0xFFEEF2F6),
+                      backgroundColor: const Color(0xFFF1F5F9),
                       child: _profile?['photo_url'] == null
                           ? Text(
                               (_profile?['name'] ?? 'U')[0].toUpperCase(),
                               style: const TextStyle(
-                                fontSize: 18,
+                                fontSize: 16,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFF3F1200),
+                                color: Color(0xFF0F172A),
                               ),
                             )
                           : null,
@@ -1280,13 +1295,13 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                             style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                              color: Color(0xFF0F172A),
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 2),
-                          const _LiveDateTimeWidget(color: Colors.white70),
+                          const _LiveDateTimeWidget(color: Color(0xFF64748B)),
                         ],
                       ),
                     ),
@@ -1309,25 +1324,25 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
           color: Colors.white,
           border: Border(
             top: BorderSide(
-              color: Color(0xFFE2E8F0),
+              color: Color(0xFFF1F5F9),
               width: 1.0,
             ),
           ),
         ),
         child: NavigationBarTheme(
           data: NavigationBarThemeData(
-            indicatorColor: const Color(0xFF3F1200).withValues(alpha: 0.12),
+            indicatorColor: const Color(0xFF0F172A).withValues(alpha: 0.08),
             labelTextStyle: WidgetStateProperty.resolveWith((states) {
               if (states.contains(WidgetState.selected)) {
-                return const TextStyle(color: Color(0xFF3F1200), fontWeight: FontWeight.bold, fontSize: 12);
+                return const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 12);
               }
-              return TextStyle(color: const Color(0xFF3F1200).withValues(alpha: 0.6), fontSize: 12);
+              return const TextStyle(color: Color(0xFF94A3B8), fontSize: 12);
             }),
             iconTheme: WidgetStateProperty.resolveWith((states) {
               if (states.contains(WidgetState.selected)) {
-                return const IconThemeData(color: Color(0xFF3F1200));
+                return const IconThemeData(color: Color(0xFF0F172A));
               }
-              return IconThemeData(color: const Color(0xFF3F1200).withValues(alpha: 0.6));
+              return const IconThemeData(color: Color(0xFF94A3B8));
             }),
           ),
           child: NavigationBar(
@@ -1373,6 +1388,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       onRefresh: () async {
         await _loadProfileAndData();
         await _fetchAnnouncements();
+        await _fetchDailyDarshan();
       },
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
@@ -1380,6 +1396,9 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Daily Darshan Card
+            _buildDailyDarshanCard(),
+
             // Announcement Carousel
             if (_announcements.isNotEmpty) ...[
               SizedBox(
@@ -1495,7 +1514,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                     height: 6,
                     margin: const EdgeInsets.symmetric(horizontal: 3),
                     decoration: BoxDecoration(
-                      color: index == _currentAnnouncementIndex ? const Color(0xFF3F1200) : Colors.grey[400],
+                      color: index == _currentAnnouncementIndex ? const Color(0xFF0F172A) : Colors.grey[300],
                       borderRadius: BorderRadius.circular(3),
                     ),
                   );
@@ -2359,7 +2378,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
           children: [
             const Text(
               'Your Sadhana',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
             ),
             Row(
               children: ['Today', 'Yesterday', 'Ekadashi'].map((type) {
@@ -2376,7 +2395,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                       ),
                     ),
                     selected: isSelected,
-                    selectedColor: const Color(0xFF3F1200),
+                    selectedColor: const Color(0xFF0F172A),
                     backgroundColor: const Color(0xFFF1F5F9),
                     onSelected: (bool selected) {
                       if (selected) {
@@ -2449,11 +2468,11 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     return Card(
       elevation: 0,
       margin: const EdgeInsets.only(bottom: 12),
-      color: isLogged ? const Color(0xFF3F1200).withValues(alpha: 0.02) : Colors.white,
+      color: isLogged ? const Color(0xFFF8FAFC) : Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: isLogged ? const Color(0xFF3F1200).withValues(alpha: 0.25) : const Color(0xFFE2E8F0),
+          color: isLogged ? const Color(0xFF0F172A).withValues(alpha: 0.15) : const Color(0xFFE2E8F0),
           width: isLogged ? 1.5 : 1.0,
         ),
       ),
@@ -2465,19 +2484,19 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
           style: TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 14,
-            color: isLogged ? const Color(0xFF3F1200) : const Color(0xFF1E293B),
+            color: isLogged ? const Color(0xFF0F172A) : const Color(0xFF1E293B),
           ),
         ),
         subtitle: Text(
           isLogged ? loggedDetails : 'Not logged yet • Tap to log',
           style: TextStyle(
             fontSize: 12,
-            color: isLogged ? const Color(0xFF3F1200).withValues(alpha: 0.7) : const Color(0xFF64748B),
+            color: isLogged ? const Color(0xFF0F172A).withValues(alpha: 0.7) : const Color(0xFF64748B),
           ),
         ),
         trailing: isLogged
             ? const Icon(Icons.check_circle_rounded, color: Colors.green, size: 24)
-            : Icon(Icons.add_circle_outline_rounded, color: const Color(0xFF3F1200).withValues(alpha: 0.4), size: 24),
+            : Icon(Icons.add_circle_outline_rounded, color: const Color(0xFF0F172A).withValues(alpha: 0.3), size: 24),
         onTap: isLocked
             ? () {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -2516,40 +2535,21 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   }
 
   Widget _buildRealisticIcon(String activity, IconData icon, bool isLogged) {
-    final Color iconColor = isLogged ? const Color(0xFF3F1200) : const Color(0xFF7A6B63);
+    final Color iconColor = isLogged ? const Color(0xFF0F172A) : const Color(0xFF64748B);
     final Color borderColor = isLogged 
-        ? const Color(0xFF3F1200).withValues(alpha: 0.25)
-        : const Color(0xFFD6C8C0);
+        ? const Color(0xFF0F172A).withValues(alpha: 0.2)
+        : const Color(0xFFE2E8F0);
 
     return Container(
       width: 42,
       height: 42,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: isLogged
-              ? [
-                  const Color(0xFFFFF5F0),
-                  const Color(0xFFFBE4D8),
-                ]
-              : [
-                  const Color(0xFFFAFAFA),
-                  const Color(0xFFECE6E2),
-                ],
-        ),
+        color: isLogged ? const Color(0xFFF1F5F9) : const Color(0xFFF8FAFC),
         border: Border.all(
           color: borderColor,
           width: 1.2,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: isLogged ? const Color(0x1F3F1200) : const Color(0x0F000000),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
       ),
       child: Center(
         child: Icon(
@@ -2558,6 +2558,154 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
           size: 20,
         ),
       ),
+    );
+  }
+
+  Widget _buildDailyDarshanCard() {
+    if (_todayDarshan == null) return const SizedBox.shrink();
+
+    final title = _todayDarshan!['title'] as String? ?? 'Today\'s Daily Darshan';
+    final List<dynamic> rawUrls = _todayDarshan!['imageUrls'] is List ? _todayDarshan!['imageUrls'] : [];
+    final List<String> imageUrls = rawUrls.map((u) => u.toString()).toList();
+    if (imageUrls.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(10),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(14.0),
+            child: Row(
+              children: [
+                const Icon(Icons.temple_hindu_rounded, color: Color(0xFF0F172A), size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0F172A),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text(
+                    'DAILY DARSHAN',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF475569),
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(
+            height: 220,
+            child: PageView.builder(
+              itemCount: imageUrls.length,
+              itemBuilder: (context, idx) {
+                final url = imageUrls[idx];
+                return GestureDetector(
+                  onTap: () => _openFullDarshanDialog(imageUrls, idx),
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Image.network(
+                          url,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, err, stack) => Container(
+                            color: const Color(0xFFF1F5F9),
+                            child: const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+                          ),
+                        ),
+                        Positioned(
+                          right: 12,
+                          bottom: 12,
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withAlpha(150),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.zoom_in_rounded, color: Colors.white, size: 20),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openFullDarshanDialog(List<String> urls, int initialIndex) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final PageController pageController = PageController(initialPage: initialIndex);
+        return Dialog(
+          backgroundColor: Colors.black,
+          insetPadding: EdgeInsets.zero,
+          child: Stack(
+            children: [
+              PageView.builder(
+                controller: pageController,
+                itemCount: urls.length,
+                itemBuilder: (context, idx) {
+                  return InteractiveViewer(
+                    minScale: 0.8,
+                    maxScale: 4.0,
+                    child: Center(
+                      child: Image.network(
+                        urls[idx],
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  );
+                },
+              ),
+              Positioned(
+                top: 40,
+                right: 20,
+                child: IconButton(
+                  icon: const Icon(Icons.close_rounded, color: Colors.white, size: 30),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 

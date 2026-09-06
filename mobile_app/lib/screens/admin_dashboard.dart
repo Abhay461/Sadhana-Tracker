@@ -1,8 +1,12 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 import '../services/api_service.dart';
+import '../services/cloudinary_service.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -25,7 +29,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
   bool _isAdminVerified = false;
 
   // Tabs and Preachers list state
-  int _selectedTab = 0; // 0 = Create Preacher, 1 = Preachers Directory
+  final ImagePicker _picker = ImagePicker();
+  int _selectedTab = 0; // 0 = Create Preacher, 1 = Preachers Directory, 2 = Daily Darshan
   List<dynamic> _preachers = [];
   Map<String, List<dynamic>> _preacherStudents = {};
   bool _isLoadingPreachersList = false;
@@ -509,49 +514,40 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
                 // Tab Selection Row
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: ChoiceChip(
-                          label: Container(
-                            width: double.infinity,
-                            alignment: Alignment.center,
-                            child: Text(
-                              'Create Preacher',
-                              style: TextStyle(
-                                color: _selectedTab == 0 ? Colors.white : const Color(0xFF3F1200),
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                              ),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        ChoiceChip(
+                          label: Text(
+                            'Create Preacher',
+                            style: TextStyle(
+                              color: _selectedTab == 0 ? Colors.white : const Color(0xFF0F172A),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
                             ),
                           ),
                           selected: _selectedTab == 0,
                           onSelected: (selected) {
                             if (selected) setState(() => _selectedTab = 0);
                           },
-                          selectedColor: const Color(0xFF3F1200),
+                          selectedColor: const Color(0xFF0F172A),
                           backgroundColor: Colors.white,
                           side: BorderSide(
-                            color: _selectedTab == 0 ? Colors.transparent : const Color(0xFF3F1200).withAlpha(51),
+                            color: _selectedTab == 0 ? Colors.transparent : const Color(0xFFE2E8F0),
                           ),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           showCheckmark: false,
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ChoiceChip(
-                          label: Container(
-                            width: double.infinity,
-                            alignment: Alignment.center,
-                            child: Text(
-                              'Preachers Directory',
-                              style: TextStyle(
-                                color: _selectedTab == 1 ? Colors.white : const Color(0xFF3F1200),
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                              ),
+                        const SizedBox(width: 8),
+                        ChoiceChip(
+                          label: Text(
+                            'Preachers Directory',
+                            style: TextStyle(
+                              color: _selectedTab == 1 ? Colors.white : const Color(0xFF0F172A),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
                             ),
                           ),
                           selected: _selectedTab == 1,
@@ -561,16 +557,40 @@ class _AdminDashboardState extends State<AdminDashboard> {
                               _fetchPreachersAndStats();
                             }
                           },
-                          selectedColor: const Color(0xFF3F1200),
+                          selectedColor: const Color(0xFF0F172A),
                           backgroundColor: Colors.white,
                           side: BorderSide(
-                            color: _selectedTab == 1 ? Colors.transparent : const Color(0xFF3F1200).withAlpha(51),
+                            color: _selectedTab == 1 ? Colors.transparent : const Color(0xFFE2E8F0),
                           ),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           showCheckmark: false,
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 8),
+                        ChoiceChip(
+                          label: Text(
+                            'Daily Darshan',
+                            style: TextStyle(
+                              color: _selectedTab == 2 ? Colors.white : const Color(0xFF0F172A),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                          selected: _selectedTab == 2,
+                          onSelected: (selected) {
+                            if (selected) {
+                              setState(() => _selectedTab = 2);
+                            }
+                          },
+                          selectedColor: const Color(0xFF0F172A),
+                          backgroundColor: Colors.white,
+                          side: BorderSide(
+                            color: _selectedTab == 2 ? Colors.transparent : const Color(0xFFE2E8F0),
+                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          showCheckmark: false,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
 
@@ -578,9 +598,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   padding: const EdgeInsets.all(24.0),
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 200),
-                    child: _selectedTab == 0
-                        ? Form(
-                            key: _formKey,
+                    child: _selectedTab == 2
+                        ? _buildDailyDarshanPublishView()
+                        : _selectedTab == 0
+                            ? Form(
+                                key: _formKey,
                             child: Column(
                               children: [
                                 // Success message banner
@@ -745,6 +767,175 @@ class _AdminDashboardState extends State<AdminDashboard> {
     ),
   ),
 ),
+    );
+  }
+
+  Widget _buildDailyDarshanPublishView() {
+    final titleController = TextEditingController();
+    final descriptionController = TextEditingController();
+    List<File> selectedFiles = [];
+    bool isUploading = false;
+
+    return StatefulBuilder(
+      builder: (context, setPublishState) {
+        return Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: Color(0xFFE2E8F0)),
+          ),
+          color: Colors.white,
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.temple_hindu_rounded, color: Color(0xFF0F172A), size: 24),
+                    SizedBox(width: 10),
+                    Text(
+                      'Publish Today\'s Darshan',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: titleController,
+                  decoration: InputDecoration(
+                    labelText: 'Darshan Title',
+                    hintText: 'e.g. Sri Sri Radha Gopinath Morning Darshan',
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: descriptionController,
+                  decoration: InputDecoration(
+                    labelText: 'Description (Optional)',
+                    hintText: 'e.g. Special Mangla Arti Shringar',
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  onPressed: isUploading
+                      ? null
+                      : () async {
+                          final images = await _picker.pickMultiImage();
+                          if (images.isNotEmpty) {
+                            setPublishState(() {
+                              selectedFiles = images.map((x) => File(x.path)).toList();
+                            });
+                          }
+                        },
+                  icon: const Icon(Icons.photo_library_rounded),
+                  label: Text(
+                    selectedFiles.isEmpty
+                        ? 'Choose Darshan Photos'
+                        : '${selectedFiles.length} Photos Selected',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                    side: const BorderSide(color: Color(0xFF0F172A)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                if (selectedFiles.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 80,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: selectedFiles.length,
+                      itemBuilder: (context, idx) {
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.file(selectedFiles[idx], width: 80, height: 80, fit: BoxFit.cover),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F172A),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: (isUploading || selectedFiles.isEmpty)
+                        ? null
+                        : () async {
+                            if (titleController.text.trim().isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Please enter a title')),
+                              );
+                              return;
+                            }
+                            setPublishState(() {
+                              isUploading = true;
+                            });
+
+                            try {
+                              final List<String> uploadedUrls = [];
+                              for (var file in selectedFiles) {
+                                final url = await CloudinaryService.uploadToCloudinary(file);
+                                uploadedUrls.add(url);
+                              }
+
+                              final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+                              await ApiService.post('/daily-darshan', {
+                                'date': todayStr,
+                                'title': titleController.text.trim(),
+                                'description': descriptionController.text.trim(),
+                                'imageUrls': uploadedUrls,
+                              });
+
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Daily Darshan published successfully!')),
+                                );
+                                setPublishState(() {
+                                  selectedFiles.clear();
+                                  titleController.clear();
+                                  descriptionController.clear();
+                                  isUploading = false;
+                                });
+                              }
+                            } catch (e) {
+                              setPublishState(() {
+                                isUploading = false;
+                              });
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Failed to publish Darshan: $e')),
+                                );
+                              }
+                            }
+                          },
+                    child: isUploading
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Text('Publish Daily Darshan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

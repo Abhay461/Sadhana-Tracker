@@ -15,6 +15,7 @@ import { ScreenTimeLog, ScreenTimeLogSchema } from './schemas/screen-time-logs.s
 import { Feedback, FeedbackSchema } from './schemas/feedback.schema';
 import { AuditLog, AuditLogSchema } from './schemas/audit-logs.schema';
 import { MigrationRun, MigrationRunSchema } from './schemas/migration-runs.schema';
+import { DailyDarshan, DailyDarshanSchema } from './schemas/daily-darshan.schema';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { MigrationRun, MigrationRunSchema } from './schemas/migration-runs.schem
       { name: Feedback.name, schema: FeedbackSchema },
       { name: AuditLog.name, schema: AuditLogSchema },
       { name: MigrationRun.name, schema: MigrationRunSchema },
+      { name: DailyDarshan.name, schema: DailyDarshanSchema },
     ]),
   ],
   exports: [MongooseModule],

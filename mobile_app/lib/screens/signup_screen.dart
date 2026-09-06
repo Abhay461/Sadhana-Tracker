@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
+import '../utils/notification_helper.dart';
 import '../widgets/auth_components.dart';
 
 class SignupScreen extends StatefulWidget {
@@ -90,135 +91,225 @@ class _SignupScreenState extends State<SignupScreen> {
       _showOtpDialog(email);
     } catch (e) {
       if (!mounted) return;
+      final String rawErr = e is ApiException ? e.message : e.toString().replaceAll('Exception: ', '');
       setState(() {
-        final String errStr = e is ApiException ? e.message : e.toString().replaceAll('Exception: ', '');
-        _errorMessage = errStr;
+        _isLoading = false;
+        if (rawErr.contains('already linked') || rawErr.contains('ACCOUNT_CONFLICT') || rawErr.contains('email-already-in-use')) {
+          _errorMessage = 'An account with this email already exists! Please tap Sign In below.\n(इस ईमेल से अकाउंट पहले से बना हुआ है! कृपया नीचे Sign In पर क्लिक करें)';
+        } else {
+          _errorMessage = rawErr;
+        }
       });
     }
   }
 
+
   void _showOtpDialog(String email) {
     _otpController.clear();
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      barrierDismissible: false,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
             bool isVerifying = false;
             String? modalError;
 
-            return Container(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-                top: 24,
-                left: 24,
-                right: 24,
+            return Dialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
               ),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(AppRadius.sheet),
-                  topRight: Radius.circular(AppRadius.sheet),
-                ),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFCBD5E1),
-                        borderRadius: BorderRadius.circular(2),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 320),
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'Verify Email OTP',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF0F172A),
+                        ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Enter 6-Digit Email OTP',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'We sent a 6-digit verification code to your email:\n$email',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 13,
-                      color: AppColors.textMuted,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  if (modalError != null) ...[
-                    Text(
-                      modalError!,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.red, fontSize: 12),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  AuthTextField(
-                    controller: _otpController,
-                    label: '6-Digit OTP',
-                    hintText: 'e.g. 482910',
-                    keyboardType: TextInputType.number,
-                  ),
-                  const SizedBox(height: 20),
-                  ElevatedButton(
-                    onPressed: isVerifying
-                        ? null
-                        : () async {
-                            final otpCode = _otpController.text.trim();
-                            if (otpCode.length != 6) {
-                              setModalState(() {
-                                modalError = 'Please enter 6-digit OTP code';
-                              });
-                              return;
-                            }
-                            setModalState(() {
-                              isVerifying = true;
-                              modalError = null;
-                            });
-                            try {
-                              await ApiService.post('/auth/verify-email-otp', {
-                                'email': email,
-                                'otp': otpCode,
-                              });
-                              Navigator.pop(context);
-                              await _completeRegistration();
-                            } catch (err) {
-                              setModalState(() {
-                                isVerifying = false;
-                                modalError = err is ApiException ? err.message : err.toString().replaceAll('Exception: ', '');
-                              });
-                            }
-                          },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Enter the 6-digit verification code sent to:\n$email',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 13,
+                          color: Color(0xFF64748B),
+                        ),
                       ),
-                    ),
-                    child: isVerifying
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : const Text(
-                            'Verify OTP & Register',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      const SizedBox(height: 18),
+
+                      // Error Banner
+                      if (modalError != null) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFFCA5A5)),
                           ),
+                          child: Text(
+                            modalError!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 12,
+                              color: Color(0xFF991B1B),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
+                      // OTP Input Field
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            '6-Digit OTP',
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF1E293B),
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          TextFormField(
+                            controller: _otpController,
+                            keyboardType: TextInputType.number,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 18,
+                              letterSpacing: 4,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF0F172A),
+                            ),
+                            decoration: InputDecoration(
+                              hintText: '000000',
+                              hintStyle: const TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 16,
+                                letterSpacing: 4,
+                                color: Color(0xFFCBD5E1),
+                              ),
+                              filled: true,
+                              fillColor: const Color(0xFFF8FAFC),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: const BorderSide(color: Color(0xFF0F172A), width: 1.5),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+
+                      // Verify Button
+                      SizedBox(
+                        height: 44,
+                        child: ElevatedButton(
+                          onPressed: isVerifying
+                              ? null
+                              : () async {
+                                  final otpCode = _otpController.text.trim();
+                                  if (otpCode.length != 6) {
+                                    setModalState(() {
+                                      modalError = 'Please enter 6-digit OTP code';
+                                    });
+                                    return;
+                                  }
+                                  setModalState(() {
+                                    isVerifying = true;
+                                    modalError = null;
+                                  });
+                                  try {
+                                    await ApiService.post('/auth/verify-email-otp', {
+                                      'email': email,
+                                      'otp': otpCode,
+                                    });
+                                    Navigator.pop(context);
+                                    await _completeRegistration();
+                                  } catch (err) {
+                                    setModalState(() {
+                                      isVerifying = false;
+                                      modalError = err is ApiException
+                                          ? err.message
+                                          : err.toString().replaceAll('Exception: ', '');
+                                    });
+                                  }
+                                },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0F172A),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: isVerifying
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2.5,
+                                  ),
+                                )
+                              : const Text(
+                                  'Verify & Register',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Cancel Button
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 13,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             );
           },
@@ -272,9 +363,14 @@ class _SignupScreenState extends State<SignupScreen> {
       });
     } catch (e) {
       if (!mounted) return;
+      final String rawErr = e is ApiException ? e.message : e.toString().replaceAll('Exception: ', '');
       setState(() {
         _isLoading = false;
-        _errorMessage = e.toString().replaceAll('Exception: ', '');
+        if (rawErr.contains('already linked') || rawErr.contains('ACCOUNT_CONFLICT') || rawErr.contains('email-already-in-use')) {
+          _errorMessage = 'An account with this email already exists! Please tap Sign In below.\n(इस ईमेल से अकाउंट पहले से बना हुआ है! कृपया नीचे Sign In पर क्लिक करें)';
+        } else {
+          _errorMessage = rawErr;
+        }
       });
     }
   }
@@ -293,29 +389,29 @@ class _SignupScreenState extends State<SignupScreen> {
             }).toList();
 
             return Container(
-              height: MediaQuery.of(context).size.height * 0.72,
+              height: MediaQuery.of(context).size.height * 0.70,
               decoration: const BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(AppRadius.sheet),
-                  topRight: Radius.circular(AppRadius.sheet),
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
                 ),
               ),
-              padding: const EdgeInsets.fromLTRB(24, 14, 24, 24),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
               child: Column(
                 children: [
                   // Drag handle
                   Center(
                     child: Container(
-                      width: 40,
+                      width: 36,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: const Color(0xFFCBD5E1),
+                        color: const Color(0xFFE2E8F0),
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.md + 2),
+                  const SizedBox(height: 14),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -323,38 +419,38 @@ class _SignupScreenState extends State<SignupScreen> {
                         'Select Assigned Preacher',
                         style: TextStyle(
                           fontFamily: 'Poppins',
-                          fontSize: 18,
+                          fontSize: 17,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
+                          color: Color(0xFF0F172A),
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.close_rounded, color: AppColors.textSecondary),
+                        icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B), size: 20),
                         onPressed: () => Navigator.pop(context),
                       )
                     ],
                   ),
-                  const SizedBox(height: AppSpacing.sm + 6),
+                  const SizedBox(height: 10),
                   TextField(
-                    style: const TextStyle(fontFamily: 'Inter', fontSize: 14, color: AppColors.textPrimary),
+                    style: const TextStyle(fontFamily: 'Inter', fontSize: 14, color: Color(0xFF0F172A)),
                     decoration: InputDecoration(
                       hintText: 'Search preacher by name...',
-                      hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 14),
-                      prefixIcon: const Icon(Icons.search_rounded, color: AppColors.textMuted, size: 20),
+                      hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
+                      prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF94A3B8), size: 20),
                       filled: true,
-                      fillColor: AppColors.inputFill,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      fillColor: const Color(0xFFF8FAFC),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(AppRadius.md),
-                        borderSide: const BorderSide(color: AppColors.border),
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
                       ),
                       enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(AppRadius.md),
-                        borderSide: const BorderSide(color: AppColors.border),
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(AppRadius.md),
-                        borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xFF0F172A), width: 1.5),
                       ),
                     ),
                     onChanged: (value) {
@@ -363,75 +459,44 @@ class _SignupScreenState extends State<SignupScreen> {
                       });
                     },
                   ),
-                  const SizedBox(height: AppSpacing.md + 2),
+                  const SizedBox(height: 14),
                   Expanded(
                     child: filteredPreachers.isNotEmpty
                         ? ListView.separated(
                             itemCount: filteredPreachers.length,
-                            separatorBuilder: (context, index) => const SizedBox(height: 10),
+                            separatorBuilder: (context, index) => const Divider(color: Color(0xFFF1F5F9), height: 1),
                             itemBuilder: (context, index) {
                               final p = filteredPreachers[index];
-                              final isSelected = _selectedPreacher?['id'] == p['id'];
-                              return AnimatedContainer(
-                                duration: AppAnimation.duration,
-                                child: InkWell(
-                                  onTap: () {
-                                    setState(() {
-                                      _selectedPreacher = p;
-                                    });
-                                    Navigator.pop(context);
-                                  },
-                                  borderRadius: BorderRadius.circular(AppRadius.md),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(14),
-                                    decoration: BoxDecoration(
-                                      color: isSelected ? const Color(0xFFFFFBEB) : AppColors.inputFill,
-                                      borderRadius: BorderRadius.circular(AppRadius.md),
-                                      border: Border.all(
-                                        color: isSelected ? AppColors.primary : AppColors.border,
-                                        width: isSelected ? 1.5 : 1,
+                              final isSelected = _selectedPreacher?['id'] == p['id'] || _selectedPreacher?['_id'] == p['_id'];
+                              return InkWell(
+                                onTap: () {
+                                  setState(() {
+                                    _selectedPreacher = p;
+                                  });
+                                  Navigator.pop(context);
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 14),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          p['name'] ?? '',
+                                          style: TextStyle(
+                                            fontFamily: 'Inter',
+                                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                                            fontSize: 15,
+                                            color: isSelected ? const Color(0xFF0F172A) : const Color(0xFF334155),
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        CircleAvatar(
-                                          radius: 22,
-                                          backgroundImage: p['photo_url'] != null
-                                              ? NetworkImage(p['photo_url'])
-                                              : null,
-                                          backgroundColor: const Color(0xFFFEF3C7),
-                                          child: p['photo_url'] == null
-                                              ? Text(
-                                                  (p['name'] ?? 'P')[0].toUpperCase(),
-                                                  style: const TextStyle(
-                                                    fontFamily: 'Poppins',
-                                                    color: AppColors.primary,
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 16,
-                                                  ),
-                                                )
-                                              : null,
+                                      if (isSelected)
+                                        const Icon(
+                                          Icons.check_rounded,
+                                          color: Color(0xFF0F172A),
+                                          size: 18,
                                         ),
-                                        const SizedBox(width: 14),
-                                        Expanded(
-                                          child: Text(
-                                            p['name'] ?? '',
-                                            style: TextStyle(
-                                              fontFamily: 'Inter',
-                                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                                              fontSize: 15,
-                                              color: AppColors.textPrimary,
-                                            ),
-                                          ),
-                                        ),
-                                        if (isSelected)
-                                          const Icon(
-                                            Icons.check_circle_rounded,
-                                            color: AppColors.primary,
-                                            size: 22,
-                                          ),
-                                      ],
-                                    ),
+                                    ],
                                   ),
                                 ),
                               );
@@ -442,7 +507,7 @@ class _SignupScreenState extends State<SignupScreen> {
                               'No preachers found',
                               style: TextStyle(
                                 fontFamily: 'Inter',
-                                color: AppColors.textSecondary,
+                                color: Color(0xFF64748B),
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
@@ -457,251 +522,292 @@ class _SignupScreenState extends State<SignupScreen> {
     );
   }
 
+  Widget _buildSimpleTextField({
+    required TextEditingController controller,
+    required String label,
+    required String hintText,
+    TextInputType keyboardType = TextInputType.text,
+    bool obscureText = false,
+    String? Function(String?)? validator,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF1E293B),
+          ),
+        ),
+        const SizedBox(height: 5),
+        TextFormField(
+          controller: controller,
+          keyboardType: keyboardType,
+          obscureText: obscureText,
+          style: const TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 14,
+            color: Color(0xFF0F172A),
+          ),
+          decoration: InputDecoration(
+            hintText: hintText,
+            hintStyle: const TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 13,
+              color: Color(0xFF94A3B8),
+            ),
+            filled: true,
+            fillColor: const Color(0xFFF8FAFC),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFF0F172A), width: 1.5),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFFEF4444)),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.5),
+            ),
+          ),
+          validator: validator,
+        ),
+      ],
+    );
+  }
+
   Widget _buildSinglePageForm() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // ==========================================
-        // SECTION 1: PERSONAL INFORMATION
-        // ==========================================
-        AuthSectionCard(
-          title: 'Personal Information',
-          subtitle: 'Your basic identity details',
-          children: [
-            // Full Name Field (No decorative prefix icon)
-            AuthTextField(
-              controller: _nameController,
-              label: 'Full Name',
-              keyboardType: TextInputType.name,
-              textInputAction: TextInputAction.next,
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter your name';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: AppSpacing.md + 2),
-
-            // Email Address Field (No decorative prefix icon)
-            AuthTextField(
-              controller: _emailController,
-              label: 'Email Address',
-              keyboardType: TextInputType.emailAddress,
-              textInputAction: TextInputAction.next,
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter your email';
-                }
-                if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
-                  return 'Please enter a valid email';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: AppSpacing.md + 2),
-
-            // WhatsApp Number Field (No decorative prefix icon)
-            AuthTextField(
-              controller: _whatsappController,
-              label: 'WhatsApp Number',
-              hintText: '10-digit phone number',
-              keyboardType: TextInputType.phone,
-              textInputAction: TextInputAction.next,
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter WhatsApp number';
-                }
-                if (!RegExp(r'^[0-9]{10}$').hasMatch(value)) {
-                  return 'Enter a valid 10-digit number';
-                }
-                return null;
-              },
-            ),
-          ],
+        // 1. Full Name Field
+        _buildSimpleTextField(
+          controller: _nameController,
+          label: 'Full Name',
+          hintText: 'Enter your full name',
+          keyboardType: TextInputType.name,
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Please enter your full name';
+            }
+            return null;
+          },
         ),
-        const SizedBox(height: AppSpacing.lg),
+        const SizedBox(height: 12),
 
-        // ==========================================
-        // SECTION 2: SPIRITUAL INFORMATION
-        // ==========================================
-        AuthSectionCard(
-          title: 'Spiritual Information',
-          subtitle: 'Your journey & mentor details',
+        // 2. Email Address Field
+        _buildSimpleTextField(
+          controller: _emailController,
+          label: 'Email Address',
+          hintText: 'Enter your email address',
+          keyboardType: TextInputType.emailAddress,
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Please enter your email address';
+            }
+            if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value.trim())) {
+              return 'Please enter a valid email address';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 12),
+
+        // 3. Assigned Preacher Field
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Date of Birth Field (Functional Calendar Suffix Icon)
-            AuthTextField(
-              controller: _dobController,
-              label: 'Date of Birth',
-              readOnly: true,
-              suffixIcon: const Icon(Icons.calendar_today_rounded, color: AppColors.textMuted, size: 18),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please select your Date of Birth';
-                }
-                return null;
-              },
-              onTap: () async {
-                final date = await showDatePicker(
-                  context: context,
-                  initialDate: _selectedDob ?? DateTime(2000, 1, 1),
-                  firstDate: DateTime(1950),
-                  lastDate: DateTime.now(),
-                );
-                if (date != null) {
-                  setState(() {
-                    _selectedDob = date;
-                    _dobController.text = DateFormat('dd MMMM yyyy').format(date);
-                  });
-                }
-              },
-            ),
-            const SizedBox(height: AppSpacing.md + 2),
-
-            // Folk Joining Date Field (Functional Calendar Suffix Icon)
-            AuthTextField(
-              controller: _joiningDateController,
-              label: 'FOLK Joining Date',
-              readOnly: true,
-              suffixIcon: const Icon(Icons.calendar_today_rounded, color: AppColors.textMuted, size: 18),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please select your Folk Joining Date';
-                }
-                return null;
-              },
-              onTap: () async {
-                final date = await showDatePicker(
-                  context: context,
-                  initialDate: _selectedJoiningDate ?? DateTime.now(),
-                  firstDate: DateTime(2000),
-                  lastDate: DateTime.now().add(const Duration(days: 30)),
-                );
-                if (date != null) {
-                  setState(() {
-                    _selectedJoiningDate = date;
-                    _joiningDateController.text = DateFormat('dd MMMM yyyy').format(date);
-                  });
-                }
-              },
-            ),
-            const SizedBox(height: AppSpacing.md + 4),
-
-            // Assigned Preacher Trigger Tile
             const Text(
               'Assigned Preacher',
               style: TextStyle(
                 fontFamily: 'Inter',
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF475569),
+                color: Color(0xFF1E293B),
               ),
             ),
-            const SizedBox(height: AppSpacing.sm + 2),
-            AuthDropdownTile(
-              selectedPreacher: _selectedPreacher,
+            const SizedBox(height: 5),
+            InkWell(
               onTap: _showPreacherPicker,
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: _selectedPreacher != null ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0),
+                    width: _selectedPreacher != null ? 1.5 : 1.0,
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _selectedPreacher != null
+                            ? (_selectedPreacher!['name'] ?? 'Selected Preacher')
+                            : 'Select assigned preacher',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 14,
+                          color: _selectedPreacher != null ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
+                          fontWeight: _selectedPreacher != null ? FontWeight.w600 : FontWeight.w400,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: Color(0xFF64748B),
+                      size: 20,
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
-        const SizedBox(height: AppSpacing.lg),
+        const SizedBox(height: 12),
 
-        // ==========================================
-        // SECTION 3: ACCOUNT SECURITY
-        // ==========================================
-        AuthSectionCard(
-          title: 'Account Security',
-          subtitle: 'Set up a password for logging in',
-          children: [
-            // Password Field (Functional Eye Toggle Suffix Icon)
-            AuthPasswordField(
-              controller: _passwordController,
-              label: 'Password',
-              obscureText: _obscurePassword,
-              onToggleObscure: () {
-                setState(() {
-                  _obscurePassword = !_obscurePassword;
-                });
-              },
-              textInputAction: TextInputAction.next,
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter your password';
-                }
-                if (value.length < 6) {
-                  return 'Password must be at least 6 characters';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: AppSpacing.md + 2),
-
-            // Confirm Password Field (Functional Eye Toggle Suffix Icon)
-            AuthPasswordField(
-              controller: _confirmPasswordController,
-              label: 'Confirm Password',
-              obscureText: _obscureConfirmPassword,
-              onToggleObscure: () {
-                setState(() {
-                  _obscureConfirmPassword = !_obscureConfirmPassword;
-                });
-              },
-              textInputAction: TextInputAction.done,
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please confirm your password';
-                }
-                if (value != _passwordController.text) {
-                  return 'Passwords do not match';
-                }
-                return null;
-              },
-            ),
-          ],
+        // 4. Password Field
+        _buildSimpleTextField(
+          controller: _passwordController,
+          label: 'Password',
+          hintText: 'Enter your password',
+          obscureText: true,
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Please enter your password';
+            }
+            if (value.trim().length < 6) {
+              return 'Password must be at least 6 characters';
+            }
+            return null;
+          },
         ),
-        const SizedBox(height: AppSpacing.lg),
+        const SizedBox(height: 12),
+
+        // 5. Confirm Password Field
+        _buildSimpleTextField(
+          controller: _confirmPasswordController,
+          label: 'Confirm Password',
+          hintText: 'Re-enter your password',
+          obscureText: true,
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Please confirm your password';
+            }
+            if (value.trim() != _passwordController.text.trim()) {
+              return 'Passwords do not match';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 16),
 
         // Error Banner
         if (_errorMessage != null) ...[
-          AuthStatusBanner(
-            message: _errorMessage!,
-            isError: true,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFEF2F2),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFFCA5A5)),
+            ),
+            child: Text(
+              _errorMessage!,
+              style: const TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 13,
+                color: Color(0xFF991B1B),
+              ),
+            ),
           ),
-          const SizedBox(height: AppSpacing.lg),
+          const SizedBox(height: 14),
         ],
 
         // Success Banner
         if (_successMessage != null) ...[
-          AuthStatusBanner(
-            message: _successMessage!,
-            isError: false,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0FDF4),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFF86EFAC)),
+            ),
+            child: Text(
+              _successMessage!,
+              style: const TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 13,
+                color: Color(0xFF166534),
+              ),
+            ),
           ),
-          const SizedBox(height: AppSpacing.lg),
+          const SizedBox(height: 14),
         ],
 
-        // Complete Registration Button
-        AuthPrimaryButton(
-          label: 'Send Email OTP',
-          isLoading: _isLoading,
-          onPressed: () {
-            if (!_formKey.currentState!.validate()) return;
-            if (_selectedPreacher == null) {
-              setState(() {
-                _errorMessage = 'Please select your preacher';
-              });
-              return;
-            }
-            if (_selectedDob == null) {
-              setState(() {
-                _errorMessage = 'Please select your Date of Birth';
-              });
-              return;
-            }
-            setState(() {
-              _errorMessage = null;
-            });
-            _handleSignup();
-          },
+        // Primary Button: "Create Account" (Dark Slate)
+        SizedBox(
+          height: 44,
+          child: ElevatedButton(
+            onPressed: _isLoading
+                ? null
+                : () {
+                    if (!_formKey.currentState!.validate()) return;
+                    if (_selectedPreacher == null) {
+                      setState(() {
+                        _errorMessage = 'Please select your assigned preacher';
+                      });
+                      return;
+                    }
+                    setState(() {
+                      _errorMessage = null;
+                    });
+                    _handleSignup();
+                  },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0F172A),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: _isLoading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2.5,
+                    ),
+                  )
+                : const Text(
+                    'Create Account',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+          ),
         ),
       ],
     );
@@ -710,41 +816,90 @@ class _SignupScreenState extends State<SignupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.lg,
-              vertical: AppSpacing.xl,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 24.0),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 480),
+              constraints: const BoxConstraints(maxWidth: 320),
               child: Form(
                 key: _formKey,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Auth Header
-                    const AuthHeader(
-                      title: 'Create Account',
-                      subtitle: 'Join our community & start your spiritual journey',
+                    // Top Logo & Header
+                    Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(14),
+                        child: Image.asset(
+                          'assets/logo.jpg',
+                          fit: BoxFit.cover,
+                        ),
+                      ),
                     ),
-                    const SizedBox(height: AppSpacing.xl),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Create Account',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF0F172A),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Enter your details to create an account',
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 14,
+                        color: Color(0xFF64748B),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 28),
 
-                    // Sectioned Form
+                    // Form with 3 Fields, Primary Button & Google Sign-In
                     _buildSinglePageForm(),
 
-                    const SizedBox(height: AppSpacing.xl),
+                    const SizedBox(height: 24),
 
                     // Footer Link
-                    AuthTextButton(
-                      leadingText: "Already have an account? ",
-                      actionText: 'Sign In',
-                      actionColor: AppColors.secondary,
-                      onTap: () {
-                        Navigator.pushReplacementNamed(context, '/login');
-                      },
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text(
+                          "Already have an account? ",
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 14,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.pushReplacementNamed(context, '/login');
+                          },
+                          child: const Text(
+                            'Sign In',
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF0F172A),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),

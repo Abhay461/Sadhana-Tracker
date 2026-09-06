@@ -64,11 +64,15 @@ export class AuthService {
       if (user) {
         // Safe Account Linking Guard: Ensure account isn't already bound to a different active firebaseUid
         if (user.firebaseUid && user.firebaseUid !== firebaseUid) {
-          throw new ForbiddenException({
-            statusCode: 403,
-            errorCode: 'ACCOUNT_CONFLICT',
-            message: 'This user account is already linked to a different authentication identity.',
-          });
+          const isSameEmail = email && user.email && email.toLowerCase().trim() === user.email.toLowerCase().trim();
+          if (!isSameEmail) {
+            throw new ForbiddenException({
+              statusCode: 403,
+              errorCode: 'ACCOUNT_CONFLICT',
+              message: 'This user account is already linked to a different authentication identity.',
+            });
+          }
+          this.logger.log(`Re-linking updated firebaseUid for ${user.email}: ${user.firebaseUid} -> ${firebaseUid}`);
         }
 
         user.firebaseUid = firebaseUid;

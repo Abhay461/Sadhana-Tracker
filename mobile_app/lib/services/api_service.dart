@@ -11,7 +11,13 @@ class ApiService {
     final user = FirebaseAuth.instance.currentUser;
     String? idToken;
     if (user != null) {
-      idToken = await user.getIdToken();
+      try {
+        idToken = await user.getIdToken(true);
+      } catch (e) {
+        debugPrint('Firebase token refresh failed (User account deleted): $e');
+        await FirebaseAuth.instance.signOut();
+        idToken = null;
+      }
     }
 
     final timezoneOffset = DateTime.now().timeZoneOffset.inMinutes.toString();
@@ -82,6 +88,10 @@ class ApiService {
         return jsonBody['data'];
       }
       return jsonBody;
+    }
+
+    if (response.statusCode == 401) {
+      FirebaseAuth.instance.signOut().catchError((_) {});
     }
 
     final message = jsonBody is Map ? (jsonBody['message'] ?? 'API Request Failed') : 'HTTP ${response.statusCode} Error';
