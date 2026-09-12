@@ -26,14 +26,22 @@ export class DailyDarshanService {
       images = ['https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=600&q=80'];
     }
 
-    return this.darshanModel.create({
+    const darshanData: Record<string, any> = {
       title: dto.title || 'Sri Sri Radha Vrindavan Chandra Daily Darshan',
       date: dto.date || today,
       imageUrls: images,
       description: dto.description || dto.message || '',
-      createdBy: user?._id || null,
       isActive: true,
-    });
+    };
+
+    // The web admin portal currently publishes without an auth token. Do not
+    // write null here: Mongoose treats `createdBy: null` as a missing required
+    // value. When authentication is added, preserve the creator automatically.
+    if (user?._id) {
+      darshanData.createdBy = user._id;
+    }
+
+    return this.darshanModel.create(darshanData);
   }
 
   async getTodayDarshan() {

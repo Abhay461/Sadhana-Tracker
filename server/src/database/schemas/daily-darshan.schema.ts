@@ -17,7 +17,8 @@ export class DailyDarshan {
   @Prop({ required: false })
   description?: string;
 
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true })
+  // Optional while the admin portal supports publishing without a login.
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: false, default: null })
   createdBy: MongooseSchema.Types.ObjectId;
 
   @Prop({ default: true })
