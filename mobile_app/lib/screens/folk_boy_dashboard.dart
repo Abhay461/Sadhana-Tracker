@@ -523,7 +523,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           backgroundColor: Colors.white,
           clipBehavior: Clip.antiAlias,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
           child: _SadhanaLogSheet(
             logDate: 'Today',
             initialOption: type,
@@ -3382,6 +3382,15 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                   final time = await showTimePicker(
                     context: context,
                     initialTime: _wakeUpTime,
+                    initialEntryMode: TimePickerEntryMode.dialOnly,
+                    builder: (context, child) {
+                      return MediaQuery(
+                        data: MediaQuery.of(context).copyWith(
+                          textScaler: const TextScaler.linear(1.0),
+                        ),
+                        child: child!,
+                      );
+                    },
                   );
                   if (time != null) {
                     setState(() {
@@ -3393,6 +3402,15 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                   final time = await showTimePicker(
                     context: context,
                     initialTime: _manglaStartTime,
+                    initialEntryMode: TimePickerEntryMode.dialOnly,
+                    builder: (context, child) {
+                      return MediaQuery(
+                        data: MediaQuery.of(context).copyWith(
+                          textScaler: const TextScaler.linear(1.0),
+                        ),
+                        child: child!,
+                      );
+                    },
                   );
                   if (time != null) {
                     setState(() {
@@ -3404,6 +3422,15 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                   final time = await showTimePicker(
                     context: context,
                     initialTime: _sleepTime,
+                    initialEntryMode: TimePickerEntryMode.dialOnly,
+                    builder: (context, child) {
+                      return MediaQuery(
+                        data: MediaQuery.of(context).copyWith(
+                          textScaler: const TextScaler.linear(1.0),
+                        ),
+                        child: child!,
+                      );
+                    },
                   );
                   if (time != null) {
                     setState(() {
@@ -3457,17 +3484,19 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 1),
-                    Text(
-                      isLogged ? loggedDetails : 'Tap to log',
-                      style: TextStyle(
-                        fontSize: 9.5,
-                        fontWeight: isLogged ? FontWeight.bold : FontWeight.w500,
-                        color: isLogged ? themeColor : const Color(0xFF64748B),
+                    if (isLogged && loggedDetails.isNotEmpty) ...[
+                      const SizedBox(height: 1),
+                      Text(
+                        loggedDetails,
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.bold,
+                          color: themeColor,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -4786,19 +4815,23 @@ class _SadhanaLogSheetState extends State<_SadhanaLogSheet> {
                 )
               ],
               const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6366F1),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 20),
+                  width: double.infinity,
+                  height: 46,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F172A),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: _isLoading ? null : _handleSave,
+                    child: _isLoading
+                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Text('Save Sadhana Record', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                   ),
-                  onPressed: _isLoading ? null : _handleSave,
-                  child: _isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text('Save Sadhana Record', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 ),
               )
             ]
@@ -5506,6 +5539,15 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
     final picked = await showTimePicker(
       context: context,
       initialTime: const TimeOfDay(hour: 10, minute: 0),
+      initialEntryMode: TimePickerEntryMode.dialOnly,
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: const TextScaler.linear(1.0),
+          ),
+          child: child!,
+        );
+      },
     );
     if (picked != null) {
       setState(() {
@@ -6369,77 +6411,83 @@ class _DailyDarshanCarouselWidgetState extends State<_DailyDarshanCarouselWidget
 
   @override
   Widget build(BuildContext context) {
-    return AspectRatio(
-      aspectRatio: 4 / 5,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 20),
-        decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(10),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cardWidth = constraints.maxWidth;
+        final cardHeight = cardWidth * (5.0 / 4.0); // 4:5 Aspect Ratio (Width:Height)
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 20),
+          width: cardWidth,
+          height: cardHeight,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(10),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            PageView.builder(
-              controller: _pageController,
-              onPageChanged: (index) {
-                if (_currentIndex != index) {
-                  setState(() {
-                    _currentIndex = index;
-                  });
-                }
-              },
-              itemCount: widget.imageUrls.length,
-              itemBuilder: (context, idx) {
-                final url = widget.imageUrls[idx];
-                return GestureDetector(
-                  onTap: () => widget.onTapImage(idx),
-                  child: _FolkBoyDashboardState._buildSmartImage(
-                    url,
-                    width: double.infinity,
-                    height: double.infinity,
-                    fit: BoxFit.cover,
-                  ),
-                );
-              },
-            ),
-            if (widget.imageUrls.length > 1)
-              Positioned(
-                bottom: 12,
-                left: 0,
-                right: 0,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(widget.imageUrls.length, (index) {
-                    return AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      width: index == _currentIndex ? 16 : 6,
-                      height: 6,
-                      margin: const EdgeInsets.symmetric(horizontal: 3),
-                      decoration: BoxDecoration(
-                        color: index == _currentIndex ? Colors.white : Colors.white54,
-                        borderRadius: BorderRadius.circular(3),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                PageView.builder(
+                  controller: _pageController,
+                  onPageChanged: (index) {
+                    if (_currentIndex != index) {
+                      setState(() {
+                        _currentIndex = index;
+                      });
+                    }
+                  },
+                  itemCount: widget.imageUrls.length,
+                  itemBuilder: (context, idx) {
+                    final url = widget.imageUrls[idx];
+                    return GestureDetector(
+                      onTap: () => widget.onTapImage(idx),
+                      child: _FolkBoyDashboardState._buildSmartImage(
+                        url,
+                        width: double.infinity,
+                        height: double.infinity,
+                        fit: BoxFit.cover,
                       ),
                     );
-                  }),
+                  },
                 ),
-              ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
+                if (widget.imageUrls.length > 1)
+                  Positioned(
+                    bottom: 12,
+                    left: 0,
+                    right: 0,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(widget.imageUrls.length, (index) {
+                        return AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          width: index == _currentIndex ? 16 : 6,
+                          height: 6,
+                          margin: const EdgeInsets.symmetric(horizontal: 3),
+                          decoration: BoxDecoration(
+                            color: index == _currentIndex ? Colors.white : Colors.white54,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
 
 
