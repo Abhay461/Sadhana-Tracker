@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { DailyDarshan, DailyDarshanDocument } from '../database/schemas/daily-darshan.schema';
+import { DailyDarshan, DailyDarshanDocument } from '../database/schemas/daily_darshan.schema';
 import { CreateDailyDarshanDto } from './dto/create-daily-darshan.dto';
 
 @Injectable()

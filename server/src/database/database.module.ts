@@ -15,7 +15,7 @@ import { ScreenTimeLog, ScreenTimeLogSchema } from './schemas/screen-time-logs.s
 import { Feedback, FeedbackSchema } from './schemas/feedback.schema';
 import { AuditLog, AuditLogSchema } from './schemas/audit-logs.schema';
 import { MigrationRun, MigrationRunSchema } from './schemas/migration-runs.schema';
-import { DailyDarshan, DailyDarshanSchema } from './schemas/daily-darshan.schema';
+import { DailyDarshan, DailyDarshanSchema } from './schemas/daily_darshan.schema';
 import { Course, CourseSchema } from './schemas/courses.schema';
 
 @Module({
