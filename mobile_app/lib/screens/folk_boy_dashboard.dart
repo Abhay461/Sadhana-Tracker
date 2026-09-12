@@ -6437,8 +6437,8 @@ class _DailyDarshanCarouselWidgetState extends State<_DailyDarshanCarouselWidget
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
 }
 
 
