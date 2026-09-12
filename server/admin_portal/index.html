@@ -509,24 +509,12 @@
           <h2 style="margin-bottom: 16px;">Publish Today's Daily Darshan</h2>
           <form id="darshanForm" onsubmit="submitDarshan(event)">
             <div class="form-group">
-              <label>Darshan Title</label>
-              <input type="text" id="darshanTitle" class="form-control" placeholder="e.g. Sri Sri Radha Vrindavan Chandra Shringar Darshan" required>
-            </div>
-            <div class="form-group">
-              <label>🖼️ Select Multiple Photos from Device (Computer / Gallery)</label>
+              <label>🖼️ Select Photos from Device (Computer / Mobile Gallery)</label>
               <input type="file" id="darshanFileInput" accept="image/*" multiple class="form-control" style="padding: 8px;" onchange="previewMultipleDarshanImages(event)">
             </div>
             <div class="form-group" id="darshanPreviewBox" style="display: none;">
               <label>Selected Photos Preview:</label>
               <div id="darshanPreviewGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin-top: 8px;"></div>
-            </div>
-            <div class="form-group">
-              <label>Or Image URL (Optional Alternative)</label>
-              <input type="url" id="darshanImageUrl" class="form-control" placeholder="https://...">
-            </div>
-            <div class="form-group">
-              <label>Special Message / Sloka</label>
-              <textarea id="darshanMessage" class="form-control" rows="3" placeholder="Daily blessing message..."></textarea>
             </div>
             <button type="submit" class="btn btn-primary" style="width: 100%;">Publish Daily Darshan</button>
           </form>
@@ -938,22 +926,18 @@
     async function submitDarshan(e) {
       e.preventDefault();
       let urls = [...darshanSelectedImages];
-      const singleUrl = document.getElementById('darshanImageUrl').value;
-      if (singleUrl && singleUrl.trim().length > 0) {
-        urls.push(singleUrl.trim());
-      }
 
       if (urls.length === 0) {
-        showToast('Please select at least one photo or enter image URL', true);
+        showToast('Please select at least one photo from device', true);
         return;
       }
 
       const today = new Date().toISOString().split('T')[0];
       const payload = {
         date: today,
-        title: document.getElementById('darshanTitle').value,
+        title: 'Daily Darshan',
         imageUrls: urls,
-        description: document.getElementById('darshanMessage').value,
+        description: '',
       };
 
       try {

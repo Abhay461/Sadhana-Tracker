@@ -801,28 +801,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                TextField(
-                  controller: titleController,
-                  decoration: InputDecoration(
-                    labelText: 'Darshan Title',
-                    hintText: 'e.g. Sri Sri Radha Gopinath Morning Darshan',
-                    filled: true,
-                    fillColor: const Color(0xFFF8FAFC),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: descriptionController,
-                  decoration: InputDecoration(
-                    labelText: 'Description (Optional)',
-                    hintText: 'e.g. Special Mangla Arti Shringar',
-                    filled: true,
-                    fillColor: const Color(0xFFF8FAFC),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-                const SizedBox(height: 16),
                 OutlinedButton.icon(
                   onPressed: isUploading
                       ? null
@@ -879,12 +857,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     onPressed: (isUploading || selectedFiles.isEmpty)
                         ? null
                         : () async {
-                            if (titleController.text.trim().isEmpty) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Please enter a title')),
-                              );
-                              return;
-                            }
                             setPublishState(() {
                               isUploading = true;
                             });
@@ -899,8 +871,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                               final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
                               await ApiService.post('/daily-darshan', {
                                 'date': todayStr,
-                                'title': titleController.text.trim(),
-                                'description': descriptionController.text.trim(),
+                                'title': 'Daily Darshan',
+                                'description': '',
                                 'imageUrls': uploadedUrls,
                               });
 

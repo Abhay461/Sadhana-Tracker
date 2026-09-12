@@ -3530,15 +3530,11 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                     minScale: 0.8,
                     maxScale: 4.0,
                     child: Center(
-                      child: Image.network(
+                      child: _buildSmartImage(
                         _optimizeCloudinaryUrl(urls[idx]),
                         fit: BoxFit.contain,
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return const Center(
-                            child: CircularProgressIndicator(color: Colors.white),
-                          );
-                        },
+                        placeholderBgColor: Colors.black,
+                        loadingColor: Colors.white,
                       ),
                     ),
                   );
@@ -3557,6 +3553,65 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         );
       },
     );
+  }
+
+  static Widget _buildSmartImage(
+    String url, {
+    BoxFit fit = BoxFit.cover,
+    double? width,
+    double? height,
+    Color? placeholderBgColor,
+    Color? loadingColor,
+  }) {
+    if (url.startsWith('data:image/') || url.startsWith('data:')) {
+      try {
+        final base64String = url.split(',').last;
+        final Uint8List bytes = base64Decode(base64String);
+        return Image.memory(
+          bytes,
+          width: width,
+          height: height,
+          fit: fit,
+          errorBuilder: (context, err, stack) => Container(
+            color: placeholderBgColor ?? const Color(0xFFF1F5F9),
+            child: const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+          ),
+        );
+      } catch (e) {
+        return Container(
+          color: placeholderBgColor ?? const Color(0xFFF1F5F9),
+          child: const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+        );
+      }
+    } else {
+      return Image.network(
+        url,
+        width: width,
+        height: height,
+        fit: fit,
+        gaplessPlayback: true,
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return Container(
+            color: placeholderBgColor ?? const Color(0xFFF1F5F9),
+            child: Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(loadingColor ?? const Color(0xFF0F172A)),
+                ),
+              ),
+            ),
+          );
+        },
+        errorBuilder: (context, err, stack) => Container(
+          color: placeholderBgColor ?? const Color(0xFFF1F5F9),
+          child: const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+        ),
+      );
+    }
   }
 
 
@@ -6216,7 +6271,15 @@ class _DailyDarshanCarouselWidgetState extends State<_DailyDarshanCarouselWidget
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       for (final url in widget.imageUrls) {
-        precacheImage(NetworkImage(url), context).catchError((_) {});
+        if (url.startsWith('data:')) {
+          try {
+            final base64String = url.split(',').last;
+            final bytes = base64Decode(base64String);
+            precacheImage(MemoryImage(bytes), context).catchError((_) {});
+          } catch (_) {}
+        } else {
+          precacheImage(NetworkImage(url), context).catchError((_) {});
+        }
       }
     });
   }
@@ -6280,32 +6343,11 @@ class _DailyDarshanCarouselWidgetState extends State<_DailyDarshanCarouselWidget
                 final url = widget.imageUrls[idx];
                 return GestureDetector(
                   onTap: () => widget.onTapImage(idx),
-                  child: Image.network(
+                  child: _FolkBoyDashboardState._buildSmartImage(
                     url,
                     width: double.infinity,
                     height: double.infinity,
                     fit: BoxFit.cover,
-                    gaplessPlayback: true,
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return Container(
-                        color: const Color(0xFFF1F5F9),
-                        child: const Center(
-                          child: SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF0F172A)),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                    errorBuilder: (context, err, stack) => Container(
-                      color: const Color(0xFFF1F5F9),
-                      child: const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
-                    ),
                   ),
                 );
               },
