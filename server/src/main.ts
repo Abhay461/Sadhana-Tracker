@@ -21,6 +21,9 @@ async function bootstrap() {
 
   // Serve Web Admin Portal
   app.use('/admin', express.static(join(process.cwd(), 'admin_portal')));
+  app.get('/admin', (req: express.Request, res: express.Response) => {
+    res.sendFile(join(process.cwd(), 'admin_portal', 'index.html'));
+  });
 
   // Security Headers
   app.use(helmet());
