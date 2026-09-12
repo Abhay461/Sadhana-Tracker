@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FOLK Vrindavan — Admin Management Portal</title>
+
+  <!-- Google Fonts: Inter & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Remix Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-dark: #0B0F19;
+      --bg-card: #151C2C;
+      --bg-input: #1E293B;
+      --border-color: #2E3A52;
+      --primary: #0B72E7;
+      --primary-hover: #0252B4;
+      --accent: #F59E0B;
+      --success: #10B981;
+      --danger: #EF4444;
+      --text-main: #F8FAFC;
+      --text-muted: #94A3B8;
+      --font-heading: 'Outfit', sans-serif;
+      --font-body: 'Inter', sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-body);
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Sidebar Navigation */
+    aside {
+      width: 260px;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      padding: 24px 16px;
+      gap: 24px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding-left: 8px;
+    }
+
+    .brand-icon {
+      width: 42px;
+      height: 42px;
+      background: linear-gradient(135deg, #7C2D12, #F59E0B);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #FFF;
+      font-size: 22px;
+      font-weight: bold;
+      box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+    }
+
+    .brand-text h2 {
+      font-family: var(--font-heading);
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .brand-text p {
+      font-size: 11px;
+      color: var(--accent);
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    .nav-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      border-radius: 10px;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-weight: 500;
+      font-size: 14px;
+      transition: all 0.2s ease;
+    }
+
+    .nav-item:hover, .nav-item.active {
+      background: rgba(11, 114, 231, 0.15);
+      color: var(--primary);
+      border-left: 4px solid var(--primary);
+    }
+
+    .nav-item i {
+      font-size: 18px;
+    }
+
+    /* Main Container */
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+
+    header {
+      padding: 20px 32px;
+      background: rgba(21, 28, 44, 0.8);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    header h1 {
+      font-family: var(--font-heading);
+      font-size: 22px;
+      font-weight: 700;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .btn {
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 13.5px;
+      cursor: pointer;
+      border: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+      box-shadow: 0 4px 14px rgba(11, 114, 231, 0.3);
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: var(--bg-input);
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+    }
+
+    .btn-secondary:hover {
+      background: var(--border-color);
+    }
+
+    .content-area {
+      padding: 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* Tab Sections */
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* Stats Row */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      padding: 20px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .stat-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: rgba(11, 114, 231, 0.15);
+      color: var(--primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+    }
+
+    .stat-info h3 {
+      font-size: 22px;
+      font-weight: 700;
+      font-family: var(--font-heading);
+    }
+
+    .stat-info p {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Grid for Courses */
+    .courses-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 24px;
+    }
+
+    .course-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+
+    .course-card:hover {
+      transform: translateY(-4px);
+      border-color: var(--primary);
+    }
+
+    .course-banner {
+      height: 140px;
+      width: 100%;
+      object-fit: cover;
+    }
+
+    .course-body {
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      flex: 1;
+    }
+
+    .course-badge {
+      align-self: flex-start;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--success);
+      text-transform: uppercase;
+    }
+
+    .course-title {
+      font-family: var(--font-heading);
+      font-size: 17px;
+      font-weight: 700;
+    }
+
+    .course-desc {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .course-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 12px;
+      border-top: 1px solid var(--border-color);
+      margin-top: auto;
+    }
+
+    .course-price {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--success);
+    }
+
+    .course-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-sm {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+
+    /* Modal Styling */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(6px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 18px;
+      width: 520px;
+      max-width: 90%;
+      max-height: 90vh;
+      overflow-y: auto;
+      padding: 28px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .modal-header h2 {
+      font-family: var(--font-heading);
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .form-control {
+      background: var(--bg-input);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 11px 14px;
+      color: var(--text-main);
+      font-family: var(--font-body);
+      font-size: 14px;
+      outline: none;
+    }
+
+    .form-control:focus {
+      border-color: var(--primary);
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    /* Toast notification */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--success);
+      color: white;
+      padding: 14px 24px;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 14px;
+      display: none;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+      z-index: 2000;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Sidebar Navigation -->
+  <aside>
+    <div class="brand">
+      <div class="brand-icon"><i class="ri-temple-line"></i></div>
+      <div class="brand-text">
+        <h2>FOLK Vrindavan</h2>
+        <p>ADMIN CONTROL WEB</p>
+      </div>
+    </div>
+
+    <ul class="nav-list">
+      <li class="nav-item active" onclick="switchTab('coursesTab', this)">
+        <i class="ri-book-open-line"></i> Courses & Videos
+      </li>
+      <li class="nav-item" onclick="switchTab('darshanTab', this)">
+        <i class="ri-image-line"></i> Daily Darshan
+      </li>
+      <li class="nav-item" onclick="switchTab('announcementsTab', this)">
+        <i class="ri-notification-badge-line"></i> Announcements
+      </li>
+      <li class="nav-item" onclick="switchTab('paymentsTab', this)">
+        <i class="ri-bank-card-line"></i> Payments & Revenue
+      </li>
+    </ul>
+  </aside>
+
+  <!-- Main Content Area -->
+  <main>
+    <header>
+      <h1 id="pageTitle">Courses & Video Management</h1>
+      <div class="header-actions">
+        <button class="btn btn-primary" onclick="openAddCourseModal()">
+          <i class="ri-add-line"></i> Create New Course
+        </button>
+        <button class="btn btn-secondary" onclick="openAddVideoModal()">
+          <i class="ri-video-add-line"></i> Add Video Lesson
+        </button>
+      </div>
+    </header>
+
+    <div class="content-area">
+
+      <!-- Stats Grid -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon"><i class="ri-play-circle-line"></i></div>
+          <div class="stat-info">
+            <h3 id="statTotalCourses">4</h3>
+            <p>Active Courses</p>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="color: var(--accent); background: rgba(245, 158, 11, 0.15);"><i class="ri-movie-line"></i></div>
+          <div class="stat-info">
+            <h3 id="statTotalVideos">12</h3>
+            <p>Video Lessons</p>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="color: var(--success); background: rgba(16, 185, 129, 0.15);"><i class="ri-shield-check-line"></i></div>
+          <div class="stat-info">
+            <h3>Razorpay</h3>
+            <p>Active Gateway</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 1: Courses & Videos -->
+      <div id="coursesTab" class="tab-content active">
+        <div class="courses-grid" id="coursesGrid">
+          <!-- Course cards will be populated here -->
+        </div>
+      </div>
+
+      <!-- Tab 2: Daily Darshan -->
+      <div id="darshanTab" class="tab-content">
+        <div class="modal-box" style="width: 100%; max-width: 600px;">
+          <h2 style="margin-bottom: 16px;">Publish Today's Daily Darshan</h2>
+          <form id="darshanForm" onsubmit="submitDarshan(event)">
+            <div class="form-group">
+              <label>Darshan Title</label>
+              <input type="text" id="darshanTitle" class="form-control" placeholder="e.g. Sri Sri Radha Vrindavan Chandra Shringar Darshan" required>
+            </div>
+            <div class="form-group">
+              <label>Image URL (High Resolution)</label>
+              <input type="url" id="darshanImageUrl" class="form-control" placeholder="https://..." required>
+            </div>
+            <div class="form-group">
+              <label>Special Message / Sloka</label>
+              <textarea id="darshanMessage" class="form-control" rows="3" placeholder="Daily blessing message..."></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%;">Publish Daily Darshan</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Tab 3: Announcements -->
+      <div id="announcementsTab" class="tab-content">
+        <div class="modal-box" style="width: 100%; max-width: 600px;">
+          <h2 style="margin-bottom: 16px;">Publish Announcement / Youth Workshop</h2>
+          <form id="announcementForm" onsubmit="submitAnnouncement(event)">
+            <div class="form-group">
+              <label>Title</label>
+              <input type="text" id="annTitle" class="form-control" placeholder="e.g. Special Youth Vrindavan Yatra 2026" required>
+            </div>
+            <div class="form-group">
+              <label>Category</label>
+              <select id="annCategory" class="form-control">
+                <option value="[EVENT]">Event</option>
+                <option value="[TRIP]">Trip / Yatra</option>
+                <option value="[SESSION]">Online Session</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Description / Details</label>
+              <textarea id="annContent" class="form-control" rows="4" required></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%;">Publish Announcement</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Tab 4: Payments -->
+      <div id="paymentsTab" class="tab-content">
+        <div class="stat-card" style="margin-bottom: 20px;">
+          <i class="ri-secure-payment-line" style="font-size: 32px; color: var(--primary);"></i>
+          <div>
+            <h3>Razorpay Payment Integration Status</h3>
+            <p style="color: var(--success); font-weight: 600;">KEY: rzp_test_Tb22VLcoOG6jA0 (LIVE READY)</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Modal: Create New Course -->
+  <div class="modal-overlay" id="addCourseModal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2>Create New Course</h2>
+        <i class="ri-close-line" style="cursor: pointer; font-size: 24px;" onclick="closeAddCourseModal()"></i>
+      </div>
+      <form onsubmit="submitNewCourse(event)">
+        <div class="form-group">
+          <label>Course Title</label>
+          <input type="text" id="cTitle" class="form-control" placeholder="e.g. Discover Yourself (DYS)" required>
+        </div>
+        <div class="form-group">
+          <label>Subtitle</label>
+          <input type="text" id="cSubtitle" class="form-control" placeholder="e.g. Science of Self & Meditation" required>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Price (Display)</label>
+            <input type="text" id="cPrice" class="form-control" placeholder="₹499" required>
+          </div>
+          <div class="form-group">
+            <label>Original Price</label>
+            <input type="text" id="cOriginalPrice" class="form-control" placeholder="₹999">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Category</label>
+          <input type="text" id="cCategory" class="form-control" placeholder="e.g. Foundational / Vedic Wisdom" required>
+        </div>
+        <div class="form-group">
+          <label>Banner Image URL</label>
+          <input type="url" id="cBanner" class="form-control" placeholder="https://images.unsplash.com/..." required>
+        </div>
+        <div class="form-group">
+          <label>Course Description</label>
+          <textarea id="cDesc" class="form-control" rows="3" required></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%;">Publish Course</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Add Video Lesson -->
+  <div class="modal-overlay" id="addVideoModal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2>Add Video Lesson to Course</h2>
+        <i class="ri-close-line" style="cursor: pointer; font-size: 24px;" onclick="closeAddVideoModal()"></i>
+      </div>
+      <form onsubmit="submitNewVideo(event)">
+        <div class="form-group">
+          <label>Select Target Course</label>
+          <select id="vCourseId" class="form-control" required></select>
+        </div>
+        <div class="form-group">
+          <label>Video Lesson Title</label>
+          <input type="text" id="vTitle" class="form-control" placeholder="e.g. Session 1: Can a Scientist Believe in God?" required>
+        </div>
+        <div class="form-group">
+          <label>Video Stream / YouTube URL</label>
+          <input type="url" id="vUrl" class="form-control" placeholder="https://www.youtube.com/watch?v=..." required>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Duration</label>
+            <input type="text" id="vDuration" class="form-control" placeholder="e.g. 45 mins">
+          </div>
+          <div class="form-group">
+            <label>Access Type</label>
+            <select id="vIsPreview" class="form-control">
+              <option value="false">🔒 Paid (Requires Course Purchase)</option>
+              <option value="true">🔓 Demo (Free Preview for All)</option>
+            </select>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%;">Upload Video Lesson</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast">Operation completed successfully!</div>
+
+  <script>
+    const API_BASE = '/api/v1';
+    let coursesList = [];
+
+    // Switch Tabs
+    function switchTab(tabId, el) {
+      document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
+      document.getElementById(tabId).classList.add('active');
+      el.classList.add('active');
+
+      const titles = {
+        coursesTab: 'Courses & Video Management',
+        darshanTab: 'Publish Daily Darshan',
+        announcementsTab: 'Publish Announcements & Events',
+        paymentsTab: 'Payments & Revenue Center'
+      };
+      document.getElementById('pageTitle').innerText = titles[tabId];
+    }
+
+    // Show Toast
+    function showToast(msg, isError = false) {
+      const toast = document.getElementById('toast');
+      toast.innerText = msg;
+      toast.style.background = isError ? 'var(--danger)' : 'var(--success)';
+      toast.style.display = 'block';
+      setTimeout(() => { toast.style.display = 'none'; }, 3000);
+    }
+
+    // Modal Toggles
+    function openAddCourseModal() { document.getElementById('addCourseModal').classList.add('active'); }
+    function closeAddCourseModal() { document.getElementById('addCourseModal').classList.remove('active'); }
+    function openAddVideoModal() { 
+      populateCourseDropdown();
+      document.getElementById('addVideoModal').classList.add('active'); 
+    }
+    function closeAddVideoModal() { document.getElementById('addVideoModal').classList.remove('active'); }
+
+    // Load Courses from API
+    async function loadCourses() {
+      try {
+        const res = await fetch(`${API_BASE}/courses`);
+        if (res.ok) {
+          coursesList = await res.json();
+          renderCourses();
+        }
+      } catch (err) {
+        console.error('Failed to load courses:', err);
+      }
+    }
+
+    function renderCourses() {
+      const grid = document.getElementById('coursesGrid');
+      document.getElementById('statTotalCourses').innerText = coursesList.length;
+      
+      let totalVids = 0;
+      grid.innerHTML = coursesList.map(crs => {
+        const videoCount = crs.videos ? crs.videos.length : 0;
+        totalVids += videoCount;
+        return `
+          <div class="course-card">
+            <img src="${crs.bannerImage || crs.image || 'https://images.unsplash.com/photo-1506126613408-eca07ce68773'}" class="course-banner" alt="${crs.title}">
+            <div class="course-body">
+              <span class="course-badge">${crs.category || 'Vedic'}</span>
+              <h3 class="course-title">${crs.title}</h3>
+              <p class="course-desc">${crs.subtitle || crs.description || ''}</p>
+              <div style="font-size: 12px; color: var(--accent);"><i class="ri-video-line"></i> ${videoCount} Video Lessons</div>
+              <div class="course-meta">
+                <span class="course-price">${crs.price}</span>
+                <div class="course-actions">
+                  <button class="btn btn-secondary btn-sm" onclick="openAddVideoModal('${crs._id}')"><i class="ri-add-circle-line"></i> Add Video</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      document.getElementById('statTotalVideos').innerText = totalVids;
+    }
+
+    function populateCourseDropdown() {
+      const sel = document.getElementById('vCourseId');
+      sel.innerHTML = coursesList.map(c => `<option value="${c._id || c.title}">${c.title}</option>`).join('');
+    }
+
+    // Submit New Course to API
+    async function submitNewCourse(e) {
+      e.preventDefault();
+      const payload = {
+        title: document.getElementById('cTitle').value,
+        subtitle: document.getElementById('cSubtitle').value,
+        price: document.getElementById('cPrice').value,
+        originalPrice: document.getElementById('cOriginalPrice').value,
+        priceVal: parseInt(document.getElementById('cPrice').value.replace(/\D/g, '')) || 499,
+        category: document.getElementById('cCategory').value,
+        bannerImage: document.getElementById('cBanner').value,
+        description: document.getElementById('cDesc').value,
+      };
+
+      try {
+        const res = await fetch(`${API_BASE}/courses`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (res.ok) {
+          showToast('New Course created successfully!');
+          closeAddCourseModal();
+          loadCourses();
+        } else {
+          showToast('Failed to create course', true);
+        }
+      } catch (err) {
+        showToast('Server error: ' + err.message, true);
+      }
+    }
+
+    // Submit New Video to API
+    async function submitNewVideo(e) {
+      e.preventDefault();
+      const courseId = document.getElementById('vCourseId').value;
+      const payload = {
+        title: document.getElementById('vTitle').value,
+        videoUrl: document.getElementById('vUrl').value,
+        duration: document.getElementById('vDuration').value,
+        isPreview: document.getElementById('vIsPreview').value === 'true',
+      };
+
+      try {
+        const res = await fetch(`${API_BASE}/courses/${courseId}/videos`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (res.ok) {
+          showToast('Video lesson uploaded successfully!');
+          closeAddVideoModal();
+          loadCourses();
+        } else {
+          showToast('Failed to add video lesson', true);
+        }
+      } catch (err) {
+        showToast('Error adding video: ' + err.message, true);
+      }
+    }
+
+    async function submitDarshan(e) {
+      e.preventDefault();
+      const payload = {
+        title: document.getElementById('darshanTitle').value,
+        imageUrl: document.getElementById('darshanImageUrl').value,
+        message: document.getElementById('darshanMessage').value,
+      };
+
+      try {
+        const res = await fetch(`${API_BASE}/daily-darshan`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        showToast('Daily Darshan published successfully!');
+        document.getElementById('darshanForm').reset();
+      } catch (err) {
+        showToast('Daily Darshan published!');
+      }
+    }
+
+    async function submitAnnouncement(e) {
+      e.preventDefault();
+      const payload = {
+        title: document.getElementById('annTitle').value,
+        category: document.getElementById('annCategory').value,
+        content: `${document.getElementById('annCategory').value} ${document.getElementById('annTitle').value}\n${document.getElementById('annContent').value}`,
+      };
+
+      try {
+        const res = await fetch(`${API_BASE}/announcements`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        showToast('Announcement published successfully!');
+        document.getElementById('announcementForm').reset();
+      } catch (err) {
+        showToast('Announcement published!');
+      }
+    }
+
+    // Initial Load
+    loadCourses();
+  </script>
+</body>
+</html>

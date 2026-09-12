@@ -1,10 +1,12 @@
 import 'dart:io';
+
 void main() {
   try {
-    File('C:\\Users\\LENOVO\\.gemini\\antigravity-ide\\brain\\bfec33b3-1019-4f00-bbc5-a1be059f9f52\\media__1779885401188.jpg')
-      .copySync('d:\\work update app\\mobile_app\\assets\\logo.jpg');
-    stdout.writeln('Success');
+    final sourcePath = r'C:\Users\LENOVO\.gemini\antigravity-ide\brain\a1f70f4f-b3fa-4396-93cf-9341234f786e\media__1788678205664.png';
+    final targetPath = r'd:\work update app\mobile_app\assets\folk_logo.png';
+    File(sourcePath).copySync(targetPath);
+    stdout.writeln('Successfully copied folk logo to assets/folk_logo.png');
   } catch (e) {
-    stderr.writeln('Error: $e');
+    stderr.writeln('Error copying logo: $e');
   }
 }

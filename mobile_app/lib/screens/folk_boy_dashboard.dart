@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io' show File, Platform;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -8,6 +9,8 @@ import '../services/cloudinary_service.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
+import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'resident_enrollment_form_screen.dart';
 import 'student_payment_screen.dart';
 import '../utils/notification_helper.dart';
@@ -41,7 +44,6 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   final ImagePicker _picker = ImagePicker();
 
   // Inline sadhana logging
-  String _selectedSadhanaDate = 'Today';
   final Map<String, bool> _savingStatus = {};
 
   final _roundsController = TextEditingController(text: '16');
@@ -50,10 +52,8 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   final String _readingUnit = 'Pages';
   final _serviceNameController = TextEditingController();
   final _serviceMinutesController = TextEditingController();
-  final String _ekadashiFastingType = 'Ekadashi Prasadam (No Grains)';
-  final _ekadashiNotesController = TextEditingController();
 
-  final TimeOfDay _manglaStartTime = const TimeOfDay(hour: 4, minute: 30);
+  TimeOfDay _manglaStartTime = const TimeOfDay(hour: 4, minute: 30);
   final TimeOfDay _onlineStartTime = const TimeOfDay(hour: 8, minute: 0);
   final TimeOfDay _onlineEndTime = const TimeOfDay(hour: 9, minute: 0);
   final TimeOfDay _sbStartTime = const TimeOfDay(hour: 8, minute: 0);
@@ -69,12 +69,97 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   int _currentAnnouncementIndex = 0;
   Timer? _carouselTimer;
 
+  static const String _razorpayApiKey = 'rzp_test_Tb22VLcoOG6jA0';
+  static const String _razorpaySecret = 'PX2qUQCiLui8JEdzuzwzTdbK';
+  Razorpay? _razorpay;
+
+  List<Map<String, dynamic>> _dynamicCourses = [];
+  bool _isLoadingCourses = true;
+
   @override
   void initState() {
     super.initState();
+    _ensureFolkLogoAsset();
     _loadProfileAndData();
     _fetchAnnouncements();
     _fetchDailyDarshan();
+    _fetchCourses();
+    _initRazorpay();
+  }
+
+  Future<void> _fetchCourses() async {
+    try {
+      final response = await ApiService.get('/courses');
+      if (response != null && response is List && response.isNotEmpty) {
+        if (mounted) {
+          setState(() {
+            _dynamicCourses = List<Map<String, dynamic>>.from(response);
+            _isLoadingCourses = false;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching backend courses: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingCourses = false;
+        });
+      }
+    }
+  }
+
+  void _initRazorpay() {
+    try {
+      _razorpay = Razorpay();
+      _razorpay!.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
+      _razorpay!.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
+      _razorpay!.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
+    } catch (e) {
+      debugPrint('Razorpay init error: $e');
+    }
+  }
+
+  void _handlePaymentSuccess(PaymentSuccessResponse response) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Payment Successful! Payment ID: ${response.paymentId}'),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 5),
+      ),
+    );
+  }
+
+  void _handlePaymentError(PaymentFailureResponse response) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Payment Failed/Cancelled: ${response.message ?? "User cancelled"}'),
+        backgroundColor: Colors.orange,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  void _handleExternalWallet(ExternalWalletResponse response) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('External Wallet: ${response.walletName}'),
+        backgroundColor: Colors.blue,
+      ),
+    );
+  }
+
+  void _ensureFolkLogoAsset() {
+    try {
+      final source = File(r'C:\Users\LENOVO\.gemini\antigravity-ide\brain\a1f70f4f-b3fa-4396-93cf-9341234f786e\media__1788678205664.png');
+      final target = File(r'd:\work update app\mobile_app\assets\folk_logo.png');
+      if (source.existsSync() && (!target.existsSync() || target.lengthSync() != source.lengthSync())) {
+        source.copySync(target.path);
+      }
+    } catch (_) {}
   }
 
   Future<void> _fetchDailyDarshan() async {
@@ -94,6 +179,9 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
 
   @override
   void dispose() {
+    try {
+      _razorpay?.clear();
+    } catch (_) {}
     _carouselTimer?.cancel();
     _pageController.dispose();
     _roundsController.dispose();
@@ -101,7 +189,6 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     _readingValueController.dispose();
     _serviceNameController.dispose();
     _serviceMinutesController.dispose();
-    _ekadashiNotesController.dispose();
     super.dispose();
   }
 
@@ -411,20 +498,27 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       return;
     }
 
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      barrierDismissible: true,
       builder: (context) {
-        return _SadhanaLogSheet(
-          logDate: type,
-          profileId: _profile!['id'],
-          profileName: _profile!['name'],
-          preacherName: _preacher?['name'] ?? 'Preacher',
-          updates: _updates,
-          onSaveSuccess: () {
-            _fetchUpdates();
-          },
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: Colors.white,
+          clipBehavior: Clip.antiAlias,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: _SadhanaLogSheet(
+            logDate: 'Today',
+            initialOption: type,
+            profileId: _profile!['id'],
+            profileName: _profile!['name'],
+            preacherName: _preacher?['name'] ?? 'Preacher',
+            updates: _updates,
+            onSaveSuccess: (msg) {
+              _fetchUpdates();
+              _showSuccessDialog(msg);
+            },
+          ),
         );
       },
     );
@@ -1249,72 +1343,39 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
-      appBar: _selectedIndex == 0
-          ? AppBar(
-              automaticallyImplyLeading: false,
-              backgroundColor: Colors.white,
-              elevation: 0,
-              scrolledUnderElevation: 0,
-              shape: const Border(bottom: BorderSide(color: Color(0xFFF1F5F9), width: 1)),
-              toolbarHeight: 70,
-              systemOverlayStyle: const SystemUiOverlayStyle(
-                statusBarColor: Colors.white,
-                statusBarIconBrightness: Brightness.dark,
-                statusBarBrightness: Brightness.light,
-              ),
-              centerTitle: false,
-              title: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 22,
-                      backgroundImage: _profile?['photo_url'] != null
-                          ? NetworkImage(_profile!['photo_url'])
-                          : null,
-                      backgroundColor: const Color(0xFFF1F5F9),
-                      child: _profile?['photo_url'] == null
-                          ? Text(
-                              (_profile?['name'] ?? 'U')[0].toUpperCase(),
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF0F172A),
-                              ),
-                            )
-                          : null,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'Hare Krishna, ${_profile?['name'] ?? 'User'}',
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF0F172A),
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 2),
-                          const _LiveDateTimeWidget(color: Color(0xFF64748B)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          : null,
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        toolbarHeight: 95,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFFBAE6FD),
+                Color(0xFFE0F2FE),
+                Color(0xFFF8FAFC),
+              ],
+            ),
+          ),
+        ),
+        systemOverlayStyle: const SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.dark,
+          statusBarBrightness: Brightness.light,
+        ),
+        centerTitle: true,
+        title: _buildHeaderLogo(),
+      ),
       body: IndexedStack(
-        index: _selectedIndex,
+        index: _selectedIndex > 4 ? 0 : _selectedIndex,
         children: [
           _buildHomeTab(),
-          _buildHistoryTab(),
+          _buildEventsTab(),
+          _buildCoursesTab(),
           _buildServicesTab(),
           _buildProfileTab(),
         ],
@@ -1334,9 +1395,9 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
             indicatorColor: const Color(0xFF0F172A).withValues(alpha: 0.08),
             labelTextStyle: WidgetStateProperty.resolveWith((states) {
               if (states.contains(WidgetState.selected)) {
-                return const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 12);
+                return const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 11);
               }
-              return const TextStyle(color: Color(0xFF94A3B8), fontSize: 12);
+              return const TextStyle(color: Color(0xFF94A3B8), fontSize: 11);
             }),
             iconTheme: WidgetStateProperty.resolveWith((states) {
               if (states.contains(WidgetState.selected)) {
@@ -1346,7 +1407,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
             }),
           ),
           child: NavigationBar(
-            selectedIndex: _selectedIndex,
+            selectedIndex: _selectedIndex > 4 ? 0 : _selectedIndex,
             onDestinationSelected: (int index) {
               setState(() {
                 _selectedIndex = index;
@@ -1362,9 +1423,14 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                 label: 'Home',
               ),
               NavigationDestination(
-                icon: Icon(Icons.history_outlined),
-                selectedIcon: Icon(Icons.history_rounded),
-                label: 'History',
+                icon: Icon(Icons.event_outlined),
+                selectedIcon: Icon(Icons.event_rounded),
+                label: 'Events',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.auto_stories_outlined),
+                selectedIcon: Icon(Icons.auto_stories_rounded),
+                label: 'Courses',
               ),
               NavigationDestination(
                 icon: Icon(Icons.grid_view_outlined),
@@ -1383,6 +1449,19 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     );
   }
 
+  Widget _buildHeaderLogo() {
+    return Image.asset(
+      'assets/folk_logo.png',
+      height: 82,
+      fit: BoxFit.contain,
+      errorBuilder: (context, error, stackTrace) => Image.asset(
+        'assets/logo.jpg',
+        height: 82,
+        fit: BoxFit.contain,
+      ),
+    );
+  }
+
   Widget _buildHomeTab() {
     return RefreshIndicator(
       onRefresh: () async {
@@ -1396,6 +1475,10 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Action Buttons / Categories (Your Sadhana)
+            _buildInlineSadhanaCard(),
+            const SizedBox(height: 20),
+
             // Daily Darshan Card
             _buildDailyDarshanCard(),
 
@@ -1558,10 +1641,6 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
               ),
               const SizedBox(height: 20),
             ],
-
-            // Action Buttons / Categories
-            _buildInlineSadhanaCard(),
-            const SizedBox(height: 20),
           ],
         ),
       ),
@@ -1740,7 +1819,80 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     );
   }
 
+  int _servicesSubTab = 0;
+
   Widget _buildServicesTab() {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Container(
+            height: 42,
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE2E8F0),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _servicesSubTab = 0),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: _servicesSubTab == 0 ? Colors.white : Colors.transparent,
+                        borderRadius: BorderRadius.circular(9),
+                        boxShadow: _servicesSubTab == 0
+                            ? [BoxShadow(color: Colors.black.withAlpha(12), blurRadius: 4)]
+                            : [],
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        'Services',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: _servicesSubTab == 0 ? const Color(0xFF0F172A) : const Color(0xFF64748B),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _servicesSubTab = 1),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: _servicesSubTab == 1 ? Colors.white : Colors.transparent,
+                        borderRadius: BorderRadius.circular(9),
+                        boxShadow: _servicesSubTab == 1
+                            ? [BoxShadow(color: Colors.black.withAlpha(12), blurRadius: 4)]
+                            : [],
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        'Sadhana History',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: _servicesSubTab == 1 ? const Color(0xFF0F172A) : const Color(0xFF64748B),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Expanded(
+          child: _servicesSubTab == 0 ? _buildServicesList() : _buildHistoryTab(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildServicesList() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -1753,6 +1905,11 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
           const SizedBox(height: 12),
           Column(
             children: [
+              _buildServiceListItem(
+                title: 'Sadhana & Activity History',
+                icon: Icons.history_rounded,
+                onTap: () => setState(() => _servicesSubTab = 1),
+              ),
               _buildServiceListItem(
                 title: 'Screen Time Track',
                 icon: Icons.phone_android_outlined,
@@ -1791,6 +1948,743 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
               ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+  Widget _buildEventsTab() {
+    final List<Map<String, dynamic>> defaultEvents = [
+      {
+        'title': 'Sri Krishna Janmashtami Festival & Abhishek',
+        'type': 'Festival',
+        'date': 'Coming Soon',
+        'venue': 'Vrindavan Chandrodaya Mandir',
+        'image': 'https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=600&q=80',
+        'description': 'Grand celebration with Kirtan, Abhishek, and Prasadam distribution.',
+      },
+      {
+        'title': 'Govardhan Parikrama & Yatra Retreat',
+        'type': 'Yatra',
+        'date': 'Upcoming Weekend',
+        'venue': 'Govardhan Dham',
+        'image': 'https://images.unsplash.com/photo-1609137144813-7d9921338f24?auto=format&fit=crop&w=600&q=80',
+        'description': 'Spiritual retreat with ecstatic Kirtan, Parikrama, and Preacher lectures.',
+      },
+      {
+        'title': 'Youth Awakening Workshop & Meditation',
+        'type': 'Workshop',
+        'date': 'Every Sunday 5:00 PM',
+        'venue': 'FOLK Youth Hall',
+        'image': 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=600&q=80',
+        'description': 'Interactive sessions on mind management, meditation, and leadership.',
+      },
+    ];
+
+    final eventList = _announcements.where((a) => a['type'] == 'event' || a['type'] == 'trip').toList();
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Upcoming Events & Yatra',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEEF2FF),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${eventList.length + defaultEvents.length} Active',
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF4F46E5)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          ...eventList.map((ann) {
+            return Card(
+              margin: const EdgeInsets.only(bottom: 14),
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: const BorderSide(color: Color(0xFFE2E8F0)),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if ((ann['banner'] as String? ?? '').isNotEmpty)
+                    Image.network(
+                      ann['banner'],
+                      height: 140,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(height: 100, color: const Color(0xFF3F1200)),
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.all(14.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFDCFCE7),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                ann['type'].toString().toUpperCase(),
+                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
+                              ),
+                            ),
+                            const Spacer(),
+                            if ((ann['time'] as String? ?? '').isNotEmpty)
+                              Text(
+                                ann['time'],
+                                style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          ann['title'] ?? '',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              final link = ann['link'] as String? ?? '';
+                              if (link.isNotEmpty) {
+                                launchUrl(Uri.parse(link), mode: LaunchMode.externalApplication);
+                              } else {
+                                _showEventJoinDialog(ann['title'] ?? 'Event', link);
+                              }
+                            },
+                            icon: const Icon(Icons.event_available_rounded, size: 18),
+                            label: const Text('Register / View Event'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF3F1200),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+
+          ...defaultEvents.map((evt) {
+            return Card(
+              margin: const EdgeInsets.only(bottom: 14),
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: const BorderSide(color: Color(0xFFE2E8F0)),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Image.network(
+                    evt['image'],
+                    height: 130,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(height: 90, color: const Color(0xFF3F1200)),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(14.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFEF3C7),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                evt['type'].toString().toUpperCase(),
+                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFD97706)),
+                              ),
+                            ),
+                            const Spacer(),
+                            Row(
+                              children: [
+                                const Icon(Icons.calendar_month, size: 13, color: Color(0xFF64748B)),
+                                const SizedBox(width: 4),
+                                Text(
+                                  evt['date'],
+                                  style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          evt['title'],
+                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          evt['description'],
+                          style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              _showEventJoinDialog(evt['title'], '');
+                            },
+                            icon: const Icon(Icons.check_circle_outline, size: 18),
+                            label: const Text('Join Event'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF3F1200),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBannerTag(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: Colors.white),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: Colors.white),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCoursePaymentDialog(Map<String, dynamic> crs) {
+    _openRazorpayCheckout(crs, 'ALL');
+  }
+
+  Widget _buildRazorpayPaymentOption({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required String value,
+    required String groupValue,
+    required ValueChanged<String?> onChanged,
+  }) {
+    final bool isSelected = value == groupValue;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: isSelected ? const Color(0xFFF0F7FF) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isSelected ? const Color(0xFF0B72E7) : const Color(0xFFE2E8F0),
+          width: isSelected ? 1.5 : 1.0,
+        ),
+      ),
+      child: RadioListTile<String>(
+        value: value,
+        groupValue: groupValue,
+        onChanged: onChanged,
+        activeColor: const Color(0xFF0B72E7),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+        title: Row(
+          children: [
+            Icon(icon, color: isSelected ? const Color(0xFF0B72E7) : const Color(0xFF64748B), size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                      color: isSelected ? const Color(0xFF0C2340) : const Color(0xFF1E293B),
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openRazorpayCheckout(Map<String, dynamic> crs, String method) async {
+    final priceStr = (crs['price'] as String? ?? '').replaceAll('₹', '').trim();
+    final double priceVal = double.tryParse(priceStr) ?? 499;
+    final int amountInPaise = (priceVal * 100).round();
+
+    // Prepare native Razorpay options for in-app popup
+    var options = {
+      'key': _razorpayApiKey,
+      'amount': amountInPaise,
+      'name': 'FOLK Vrindavan',
+      'description': 'Course: ${crs['title']}',
+      'prefill': {
+        'contact': _profile?['mobile_number'] ?? _profile?['whatsapp_number'] ?? '',
+        'email': _profile?['email'] ?? '',
+        'name': _profile?['full_name'] ?? 'Student',
+      },
+      'external': {
+        'wallets': ['paytm']
+      }
+    };
+
+    bool openedNatively = false;
+    try {
+      if (_razorpay != null) {
+        _razorpay!.open(options);
+        openedNatively = true;
+      }
+    } catch (e) {
+      debugPrint('Razorpay native open error: $e');
+    }
+
+    if (!openedNatively) {
+      _openRazorpayWebCheckout(crs, amountInPaise);
+    }
+  }
+
+  Future<void> _openRazorpayWebCheckout(Map<String, dynamic> crs, int amountInPaise) async {
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: const Padding(
+          padding: EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(width: 44, height: 44, child: CircularProgressIndicator(color: Color(0xFF0B72E7), strokeWidth: 3)),
+              SizedBox(height: 18),
+              Text('Opening Razorpay...', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F172A))),
+              SizedBox(height: 6),
+              Text('Please wait...', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    try {
+      // Create Razorpay Payment Link via API
+      final credentials = base64Encode(utf8.encode('$_razorpayApiKey:$_razorpaySecret'));
+      final response = await http.post(
+        Uri.parse('https://api.razorpay.com/v1/payment_links'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Basic $credentials',
+        },
+        body: jsonEncode({
+          'amount': amountInPaise,
+          'currency': 'INR',
+          'description': 'Course Payment: ${crs['title']}',
+          'customer': {
+            'name': _profile?['full_name'] ?? 'Student',
+            'contact': _profile?['mobile_number'] ?? _profile?['whatsapp_number'] ?? '',
+            'email': _profile?['email'] ?? '',
+          },
+          'notify': {'sms': true, 'email': true},
+        }),
+      );
+
+      if (mounted) Navigator.pop(context); // close loading
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        final shortUrl = data['short_url'] as String?;
+
+        if (shortUrl != null && shortUrl.isNotEmpty) {
+          final uri = Uri.parse(shortUrl);
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Razorpay payment page opened. Complete payment there.'),
+                backgroundColor: Color(0xFF0B72E7),
+                duration: Duration(seconds: 4),
+              ),
+            );
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Payment link not available. Try again.'), backgroundColor: Colors.red),
+            );
+          }
+        }
+      } else {
+        debugPrint('Razorpay error: ${response.statusCode} ${response.body}');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Payment error (${response.statusCode}). Try again.'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) Navigator.pop(context);
+      debugPrint('Razorpay error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Network error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Widget _buildCoursesTab() {
+    final List<Map<String, dynamic>> courses = [
+      {
+        'title': 'Discover Yourself (DYS)',
+        'subtitle': 'Science of Self, Mind & Meditation',
+        'duration': '6 Sessions',
+        'category': 'Foundational',
+        'price': '₹499',
+        'originalPrice': '₹999',
+        'icon': Icons.psychology_rounded,
+        'color': const Color(0xFF4F46E5),
+        'bg': const Color(0xFFEEF2FF),
+        'image': 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=600&q=80',
+        'description': 'Systematic course exploring life purpose, mind control, karma & meditation practices.',
+      },
+      {
+        'title': 'Bhagavad Gita As It Is',
+        'subtitle': '18 Chapters In-Depth Study',
+        'duration': '12 Weeks',
+        'category': 'Vedic Wisdom',
+        'price': '₹999',
+        'originalPrice': '₹1999',
+        'icon': Icons.auto_stories_rounded,
+        'color': const Color(0xFFD97706),
+        'bg': const Color(0xFFFFFBEB),
+        'image': 'https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=600&q=80',
+        'description': 'Learn timeless wisdom for daily life, duty, devotion, and inner peace.',
+      },
+      {
+        'title': 'Spiritual Scientist',
+        'subtitle': 'Consciousness & Scientific Evidence',
+        'duration': '4 Sessions',
+        'category': 'Science & Spirituality',
+        'price': '₹349',
+        'originalPrice': '₹699',
+        'icon': Icons.science_rounded,
+        'color': const Color(0xFF059669),
+        'bg': const Color(0xFFECFDF5),
+        'image': 'https://images.unsplash.com/photo-1507413245164-6160d8298b31?auto=format&fit=crop&w=600&q=80',
+        'description': 'Scientific inquiry into life, origin of species, consciousness, and cosmology.',
+      },
+      {
+        'title': 'Japa Yoga & Habit Building',
+        'subtitle': 'Mastering Mantra Meditation',
+        'duration': '3 Weeks',
+        'category': 'Practicum',
+        'price': '₹299',
+        'originalPrice': '₹599',
+        'icon': Icons.spa_rounded,
+        'color': const Color(0xFFDB2777),
+        'bg': const Color(0xFFFDF2F8),
+        'image': 'https://images.unsplash.com/photo-1609137144813-7d9921338f24?auto=format&fit=crop&w=600&q=80',
+        'description': 'Practical guide to morning habits, mantra meditation focus, and spiritual discipline.',
+      },
+    ];
+
+    final List<Map<String, dynamic>> displayCourses = _dynamicCourses.isNotEmpty
+        ? _dynamicCourses
+        : courses;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Top Course Hero Banner
+          Container(
+            margin: const EdgeInsets.only(bottom: 18),
+            width: double.infinity,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: const LinearGradient(
+                colors: [Color(0xFF3F1200), Color(0xFF7C2D12)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF3F1200).withValues(alpha: 0.25),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Stack(
+                children: [
+                  Positioned(
+                    right: -15,
+                    bottom: -15,
+                    child: Icon(
+                      Icons.auto_stories_rounded,
+                      size: 130,
+                      color: Colors.white.withValues(alpha: 0.08),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(18.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFDE68A),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Icon(Icons.stars_rounded, size: 14, color: Color(0xFF92400E)),
+                              SizedBox(width: 4),
+                              Text(
+                                'FOLK ACADEMY BANNER',
+                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Color(0xFF92400E), letterSpacing: 0.5),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Transform Your Life with Vedic Wisdom',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white, height: 1.2),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Explore interactive youth workshops, mind management & mantra meditation courses guided by experienced preachers.',
+                          style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.9), height: 1.35),
+                        ),
+                        const SizedBox(height: 14),
+                        Row(
+                          children: [
+                            _buildBannerTag(Icons.workspace_premium_rounded, 'Certificate'),
+                            const SizedBox(width: 8),
+                            _buildBannerTag(Icons.groups_rounded, 'Live Sessions'),
+                            const SizedBox(width: 8),
+                            _buildBannerTag(Icons.sell_rounded, 'Paid Courses'),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Vedic & Youth Growth Courses',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDCFCE7),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${displayCourses.length} Available',
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ...displayCourses.map((crs) {
+            final Color themeColor = crs['color'] is Color
+                ? crs['color'] as Color
+                : const Color(0xFF4F46E5);
+            final Color bgColor = crs['bg'] is Color
+                ? crs['bg'] as Color
+                : const Color(0xFFEEF2FF);
+            final IconData icon = crs['icon'] is IconData
+                ? crs['icon'] as IconData
+                : Icons.auto_stories_rounded;
+            final String imageUrl = (crs['image'] ?? crs['bannerImage'] ?? 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=600&q=80').toString();
+
+            return Card(
+              margin: const EdgeInsets.only(bottom: 14),
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: const BorderSide(color: Color(0xFFE2E8F0)),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Image.network(
+                    imageUrl,
+                    height: 120,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(height: 80, color: themeColor),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: bgColor,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(icon, color: themeColor, size: 22),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: bgColor,
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      crs['category'].toString().toUpperCase(),
+                                      style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: themeColor),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    crs['title'],
+                                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                                  ),
+                                  Text(
+                                    crs['subtitle'],
+                                    style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          crs['description'],
+                          style: const TextStyle(fontSize: 12.5, color: Color(0xFF475569), height: 1.4),
+                        ),
+                        const SizedBox(height: 14),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.schedule, size: 13, color: Color(0xFF64748B)),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      crs['duration'],
+                                      style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    Text(
+                                      crs['originalPrice'] ?? '',
+                                      style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8), decoration: TextDecoration.lineThrough),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      crs['price'] ?? '',
+                                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                _showCoursePaymentDialog(crs);
+                              },
+                              icon: const Icon(Icons.shopping_cart_outlined, size: 16),
+                              label: Text('Buy Course (${crs['price']})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF3F1200),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
         ],
       ),
     );
@@ -2366,65 +3260,49 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       'Temple Visit',
       'Srimad Bhagavatam Class',
       'Bhagavad Gita Class',
-      if (_selectedSadhanaDate == 'Ekadashi') 'Ekadashi Fasting',
+      'Ekadashi Fasting',
       'Sleep',
     ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Your Sadhana',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
-            ),
-            Row(
-              children: ['Today', 'Yesterday', 'Ekadashi'].map((type) {
-                final isSelected = _selectedSadhanaDate == type;
-                return Padding(
-                  padding: const EdgeInsets.only(left: 6),
-                  child: ChoiceChip(
-                    label: Text(
-                      type,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: isSelected ? Colors.white : const Color(0xFF475569),
-                      ),
-                    ),
-                    selected: isSelected,
-                    selectedColor: const Color(0xFF0F172A),
-                    backgroundColor: const Color(0xFFF1F5F9),
-                    onSelected: (bool selected) {
-                      if (selected) {
-                        setState(() {
-                          _selectedSadhanaDate = type;
-                        });
-                      }
-                    },
-                    visualDensity: VisualDensity.compact,
-                    showCheckmark: false,
-                  ),
-                );
-              }).toList(),
-            ),
-          ],
+        const Text(
+          'Your Sadhana',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF0F172A),
+          ),
         ),
         const SizedBox(height: 12),
-        Column(
-          children: activities.map((activity) => _buildSadhanaTile(activity)).toList(),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: activities.length,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+            childAspectRatio: 3.0,
+          ),
+          itemBuilder: (context, index) {
+            return _buildSadhanaGridCard(activities[index]);
+          },
         ),
       ],
     );
   }
 
-  Widget _buildSadhanaTile(String activity) {
+  Widget _buildSadhanaGridCard(String activity) {
     final loggedDetails = _getSadhanaLoggedDetails(activity);
     final isLogged = loggedDetails != null;
 
     IconData icon;
+    const Color themeColor = Color(0xFF3F1200);
+    const Color boxBgColor = Color(0xFFFAF5F0);
+    const Color borderColor = Color(0xFFE8DCD5);
+
     switch (activity) {
       case 'Morning':
         icon = Icons.wb_sunny_rounded;
@@ -2454,7 +3332,8 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         icon = Icons.auto_stories_rounded;
         break;
       case 'Ekadashi Fasting':
-        icon = Icons.restaurant_rounded;
+      case 'Ekadashi':
+        icon = Icons.spa_rounded;
         break;
       case 'Sleep':
         icon = Icons.bedtime_rounded;
@@ -2464,39 +3343,13 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     }
 
     final isLocked = _isDayLockedByPreacher;
+    final String titleText = activity == 'Morning'
+        ? 'Morning Wake-Up'
+        : (activity == 'Sleep' ? 'Sleep Time' : activity);
 
-    return Card(
-      elevation: 0,
-      margin: const EdgeInsets.only(bottom: 12),
-      color: isLogged ? const Color(0xFFF8FAFC) : Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: isLogged ? const Color(0xFF0F172A).withValues(alpha: 0.15) : const Color(0xFFE2E8F0),
-          width: isLogged ? 1.5 : 1.0,
-        ),
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        leading: _buildRealisticIcon(activity, icon, isLogged),
-        title: Text(
-          activity == 'Morning' ? 'Morning Wake-Up' : (activity == 'Sleep' ? 'Sleep Time' : activity),
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
-            color: isLogged ? const Color(0xFF0F172A) : const Color(0xFF1E293B),
-          ),
-        ),
-        subtitle: Text(
-          isLogged ? loggedDetails : 'Not logged yet • Tap to log',
-          style: TextStyle(
-            fontSize: 12,
-            color: isLogged ? const Color(0xFF0F172A).withValues(alpha: 0.7) : const Color(0xFF64748B),
-          ),
-        ),
-        trailing: isLogged
-            ? const Icon(Icons.check_circle_rounded, color: Colors.green, size: 24)
-            : Icon(Icons.add_circle_outline_rounded, color: const Color(0xFF0F172A).withValues(alpha: 0.3), size: 24),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
         onTap: isLocked
             ? () {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -2515,6 +3368,17 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                     });
                     await _handleInlineSave('Morning');
                   }
+                } else if (activity == 'Mangla Arti') {
+                  final time = await showTimePicker(
+                    context: context,
+                    initialTime: _manglaStartTime,
+                  );
+                  if (time != null) {
+                    setState(() {
+                      _manglaStartTime = time;
+                    });
+                    await _handleInlineSave('Mangla Arti');
+                  }
                 } else if (activity == 'Sleep') {
                   final time = await showTimePicker(
                     context: context,
@@ -2530,141 +3394,121 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                   _openSadhanaModal(activity);
                 }
               },
+        borderRadius: BorderRadius.circular(10),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          decoration: BoxDecoration(
+            color: isLogged ? themeColor.withValues(alpha: 0.12) : boxBgColor,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isLogged ? themeColor.withValues(alpha: 0.5) : borderColor,
+              width: isLogged ? 1.2 : 0.9,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: isLogged ? themeColor.withValues(alpha: 0.2) : themeColor.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  icon,
+                  size: 13,
+                  color: themeColor,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      titleText,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                        color: Color(0xFF0F172A),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      isLogged ? loggedDetails : 'Tap to log',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: isLogged ? FontWeight.bold : FontWeight.w500,
+                        color: isLogged ? themeColor : const Color(0xFF64748B),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 2),
+              Icon(
+                isLogged ? Icons.check_circle_rounded : Icons.add_circle_outline_rounded,
+                size: 14,
+                color: isLogged ? themeColor : themeColor.withValues(alpha: 0.4),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildRealisticIcon(String activity, IconData icon, bool isLogged) {
-    final Color iconColor = isLogged ? const Color(0xFF0F172A) : const Color(0xFF64748B);
-    final Color borderColor = isLogged 
-        ? const Color(0xFF0F172A).withValues(alpha: 0.2)
-        : const Color(0xFFE2E8F0);
-
-    return Container(
-      width: 42,
-      height: 42,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: isLogged ? const Color(0xFFF1F5F9) : const Color(0xFFF8FAFC),
-        border: Border.all(
-          color: borderColor,
-          width: 1.2,
-        ),
-      ),
-      child: Center(
-        child: Icon(
-          icon,
-          color: iconColor,
-          size: 20,
-        ),
-      ),
-    );
+  String _optimizeCloudinaryUrl(String url) {
+    if (url.contains('res.cloudinary.com') && url.contains('/upload/') && !url.contains('f_auto')) {
+      return url.replaceFirst('/upload/', '/upload/f_auto,q_auto,w_600,c_limit/');
+    }
+    return url;
   }
 
   Widget _buildDailyDarshanCard() {
     if (_todayDarshan == null) return const SizedBox.shrink();
 
-    final title = _todayDarshan!['title'] as String? ?? 'Today\'s Daily Darshan';
+    final title = _todayDarshan!['title'] as String? ?? '';
     final List<dynamic> rawUrls = _todayDarshan!['imageUrls'] is List ? _todayDarshan!['imageUrls'] : [];
-    final List<String> imageUrls = rawUrls.map((u) => u.toString()).toList();
+    final List<String> imageUrls = rawUrls.map((u) => _optimizeCloudinaryUrl(u.toString())).toList();
     if (imageUrls.isEmpty) return const SizedBox.shrink();
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(10),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(14.0),
-            child: Row(
-              children: [
-                const Icon(Icons.temple_hindu_rounded, color: Color(0xFF0F172A), size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF0F172A),
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Text(
-                    'DAILY DARSHAN',
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF475569),
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-              ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Daily Darshan',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0F172A),
+              ),
             ),
-          ),
-          SizedBox(
-            height: 220,
-            child: PageView.builder(
-              itemCount: imageUrls.length,
-              itemBuilder: (context, idx) {
-                final url = imageUrls[idx];
-                return GestureDetector(
-                  onTap: () => _openFullDarshanDialog(imageUrls, idx),
-                  child: ClipRRect(
-                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        Image.network(
-                          url,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, err, stack) => Container(
-                            color: const Color(0xFFF1F5F9),
-                            child: const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
-                          ),
-                        ),
-                        Positioned(
-                          right: 12,
-                          bottom: 12,
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withAlpha(150),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.zoom_in_rounded, color: Colors.white, size: 20),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
+            if (title.isNotEmpty)
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF64748B),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        _DailyDarshanCarouselWidget(
+          imageUrls: imageUrls,
+          onTapImage: (idx) => _openFullDarshanDialog(imageUrls, idx),
+        ),
+      ],
     );
   }
 
@@ -2687,8 +3531,14 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                     maxScale: 4.0,
                     child: Center(
                       child: Image.network(
-                        urls[idx],
+                        _optimizeCloudinaryUrl(urls[idx]),
                         fit: BoxFit.contain,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return const Center(
+                            child: CircularProgressIndicator(color: Colors.white),
+                          );
+                        },
                       ),
                     ),
                   );
@@ -2709,15 +3559,10 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     );
   }
 
+
   String? _getSadhanaLoggedDetails(String activity) {
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    String targetDate = today;
-    if (_selectedSadhanaDate == 'Yesterday') {
-      final yesterday = DateTime.now().subtract(const Duration(days: 1));
-      targetDate = DateFormat('yyyy-MM-dd').format(yesterday);
-    } else if (_selectedSadhanaDate == 'Ekadashi') {
-      targetDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    }
+    final String targetDate = today;
 
     try {
       final match = _updates.firstWhere((u) {
@@ -2750,14 +3595,14 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         if (activity == 'Bhagavad Gita Class') {
           return workStarted.startsWith('Bhagavad Gita Class');
         }
-        if (activity == 'Ekadashi Fasting') {
-          return workStarted.startsWith('Ekadashi Fasting');
-        }
         if (activity == 'Morning') {
           return workStarted.startsWith('Morning');
         }
         if (activity == 'Sleep') {
           return workStarted.startsWith('Sleep');
+        }
+        if (activity == 'Ekadashi Fasting' || activity == 'Ekadashi') {
+          return workStarted.contains('Ekadashi');
         }
         return false;
       });
@@ -2785,10 +3630,6 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         if (ws.contains('(')) {
           return ws.substring(ws.indexOf('(') + 1, ws.indexOf(')')).trim();
         }
-      } else if (activity == 'Ekadashi Fasting') {
-        if (ws.contains(':')) {
-          return ws.split(':').skip(1).join(':').trim();
-        }
       } else if (activity == 'Morning') {
         if (ws.contains('Wake-up:')) {
           return ws.split('Wake-up:')[1].replaceAll(')', '').trim();
@@ -2797,6 +3638,11 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         if (ws.contains('Time:')) {
           return ws.split('Time:')[1].replaceAll(')', '').trim();
         }
+      } else if (activity == 'Ekadashi Fasting' || activity == 'Ekadashi') {
+        if (ws.contains(':')) {
+          return ws.split(':')[1].trim();
+        }
+        return 'Logged';
       } else if (activity == 'Temple Visit') {
         return 'Logged';
       }
@@ -2804,6 +3650,55 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     } catch (_) {
       return null;
     }
+  }
+
+  void _showSuccessDialog(String message) {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        Future.delayed(const Duration(milliseconds: 1800), () {
+          if (dialogContext.mounted && Navigator.canPop(dialogContext)) {
+            Navigator.pop(dialogContext);
+          }
+        });
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          backgroundColor: Colors.white,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFDCFCE7),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.check_circle_rounded,
+                    color: Color(0xFF16A34A),
+                    size: 36,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _handleInlineSave(String activity) async {
@@ -2822,13 +3717,6 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
 
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
     String targetDate = today;
-
-    if (_selectedSadhanaDate == 'Yesterday') {
-      final yesterday = DateTime.now().subtract(const Duration(days: 1));
-      targetDate = DateFormat('yyyy-MM-dd').format(yesterday);
-    } else if (_selectedSadhanaDate == 'Ekadashi') {
-      targetDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    }
 
     if (activity == 'Temple Visit') {
       targetDate = DateFormat('yyyy-MM-dd').format(_templeVisitDate);
@@ -2884,10 +3772,6 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       final endStr = '${_bgEndTime.hour.toString().padLeft(2, '0')}:${_bgEndTime.minute.toString().padLeft(2, '0')}';
       label = 'Bhagavad Gita Class ($startStr to $endStr)';
       points = 5;
-    } else if (activity == 'Ekadashi Fasting') {
-      final notes = _ekadashiNotesController.text.trim();
-      label = 'Ekadashi Fasting: $_ekadashiFastingType${notes.isNotEmpty ? " ($notes)" : ""}';
-      points = _ekadashiFastingType == 'No Fasting' ? 0 : 10;
     } else if (activity == 'Morning') {
       final timeStr = _wakeUpTime.format(context);
       label = 'Morning (Wake-up: $timeStr)';
@@ -2941,9 +3825,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       NotificationHelper.sendUpdateNotification(updateData).catchError((_) {});
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$label logged successfully!')),
-        );
+        _showSuccessDialog('$label logged successfully!');
         _fetchUpdates();
         setState(() {
           if (activity == 'Book Reading') {
@@ -2952,8 +3834,6 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
           } else if (activity == 'Service') {
             _serviceNameController.clear();
             _serviceMinutesController.clear();
-          } else if (activity == 'Ekadashi Fasting') {
-            _ekadashiNotesController.clear();
           }
         });
       }
@@ -3312,7 +4192,8 @@ class _SadhanaLogSheet extends StatefulWidget {
   final String profileName;
   final String preacherName;
   final List<dynamic> updates;
-  final VoidCallback onSaveSuccess;
+  final Function(String msg) onSaveSuccess;
+  final String? initialOption;
 
   const _SadhanaLogSheet({
     required this.logDate,
@@ -3321,6 +4202,7 @@ class _SadhanaLogSheet extends StatefulWidget {
     required this.preacherName,
     required this.updates,
     required this.onSaveSuccess,
+    this.initialOption,
   });
 
   @override
@@ -3356,6 +4238,7 @@ class _SadhanaLogSheetState extends State<_SadhanaLogSheet> {
   @override
   void initState() {
     super.initState();
+    _selectedSubOption = widget.initialOption;
     if (widget.logDate == 'Yesterday') {
       _templeVisitDate = DateTime.now().subtract(const Duration(days: 1));
     } else {
@@ -3370,7 +4253,7 @@ class _SadhanaLogSheetState extends State<_SadhanaLogSheet> {
       'Temple Visit',
       'Srimad Bhagavatam Class',
       'Bhagavad Gita Class',
-      if (widget.logDate == 'Ekadashi') 'Ekadashi Fasting',
+      'Ekadashi Fasting',
     ];
   }
 
@@ -3492,7 +4375,7 @@ class _SadhanaLogSheetState extends State<_SadhanaLogSheet> {
       await supabase.from('updates').insert(updateData);
       NotificationHelper.sendUpdateNotification(updateData).catchError((_) {});
 
-      widget.onSaveSuccess();
+      widget.onSaveSuccess('$label logged successfully!');
       if (mounted) Navigator.pop(context);
     } catch (e) {
       debugPrint('Error inserting update: $e');
@@ -3506,7 +4389,7 @@ class _SadhanaLogSheetState extends State<_SadhanaLogSheet> {
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
+        borderRadius: BorderRadius.all(Radius.circular(20)),
       ),
       padding: EdgeInsets.only(
         left: 20,
@@ -3519,28 +4402,33 @@ class _SadhanaLogSheetState extends State<_SadhanaLogSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _selectedSubOption != null ? 'Log $_selectedSubOption' : 'Log Sadhana',
+                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B), size: 20),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            Text(
-              'Log Sadhana (${widget.logDate})',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
-            ),
+            const SizedBox(height: 12),
+            const Divider(height: 1, thickness: 1, color: Color(0xFFF1F5F9)),
             const SizedBox(height: 16),
             if (_selectedSubOption == null) ...[
-              const Text('Select Activity', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+              const Text('Select Activity', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey, fontSize: 12)),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: _sadhanaOptions.map((opt) {
                   return ChoiceChip(
-                    label: Text(opt),
+                    label: Text(opt, style: TextStyle(fontSize: 12, color: _selectedSubOption == opt ? Colors.white : Colors.black87)),
                     selected: _selectedSubOption == opt,
                     onSelected: (selected) {
                       setState(() {
@@ -3548,22 +4436,12 @@ class _SadhanaLogSheetState extends State<_SadhanaLogSheet> {
                       });
                     },
                     selectedColor: const Color(0xFF6366F1),
-                    labelStyle: TextStyle(color: _selectedSubOption == opt ? Colors.white : Colors.black),
+                    backgroundColor: const Color(0xFFF8FAFC),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   );
                 }).toList(),
               )
             ] else ...[
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Selected: $_selectedSubOption', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF6366F1))),
-                  TextButton(
-                    onPressed: () => setState(() => _selectedSubOption = null),
-                    child: const Text('Change'),
-                  )
-                ],
-              ),
-              const SizedBox(height: 16),
 
               // Inputs based on selection
               if (_selectedSubOption == 'Chanting') ...[
@@ -5294,6 +6172,167 @@ class _LiveDateTimeWidgetState extends State<_LiveDateTimeWidget> {
         fontSize: 12,
         color: widget.color ?? const Color(0xFF64748B),
         fontWeight: FontWeight.w500,
+      ),
+    );
+  }
+}
+
+class _DailyDarshanCarouselWidget extends StatefulWidget {
+  final List<String> imageUrls;
+  final Function(int index) onTapImage;
+
+  const _DailyDarshanCarouselWidget({
+    required this.imageUrls,
+    required this.onTapImage,
+  });
+
+  @override
+  State<_DailyDarshanCarouselWidget> createState() => _DailyDarshanCarouselWidgetState();
+}
+
+class _DailyDarshanCarouselWidgetState extends State<_DailyDarshanCarouselWidget> {
+  late final PageController _pageController;
+  int _currentIndex = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+    _startTimer();
+    _precacheImages();
+  }
+
+  @override
+  void didUpdateWidget(_DailyDarshanCarouselWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.imageUrls != widget.imageUrls) {
+      _startTimer();
+      _precacheImages();
+    }
+  }
+
+  void _precacheImages() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      for (final url in widget.imageUrls) {
+        precacheImage(NetworkImage(url), context).catchError((_) {});
+      }
+    });
+  }
+
+  void _startTimer() {
+    _timer?.cancel();
+    if (widget.imageUrls.length > 1) {
+      _timer = Timer.periodic(const Duration(seconds: 4), (timer) {
+        if (_pageController.hasClients) {
+          final nextPage = (_currentIndex + 1) % widget.imageUrls.length;
+          _pageController.animateToPage(
+            nextPage,
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.fastOutSlowIn,
+          );
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      height: 220,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(10),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            PageView.builder(
+              controller: _pageController,
+              onPageChanged: (index) {
+                if (_currentIndex != index) {
+                  setState(() {
+                    _currentIndex = index;
+                  });
+                }
+              },
+              itemCount: widget.imageUrls.length,
+              itemBuilder: (context, idx) {
+                final url = widget.imageUrls[idx];
+                return GestureDetector(
+                  onTap: () => widget.onTapImage(idx),
+                  child: Image.network(
+                    url,
+                    width: double.infinity,
+                    height: double.infinity,
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return Container(
+                        color: const Color(0xFFF1F5F9),
+                        child: const Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF0F172A)),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                    errorBuilder: (context, err, stack) => Container(
+                      color: const Color(0xFFF1F5F9),
+                      child: const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+                    ),
+                  ),
+                );
+              },
+            ),
+            if (widget.imageUrls.length > 1)
+              Positioned(
+                bottom: 12,
+                left: 0,
+                right: 0,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(widget.imageUrls.length, (index) {
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: index == _currentIndex ? 16 : 6,
+                      height: 6,
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      decoration: BoxDecoration(
+                        color: index == _currentIndex ? Colors.white : Colors.white54,
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    );
+                  }),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

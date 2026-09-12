@@ -16,6 +16,7 @@ import { Feedback, FeedbackSchema } from './schemas/feedback.schema';
 import { AuditLog, AuditLogSchema } from './schemas/audit-logs.schema';
 import { MigrationRun, MigrationRunSchema } from './schemas/migration-runs.schema';
 import { DailyDarshan, DailyDarshanSchema } from './schemas/daily-darshan.schema';
+import { Course, CourseSchema } from './schemas/courses.schema';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { DailyDarshan, DailyDarshanSchema } from './schemas/daily-darshan.schema
       { name: AuditLog.name, schema: AuditLogSchema },
       { name: MigrationRun.name, schema: MigrationRunSchema },
       { name: DailyDarshan.name, schema: DailyDarshanSchema },
+      { name: Course.name, schema: CourseSchema },
     ]),
   ],
   exports: [MongooseModule],

@@ -2,7 +2,8 @@ import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
-import helmet from 'helmet';
+import * as express from 'express';
+import { join } from 'path';
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -16,6 +17,9 @@ async function bootstrap() {
   const port = configService.get<number>('port');
   const apiPrefix = configService.get<string>('apiPrefix');
   const corsOrigins = configService.get<string[]>('cors.origins');
+
+  // Serve Web Admin Portal
+  app.use('/admin', express.static(join(process.cwd(), 'admin_portal')));
 
   // Security Headers
   app.use(helmet());
@@ -76,6 +80,7 @@ async function bootstrap() {
 
   await app.listen(port);
   logger.log(`Sadhana Tracker API Server running on port ${port} with prefix /${apiPrefix}`);
+  logger.log(`Admin Web Portal available at http://localhost:${port}/admin`);
 }
 
 bootstrap();

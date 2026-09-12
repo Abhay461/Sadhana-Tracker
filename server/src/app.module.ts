@@ -21,6 +21,7 @@ import { AnnouncementsModule } from './announcements/announcements.module';
 import { ScreenTimeModule } from './screen-time/screen-time.module';
 import { MediaModule } from './media/media.module';
 import { DailyDarshanModule } from './daily-darshan/daily-darshan.module';
+import { CoursesModule } from './courses/courses.module';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { DailyDarshanModule } from './daily-darshan/daily-darshan.module';
     ScreenTimeModule,
     MediaModule,
     DailyDarshanModule,
+    CoursesModule,
   ],
 })
 export class AppModule {}
