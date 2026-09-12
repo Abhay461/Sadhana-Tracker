@@ -589,6 +589,30 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           showCheckmark: false,
                         ),
+                        const SizedBox(width: 8),
+                        ChoiceChip(
+                          label: Text(
+                            'Daily Quote',
+                            style: TextStyle(
+                              color: _selectedTab == 3 ? Colors.white : const Color(0xFF0F172A),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                          selected: _selectedTab == 3,
+                          onSelected: (selected) {
+                            if (selected) {
+                              setState(() => _selectedTab = 3);
+                            }
+                          },
+                          selectedColor: const Color(0xFF0F172A),
+                          backgroundColor: Colors.white,
+                          side: BorderSide(
+                            color: _selectedTab == 3 ? Colors.transparent : const Color(0xFFE2E8F0),
+                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          showCheckmark: false,
+                        ),
                       ],
                     ),
                   ),
@@ -598,9 +622,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   padding: const EdgeInsets.all(24.0),
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 200),
-                    child: _selectedTab == 2
-                        ? _buildDailyDarshanPublishView()
-                        : _selectedTab == 0
+                    child: _selectedTab == 3
+                        ? _buildDailyQuotePublishView()
+                        : _selectedTab == 2
+                            ? _buildDailyDarshanPublishView()
+                            : _selectedTab == 0
                             ? Form(
                                 key: _formKey,
                             child: Column(
@@ -901,6 +927,154 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     child: isUploading
                         ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                         : const Text('Publish Daily Darshan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDailyQuotePublishView() {
+    final quoteController = TextEditingController();
+    final authorController = TextEditingController(text: 'Srila Prabhupada');
+    List<File> selectedFiles = [];
+    bool isUploading = false;
+
+    return StatefulBuilder(
+      builder: (context, setPublishState) {
+        return Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: Color(0xFFE2E8F0)),
+          ),
+          color: Colors.white,
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.format_quote_rounded, color: Color(0xFF0F172A), size: 24),
+                    SizedBox(width: 10),
+                    Text(
+                      'Publish Today\'s Quote',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: quoteController,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    labelText: 'Quote Text (Optional)',
+                    hintText: 'e.g. Always remember Krishna and never forget Him.',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: authorController,
+                  decoration: InputDecoration(
+                    labelText: 'Author Name',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  onPressed: isUploading
+                      ? null
+                      : () async {
+                          final image = await _picker.pickImage(source: ImageSource.gallery);
+                          if (image != null) {
+                            setPublishState(() {
+                              selectedFiles = [File(image.path)];
+                            });
+                          }
+                        },
+                  icon: const Icon(Icons.photo_library_rounded),
+                  label: Text(
+                    selectedFiles.isEmpty
+                        ? 'Choose Quote Photo (Optional)'
+                        : '1 Photo Selected',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 48),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                if (selectedFiles.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.file(selectedFiles.first, height: 120, width: double.infinity, fit: BoxFit.cover),
+                  ),
+                ],
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F172A),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: isUploading
+                        ? null
+                        : () async {
+                            final quoteText = quoteController.text.trim();
+                            if (quoteText.isEmpty && selectedFiles.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Please enter a quote or choose a photo')),
+                              );
+                              return;
+                            }
+
+                            setPublishState(() => isUploading = true);
+                            try {
+                              List<String> imageUrls = [];
+                              if (selectedFiles.isNotEmpty) {
+                                final bytes = await selectedFiles.first.readAsBytes();
+                                final base64Str = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+                                imageUrls.add(base64Str);
+                              }
+
+                              final today = DateTime.now().toIso8601String().split('T')[0];
+                              await ApiService.post('/daily-quotes', {
+                                'date': today,
+                                'quote': quoteText,
+                                'author': authorController.text.trim().isEmpty ? 'Srila Prabhupada' : authorController.text.trim(),
+                                'imageUrls': imageUrls,
+                              });
+
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Daily Quote published successfully!')),
+                                );
+                                setPublishState(() {
+                                  selectedFiles.clear();
+                                  quoteController.clear();
+                                  isUploading = false;
+                                });
+                              }
+                            } catch (e) {
+                              setPublishState(() => isUploading = false);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Failed to publish Quote: $e')),
+                                );
+                              }
+                            }
+                          },
+                    child: isUploading
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Text('Publish Daily Quote', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                   ),
                 ),
               ],

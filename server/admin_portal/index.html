@@ -443,6 +443,9 @@
       <li class="nav-item" onclick="switchTab('darshanTab', this)">
         <i class="ri-image-line"></i> Daily Darshan
       </li>
+      <li class="nav-item" onclick="switchTab('quotesTab', this)">
+        <i class="ri-double-quotes-l"></i> Daily Quotes
+      </li>
       <li class="nav-item" onclick="switchTab('preachersTab', this)">
         <i class="ri-user-star-line"></i> Preachers & User IDs
       </li>
@@ -517,6 +520,32 @@
               <div id="darshanPreviewGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin-top: 8px;"></div>
             </div>
             <button type="submit" class="btn btn-primary" style="width: 100%;">Publish Daily Darshan</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Tab: Daily Quotes -->
+      <div id="quotesTab" class="tab-content">
+        <div class="modal-box" style="width: 100%; max-width: 680px;">
+          <h2 style="margin-bottom: 16px;">Publish Today's Daily Quote</h2>
+          <form id="quoteForm" onsubmit="submitQuote(event)">
+            <div class="form-group">
+              <label>📜 Quote Text (Optional)</label>
+              <textarea id="quoteText" class="form-control" rows="3" placeholder="e.g. Always remember Krishna and never forget Him."></textarea>
+            </div>
+            <div class="form-group">
+              <label>✍️ Author Name (Optional)</label>
+              <input type="text" id="quoteAuthor" class="form-control" placeholder="e.g. A.C. Bhaktivedanta Swami Prabhupada">
+            </div>
+            <div class="form-group">
+              <label>🖼️ Select Quote Image from Device (Optional)</label>
+              <input type="file" id="quoteFileInput" accept="image/*" class="form-control" style="padding: 8px;" onchange="previewQuoteImage(event)">
+            </div>
+            <div class="form-group" id="quotePreviewBox" style="display: none;">
+              <label>Selected Image Preview:</label>
+              <div id="quotePreviewContainer" style="margin-top: 8px;"></div>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%;">Publish Daily Quote</button>
           </form>
         </div>
       </div>
@@ -958,6 +987,60 @@
         }
       } catch (err) {
         showToast('Error publishing Darshan: ' + err.message, true);
+      }
+    }
+
+    let quoteSelectedImage = '';
+
+    function previewQuoteImage(evt) {
+      const file = evt.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        quoteSelectedImage = e.target.result;
+        document.getElementById('quotePreviewBox').style.display = 'block';
+        document.getElementById('quotePreviewContainer').innerHTML = `<img src="${quoteSelectedImage}" style="max-width: 100%; height: 180px; object-fit: cover; border-radius: 10px;">`;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    async function submitQuote(e) {
+      e.preventDefault();
+      const quote = document.getElementById('quoteText').value.trim();
+      const author = document.getElementById('quoteAuthor').value.trim();
+      const imageUrl = quoteSelectedImage;
+
+      if (!quote && !imageUrl) {
+        showToast('Please enter a Quote text or select an image from device', true);
+        return;
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+      const payload = {
+        date: today,
+        quote: quote,
+        author: author || 'Srila Prabhupada',
+        imageUrl: imageUrl,
+      };
+
+      try {
+        const res = await fetch(`${API_BASE}/daily-quotes`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (res.ok) {
+          showToast('Daily Quote published successfully!');
+          document.getElementById('quoteForm').reset();
+          document.getElementById('quotePreviewBox').style.display = 'none';
+          document.getElementById('quotePreviewContainer').innerHTML = '';
+          quoteSelectedImage = '';
+        } else {
+          showToast('Failed to publish Daily Quote', true);
+        }
+      } catch (err) {
+        showToast('Error publishing Quote: ' + err.message, true);
       }
     }
 

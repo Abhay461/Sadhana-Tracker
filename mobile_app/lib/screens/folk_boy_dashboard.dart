@@ -31,6 +31,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   List<dynamic> _updates = [];
   List<Map<String, dynamic>> _announcements = [];
   Map<String, dynamic>? _todayDarshan;
+  Map<String, dynamic>? _todayQuote;
   bool _isLoadingProfile = true;
   bool _isAutoPromoting = false; // Guard against infinite recursion (Bug 4)
 
@@ -83,6 +84,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     _loadProfileAndData();
     _fetchAnnouncements();
     _fetchDailyDarshan();
+    _fetchDailyQuote();
     _fetchCourses();
     _initRazorpay();
   }
@@ -174,6 +176,21 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       }
     } catch (e) {
       debugPrint('Error fetching daily darshan: $e');
+    }
+  }
+
+  Future<void> _fetchDailyQuote() async {
+    try {
+      final response = await ApiService.get('/daily-quotes/today');
+      if (response != null && response is Map<String, dynamic>) {
+        if (mounted) {
+          setState(() {
+            _todayQuote = response;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching daily quote: $e');
     }
   }
 
@@ -1468,6 +1485,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         await _loadProfileAndData();
         await _fetchAnnouncements();
         await _fetchDailyDarshan();
+        await _fetchDailyQuote();
       },
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
@@ -1481,6 +1499,9 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
 
             // Daily Darshan Card
             _buildDailyDarshanCard(),
+
+            // Daily Quotes Card
+            _buildDailyQuoteCard(),
 
             // Announcement Carousel
             if (_announcements.isNotEmpty) ...[
@@ -3508,6 +3529,113 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
           imageUrls: imageUrls,
           onTapImage: (idx) => _openFullDarshanDialog(imageUrls, idx),
         ),
+      ],
+    );
+  }
+
+  Widget _buildDailyQuoteCard() {
+    if (_todayQuote == null) return const SizedBox.shrink();
+
+    final quote = _todayQuote!['quote'] as String? ?? '';
+    final author = _todayQuote!['author'] as String? ?? 'Srila Prabhupada';
+    final List<dynamic> rawUrls = _todayQuote!['imageUrls'] is List ? _todayQuote!['imageUrls'] : [];
+    final String singleUrl = _todayQuote!['imageUrl'] as String? ?? '';
+
+    List<String> imageUrls = rawUrls.map((u) => _optimizeCloudinaryUrl(u.toString())).toList();
+    if (imageUrls.isEmpty && singleUrl.isNotEmpty) {
+      imageUrls = [_optimizeCloudinaryUrl(singleUrl)];
+    }
+
+    if (quote.isEmpty && imageUrls.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: const [
+            Text(
+              'Daily Quotes',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0F172A),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        if (imageUrls.isNotEmpty) ...[
+          _DailyDarshanCarouselWidget(
+            imageUrls: imageUrls,
+            onTapImage: (idx) => _openFullDarshanDialog(imageUrls, idx),
+          ),
+          if (quote.isNotEmpty) const SizedBox(height: 10),
+        ],
+        if (quote.isNotEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFFFFBEB), Color(0xFFFEF3C7)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFFDE68A)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.amber.withOpacity(0.08),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: const [
+                    Icon(Icons.format_quote_rounded, color: Color(0xFFD97706), size: 24),
+                    SizedBox(width: 6),
+                    Text(
+                      'Thought for Today',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFB45309),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  '"$quote"',
+                  style: const TextStyle(
+                    fontSize: 14.5,
+                    fontStyle: FontStyle.italic,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF78350F),
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    '- $author',
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFFD97706),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
       ],
     );
   }

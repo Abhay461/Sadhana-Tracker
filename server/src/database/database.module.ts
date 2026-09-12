@@ -16,6 +16,7 @@ import { Feedback, FeedbackSchema } from './schemas/feedback.schema';
 import { AuditLog, AuditLogSchema } from './schemas/audit-logs.schema';
 import { MigrationRun, MigrationRunSchema } from './schemas/migration-runs.schema';
 import { DailyDarshan, DailyDarshanSchema } from './schemas/daily_darshan.schema';
+import { DailyQuote, DailyQuoteSchema } from './schemas/daily_quotes.schema';
 import { Course, CourseSchema } from './schemas/course_schema';
 
 @Module({
@@ -37,6 +38,7 @@ import { Course, CourseSchema } from './schemas/course_schema';
       { name: AuditLog.name, schema: AuditLogSchema },
       { name: MigrationRun.name, schema: MigrationRunSchema },
       { name: DailyDarshan.name, schema: DailyDarshanSchema },
+      { name: DailyQuote.name, schema: DailyQuoteSchema },
       { name: Course.name, schema: CourseSchema },
     ]),
   ],
