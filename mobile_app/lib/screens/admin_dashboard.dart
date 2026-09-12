@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -938,8 +939,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Widget _buildDailyQuotePublishView() {
-    final quoteController = TextEditingController();
-    final authorController = TextEditingController(text: 'Srila Prabhupada');
     List<File> selectedFiles = [];
     bool isUploading = false;
 
@@ -968,24 +967,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                TextFormField(
-                  controller: quoteController,
-                  maxLines: 3,
-                  decoration: InputDecoration(
-                    labelText: 'Quote Text (Optional)',
-                    hintText: 'e.g. Always remember Krishna and never forget Him.',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: authorController,
-                  decoration: InputDecoration(
-                    labelText: 'Author Name',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-                const SizedBox(height: 16),
                 OutlinedButton.icon(
                   onPressed: isUploading
                       ? null
@@ -1000,7 +981,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   icon: const Icon(Icons.photo_library_rounded),
                   label: Text(
                     selectedFiles.isEmpty
-                        ? 'Choose Quote Photo (Optional)'
+                        ? 'Choose Quote Photo from Gallery'
                         : '1 Photo Selected',
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
@@ -1013,7 +994,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   const SizedBox(height: 12),
                   ClipRRect(
                     borderRadius: BorderRadius.circular(10),
-                    child: Image.file(selectedFiles.first, height: 120, width: double.infinity, fit: BoxFit.cover),
+                    child: Image.file(selectedFiles.first, height: 160, width: double.infinity, fit: BoxFit.cover),
                   ),
                 ],
                 const SizedBox(height: 20),
@@ -1028,10 +1009,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     onPressed: isUploading
                         ? null
                         : () async {
-                            final quoteText = quoteController.text.trim();
-                            if (quoteText.isEmpty && selectedFiles.isEmpty) {
+                            if (selectedFiles.isEmpty) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Please enter a quote or choose a photo')),
+                                const SnackBar(content: Text('Please choose a quote photo from gallery')),
                               );
                               return;
                             }
@@ -1039,17 +1019,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             setPublishState(() => isUploading = true);
                             try {
                               List<String> imageUrls = [];
-                              if (selectedFiles.isNotEmpty) {
-                                final bytes = await selectedFiles.first.readAsBytes();
-                                final base64Str = 'data:image/jpeg;base64,${base64Encode(bytes)}';
-                                imageUrls.add(base64Str);
-                              }
+                              final bytes = await selectedFiles.first.readAsBytes();
+                              final base64Str = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+                              imageUrls.add(base64Str);
 
                               final today = DateTime.now().toIso8601String().split('T')[0];
                               await ApiService.post('/daily-quotes', {
                                 'date': today,
-                                'quote': quoteText,
-                                'author': authorController.text.trim().isEmpty ? 'Srila Prabhupada' : authorController.text.trim(),
                                 'imageUrls': imageUrls,
                               });
 
@@ -1059,7 +1035,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                 );
                                 setPublishState(() {
                                   selectedFiles.clear();
-                                  quoteController.clear();
                                   isUploading = false;
                                 });
                               }

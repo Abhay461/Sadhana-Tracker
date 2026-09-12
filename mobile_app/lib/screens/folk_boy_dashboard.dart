@@ -3536,8 +3536,6 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   Widget _buildDailyQuoteCard() {
     if (_todayQuote == null) return const SizedBox.shrink();
 
-    final quote = _todayQuote!['quote'] as String? ?? '';
-    final author = _todayQuote!['author'] as String? ?? 'Srila Prabhupada';
     final List<dynamic> rawUrls = _todayQuote!['imageUrls'] is List ? _todayQuote!['imageUrls'] : [];
     final String singleUrl = _todayQuote!['imageUrl'] as String? ?? '';
 
@@ -3546,7 +3544,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       imageUrls = [_optimizeCloudinaryUrl(singleUrl)];
     }
 
-    if (quote.isEmpty && imageUrls.isEmpty) return const SizedBox.shrink();
+    if (imageUrls.isEmpty) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -3566,76 +3564,10 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
           ],
         ),
         const SizedBox(height: 10),
-        if (imageUrls.isNotEmpty) ...[
-          _DailyDarshanCarouselWidget(
-            imageUrls: imageUrls,
-            onTapImage: (idx) => _openFullDarshanDialog(imageUrls, idx),
-          ),
-          if (quote.isNotEmpty) const SizedBox(height: 10),
-        ],
-        if (quote.isNotEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFFFFFBEB), Color(0xFFFEF3C7)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFFDE68A)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.amber.withOpacity(0.08),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: const [
-                    Icon(Icons.format_quote_rounded, color: Color(0xFFD97706), size: 24),
-                    SizedBox(width: 6),
-                    Text(
-                      'Thought for Today',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFFB45309),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  '"$quote"',
-                  style: const TextStyle(
-                    fontSize: 14.5,
-                    fontStyle: FontStyle.italic,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF78350F),
-                    height: 1.4,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Text(
-                    '- $author',
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFFD97706),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+        _DailyDarshanCarouselWidget(
+          imageUrls: imageUrls,
+          onTapImage: (idx) => _openFullDarshanDialog(imageUrls, idx),
+        ),
       ],
     );
   }
@@ -6437,10 +6369,11 @@ class _DailyDarshanCarouselWidgetState extends State<_DailyDarshanCarouselWidget
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      height: 220,
-      decoration: BoxDecoration(
+    return AspectRatio(
+      aspectRatio: 4 / 5,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 20),
+        decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFE2E8F0)),

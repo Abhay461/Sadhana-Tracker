@@ -530,19 +530,11 @@
           <h2 style="margin-bottom: 16px;">Publish Today's Daily Quote</h2>
           <form id="quoteForm" onsubmit="submitQuote(event)">
             <div class="form-group">
-              <label>📜 Quote Text (Optional)</label>
-              <textarea id="quoteText" class="form-control" rows="3" placeholder="e.g. Always remember Krishna and never forget Him."></textarea>
-            </div>
-            <div class="form-group">
-              <label>✍️ Author Name (Optional)</label>
-              <input type="text" id="quoteAuthor" class="form-control" placeholder="e.g. A.C. Bhaktivedanta Swami Prabhupada">
-            </div>
-            <div class="form-group">
-              <label>🖼️ Select Quote Image from Device (Optional)</label>
+              <label>🖼️ Select Quote Photo from Device (Computer / Mobile Gallery)</label>
               <input type="file" id="quoteFileInput" accept="image/*" class="form-control" style="padding: 8px;" onchange="previewQuoteImage(event)">
             </div>
             <div class="form-group" id="quotePreviewBox" style="display: none;">
-              <label>Selected Image Preview:</label>
+              <label>Selected Photo Preview:</label>
               <div id="quotePreviewContainer" style="margin-top: 8px;"></div>
             </div>
             <button type="submit" class="btn btn-primary" style="width: 100%;">Publish Daily Quote</button>
@@ -1006,20 +998,16 @@
 
     async function submitQuote(e) {
       e.preventDefault();
-      const quote = document.getElementById('quoteText').value.trim();
-      const author = document.getElementById('quoteAuthor').value.trim();
       const imageUrl = quoteSelectedImage;
 
-      if (!quote && !imageUrl) {
-        showToast('Please enter a Quote text or select an image from device', true);
+      if (!imageUrl) {
+        showToast('Please select a Quote photo from your device', true);
         return;
       }
 
       const today = new Date().toISOString().split('T')[0];
       const payload = {
         date: today,
-        quote: quote,
-        author: author || 'Srila Prabhupada',
         imageUrl: imageUrl,
       };
 
