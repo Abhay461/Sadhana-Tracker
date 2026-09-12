@@ -21,9 +21,12 @@ async function bootstrap() {
 
   // Serve Web Admin Portal
   app.use('/admin', express.static(join(process.cwd(), 'admin_portal')));
-  app.get('/admin', (req: express.Request, res: express.Response) => {
-    res.sendFile(join(process.cwd(), 'admin_portal', 'index.html'));
-  });
+  const httpAdapter = app.getHttpAdapter().getInstance();
+  if (httpAdapter && typeof httpAdapter.get === 'function') {
+    httpAdapter.get('/admin', (req: any, res: any) => {
+      res.sendFile(join(process.cwd(), 'admin_portal', 'index.html'));
+    });
+  }
 
   // Security Headers
   app.use(helmet());
