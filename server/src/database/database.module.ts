@@ -16,7 +16,7 @@ import { Feedback, FeedbackSchema } from './schemas/feedback.schema';
 import { AuditLog, AuditLogSchema } from './schemas/audit-logs.schema';
 import { MigrationRun, MigrationRunSchema } from './schemas/migration-runs.schema';
 import { DailyDarshan, DailyDarshanSchema } from './schemas/daily_darshan.schema';
-import { Course, CourseSchema } from './schemas/courses.schema';
+import { Course, CourseSchema } from './schemas/course_schema';
 
 @Module({
   imports: [

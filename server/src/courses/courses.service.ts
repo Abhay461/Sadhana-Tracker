@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Course, CourseDocument } from '../database/schemas/courses.schema';
+import { Course, CourseDocument } from '../database/schemas/course_schema';
 import { CreateCourseDto, CreateCourseVideoDto } from './dto/create-course.dto';
 
 @Injectable()
