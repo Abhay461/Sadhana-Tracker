@@ -19,6 +19,10 @@ async function bootstrap() {
   const apiPrefix = configService.get<string>('apiPrefix');
   const corsOrigins = configService.get<string[]>('cors.origins');
 
+  // Increase payload size limit for high-res multi-photo uploads
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
   // Serve Web Admin Portal
   app.use('/admin', express.static(join(process.cwd(), 'admin_portal')));
   const httpAdapter = app.getHttpAdapter().getInstance();

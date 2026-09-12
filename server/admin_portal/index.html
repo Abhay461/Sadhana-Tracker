@@ -889,20 +889,47 @@
       grid.innerHTML = '';
       document.getElementById('darshanPreviewBox').style.display = 'block';
 
-      files.forEach((file, idx) => {
+      files.forEach((file) => {
         const reader = new FileReader();
         reader.onload = function(evt) {
-          const dataUrl = evt.target.result;
-          darshanSelectedImages.push(dataUrl);
+          const imgObj = new Image();
+          imgObj.onload = function() {
+            const canvas = document.createElement('canvas');
+            const MAX_WIDTH = 1280;
+            const MAX_HEIGHT = 1280;
+            let width = imgObj.width;
+            let height = imgObj.height;
 
-          const img = document.createElement('img');
-          img.src = dataUrl;
-          img.style.width = '100%';
-          img.style.height = '100px';
-          img.style.objectFit = 'cover';
-          img.style.borderRadius = '8px';
-          img.style.border = '2px solid var(--primary)';
-          grid.appendChild(img);
+            if (width > height) {
+              if (width > MAX_WIDTH) {
+                height *= MAX_WIDTH / width;
+                width = MAX_WIDTH;
+              }
+            } else {
+              if (height > MAX_HEIGHT) {
+                width *= MAX_HEIGHT / height;
+                height = MAX_HEIGHT;
+              }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(imgObj, 0, 0, width, height);
+            const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+
+            darshanSelectedImages.push(compressedDataUrl);
+
+            const previewImg = document.createElement('img');
+            previewImg.src = compressedDataUrl;
+            previewImg.style.width = '100%';
+            previewImg.style.height = '100px';
+            previewImg.style.objectFit = 'cover';
+            previewImg.style.borderRadius = '8px';
+            previewImg.style.border = '2px solid var(--primary)';
+            grid.appendChild(previewImg);
+          };
+          imgObj.src = evt.target.result;
         };
         reader.readAsDataURL(file);
       });
