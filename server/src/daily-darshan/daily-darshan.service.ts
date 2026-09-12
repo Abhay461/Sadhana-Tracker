@@ -10,11 +10,27 @@ export class DailyDarshanService {
     @InjectModel(DailyDarshan.name) private readonly darshanModel: Model<DailyDarshanDocument>,
   ) {}
 
-  async createDarshan(user: any, dto: CreateDailyDarshanDto) {
+  async createDarshan(user: any, dto: CreateDailyDarshanDto | any) {
     const today = new Date().toISOString().split('T')[0];
+    
+    let images: string[] = [];
+    if (dto.imageUrls && Array.isArray(dto.imageUrls) && dto.imageUrls.length > 0) {
+      images = dto.imageUrls;
+    } else if (typeof dto.imageUrls === 'string' && dto.imageUrls.trim().length > 0) {
+      images = [dto.imageUrls.trim()];
+    } else if (dto.imageUrl && typeof dto.imageUrl === 'string' && dto.imageUrl.trim().length > 0) {
+      images = [dto.imageUrl.trim()];
+    }
+
+    if (images.length === 0) {
+      images = ['https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=600&q=80'];
+    }
+
     return this.darshanModel.create({
-      ...dto,
-      date: dto['date'] || today,
+      title: dto.title || 'Sri Sri Radha Vrindavan Chandra Daily Darshan',
+      date: dto.date || today,
+      imageUrls: images,
+      description: dto.description || dto.message || '',
       createdBy: user?._id || null,
       isActive: true,
     });
