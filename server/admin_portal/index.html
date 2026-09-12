@@ -697,7 +697,8 @@
       try {
         const res = await fetch(`${API_BASE}/courses`);
         if (res.ok) {
-          coursesList = await res.json();
+          const json = await res.json();
+          coursesList = Array.isArray(json) ? json : (json.data || []);
           renderCourses();
         }
       } catch (err) {

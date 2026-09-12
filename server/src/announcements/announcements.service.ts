@@ -13,7 +13,7 @@ export class AnnouncementsService {
   async createAnnouncement(creatorUser: any, dto: CreateAnnouncementDto) {
     return this.announcementModel.create({
       ...dto,
-      createdBy: creatorUser._id,
+      createdBy: creatorUser?._id || null,
       isActive: true,
     });
   }

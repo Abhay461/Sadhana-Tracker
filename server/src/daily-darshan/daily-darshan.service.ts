@@ -11,9 +11,11 @@ export class DailyDarshanService {
   ) {}
 
   async createDarshan(user: any, dto: CreateDailyDarshanDto) {
+    const today = new Date().toISOString().split('T')[0];
     return this.darshanModel.create({
       ...dto,
-      createdBy: user._id,
+      date: dto['date'] || today,
+      createdBy: user?._id || null,
       isActive: true,
     });
   }

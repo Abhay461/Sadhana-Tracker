@@ -5,21 +5,14 @@ import {
   Delete,
   Body,
   Param,
-  UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { DailyDarshanService } from './daily-darshan.service';
 import { CreateDailyDarshanDto } from './dto/create-daily-darshan.dto';
-import { FirebaseAuthGuard } from '../common/guards/firebase-auth.guard';
-import { ActiveUserGuard } from '../common/guards/active-user.guard';
-import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { Roles } from '../common/decorators/roles.decorator';
 
 @ApiTags('Daily Darshan')
 @Controller('daily-darshan')
-@UseGuards(FirebaseAuthGuard, ActiveUserGuard)
-@ApiBearerAuth('access-token')
 export class DailyDarshanController {
   constructor(private readonly darshanService: DailyDarshanService) {}
 
@@ -30,17 +23,13 @@ export class DailyDarshanController {
   }
 
   @Post()
-  @UseGuards(RolesGuard)
-  @Roles('admin')
-  @ApiOperation({ summary: 'Publish new Daily Darshan (Admin only)' })
+  @ApiOperation({ summary: 'Publish new Daily Darshan (Admin Portal & App)' })
   async createDarshan(@CurrentUser() user: any, @Body() dto: CreateDailyDarshanDto) {
     return this.darshanService.createDarshan(user, dto);
   }
 
   @Delete(':id')
-  @UseGuards(RolesGuard)
-  @Roles('admin')
-  @ApiOperation({ summary: 'Delete Daily Darshan (Admin only)' })
+  @ApiOperation({ summary: 'Delete Daily Darshan (Admin Portal)' })
   async deleteDarshan(@Param('id') id: string) {
     return this.darshanService.deleteDarshan(id);
   }
