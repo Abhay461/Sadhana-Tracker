@@ -106,7 +106,7 @@ export class AdminService {
       await this.auditLogModel.create(
         [
           {
-            performedBy: adminUser._id,
+            performedBy: adminUser?._id || preacher._id,
             action: 'CREATE_PREACHER',
             targetUserId: preacher._id,
             metadata: { preacherCode, email: dto.email, phone: normalizedPhone },
@@ -118,7 +118,7 @@ export class AdminService {
       await session.commitTransaction();
       session.endSession();
 
-      this.logger.log(`Admin ${adminUser._id} created Preacher ${preacher._id} (${preacherCode})`);
+      this.logger.log(`Created Preacher ${preacher._id} (${preacherCode})`);
 
       return {
         id: preacher._id,

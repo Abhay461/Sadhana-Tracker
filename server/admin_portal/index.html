@@ -443,6 +443,9 @@
       <li class="nav-item" onclick="switchTab('darshanTab', this)">
         <i class="ri-image-line"></i> Daily Darshan
       </li>
+      <li class="nav-item" onclick="switchTab('preachersTab', this)">
+        <i class="ri-user-star-line"></i> Preachers & User IDs
+      </li>
       <li class="nav-item" onclick="switchTab('announcementsTab', this)">
         <i class="ri-notification-badge-line"></i> Announcements
       </li>
@@ -502,7 +505,7 @@
 
       <!-- Tab 2: Daily Darshan -->
       <div id="darshanTab" class="tab-content">
-        <div class="modal-box" style="width: 100%; max-width: 600px;">
+        <div class="modal-box" style="width: 100%; max-width: 680px;">
           <h2 style="margin-bottom: 16px;">Publish Today's Daily Darshan</h2>
           <form id="darshanForm" onsubmit="submitDarshan(event)">
             <div class="form-group">
@@ -510,12 +513,12 @@
               <input type="text" id="darshanTitle" class="form-control" placeholder="e.g. Sri Sri Radha Vrindavan Chandra Shringar Darshan" required>
             </div>
             <div class="form-group">
-              <label>🖼️ Select Photo from Device (Computer / Gallery)</label>
-              <input type="file" id="darshanFileInput" accept="image/*" class="form-control" style="padding: 8px;" onchange="previewDarshanImage(event)">
+              <label>🖼️ Select Multiple Photos from Device (Computer / Gallery)</label>
+              <input type="file" id="darshanFileInput" accept="image/*" multiple class="form-control" style="padding: 8px;" onchange="previewMultipleDarshanImages(event)">
             </div>
             <div class="form-group" id="darshanPreviewBox" style="display: none;">
-              <label>Photo Live Preview:</label>
-              <img id="darshanPreviewImg" style="width: 100%; max-height: 260px; object-fit: cover; border-radius: 12px; border: 2px solid var(--primary); margin-top: 6px;">
+              <label>Selected Photos Preview:</label>
+              <div id="darshanPreviewGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin-top: 8px;"></div>
             </div>
             <div class="form-group">
               <label>Or Image URL (Optional Alternative)</label>
@@ -527,6 +530,41 @@
             </div>
             <button type="submit" class="btn btn-primary" style="width: 100%;">Publish Daily Darshan</button>
           </form>
+        </div>
+      </div>
+
+      <!-- Tab: Preachers & User IDs Management -->
+      <div id="preachersTab" class="tab-content">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+          <h2>Preachers & Credentials Management</h2>
+          <button class="btn btn-primary" onclick="openAddPreacherModal()">
+            <i class="ri-user-add-line"></i> Create New Preacher Account
+          </button>
+        </div>
+
+        <div class="stat-card" style="margin-bottom: 20px;">
+          <div class="stat-icon" style="color: var(--accent); background: rgba(245, 158, 11, 0.15);"><i class="ri-user-star-line"></i></div>
+          <div class="stat-info">
+            <h3 id="statTotalPreachers">0</h3>
+            <p>Active Preachers Registered</p>
+          </div>
+        </div>
+
+        <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 14px; padding: 20px; overflow-x: auto;">
+          <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13.5px;">
+            <thead>
+              <tr style="border-bottom: 1px solid var(--border-color); color: var(--text-muted);">
+                <th style="padding: 10px;">NAME</th>
+                <th style="padding: 10px;">PREACHER CODE</th>
+                <th style="padding: 10px;">EMAIL (USER ID)</th>
+                <th style="padding: 10px;">MOBILE / WHATSAPP</th>
+                <th style="padding: 10px;">ROLE</th>
+              </tr>
+            </thead>
+            <tbody id="preachersTableBody">
+              <!-- Preacher rows dynamically loaded -->
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -651,12 +689,43 @@
     </div>
   </div>
 
+  <!-- Modal: Create New Preacher Account -->
+  <div class="modal-overlay" id="addPreacherModal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2>Create Preacher Account</h2>
+        <i class="ri-close-line" style="cursor: pointer; font-size: 24px;" onclick="closeAddPreacherModal()"></i>
+      </div>
+      <form onsubmit="submitNewPreacher(event)">
+        <div class="form-group">
+          <label>Preacher Full Name</label>
+          <input type="text" id="pName" class="form-control" placeholder="e.g. Advaita Das" required>
+        </div>
+        <div class="form-group">
+          <label>Email Address (Login User ID)</label>
+          <input type="email" id="pEmail" class="form-control" placeholder="preacher@example.com" required>
+        </div>
+        <div class="form-group">
+          <label>Mobile / WhatsApp Number</label>
+          <input type="text" id="pPhone" class="form-control" placeholder="+919876543210" required>
+        </div>
+        <div class="form-group">
+          <label>Initial Login Password (Min 8 Chars)</label>
+          <input type="password" id="pPassword" class="form-control" placeholder="Preacher@123" required minlength="8">
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%;">Create Preacher Account</button>
+      </form>
+    </div>
+  </div>
+
   <!-- Toast Notification -->
   <div id="toast">Operation completed successfully!</div>
 
   <script>
     const API_BASE = '/api/v1';
     let coursesList = [];
+    let preachersList = [];
+    let darshanSelectedImages = [];
 
     // Switch Tabs
     function switchTab(tabId, el) {
@@ -668,10 +737,15 @@
       const titles = {
         coursesTab: 'Courses & Video Management',
         darshanTab: 'Publish Daily Darshan',
+        preachersTab: 'Preachers & Credentials Management',
         announcementsTab: 'Publish Announcements & Events',
         paymentsTab: 'Payments & Revenue Center'
       };
       document.getElementById('pageTitle').innerText = titles[tabId];
+
+      if (tabId === 'preachersTab') {
+        loadPreachers();
+      }
     }
 
     // Show Toast
@@ -691,6 +765,8 @@
       document.getElementById('addVideoModal').classList.add('active'); 
     }
     function closeAddVideoModal() { document.getElementById('addVideoModal').classList.remove('active'); }
+    function openAddPreacherModal() { document.getElementById('addPreacherModal').classList.add('active'); }
+    function closeAddPreacherModal() { document.getElementById('addPreacherModal').classList.remove('active'); }
 
     // Load Courses from API
     async function loadCourses() {
@@ -804,26 +880,53 @@
       }
     }
 
-    function previewDarshanImage(e) {
-      const file = e.target.files[0];
-      if (!file) return;
+    function previewMultipleDarshanImages(e) {
+      const files = Array.from(e.target.files);
+      if (!files || files.length === 0) return;
 
-      const reader = new FileReader();
-      reader.onload = function(evt) {
-        const dataUrl = evt.target.result;
-        document.getElementById('darshanPreviewImg').src = dataUrl;
-        document.getElementById('darshanPreviewBox').style.display = 'block';
-        document.getElementById('darshanImageUrl').value = dataUrl;
-      };
-      reader.readAsDataURL(file);
+      darshanSelectedImages = [];
+      const grid = document.getElementById('darshanPreviewGrid');
+      grid.innerHTML = '';
+      document.getElementById('darshanPreviewBox').style.display = 'block';
+
+      files.forEach((file, idx) => {
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+          const dataUrl = evt.target.result;
+          darshanSelectedImages.push(dataUrl);
+
+          const img = document.createElement('img');
+          img.src = dataUrl;
+          img.style.width = '100%';
+          img.style.height = '100px';
+          img.style.objectFit = 'cover';
+          img.style.borderRadius = '8px';
+          img.style.border = '2px solid var(--primary)';
+          grid.appendChild(img);
+        };
+        reader.readAsDataURL(file);
+      });
     }
 
     async function submitDarshan(e) {
       e.preventDefault();
+      let urls = [...darshanSelectedImages];
+      const singleUrl = document.getElementById('darshanImageUrl').value;
+      if (singleUrl && singleUrl.trim().length > 0) {
+        urls.push(singleUrl.trim());
+      }
+
+      if (urls.length === 0) {
+        showToast('Please select at least one photo or enter image URL', true);
+        return;
+      }
+
+      const today = new Date().toISOString().split('T')[0];
       const payload = {
+        date: today,
         title: document.getElementById('darshanTitle').value,
-        imageUrl: document.getElementById('darshanImageUrl').value || document.getElementById('darshanPreviewImg').src,
-        message: document.getElementById('darshanMessage').value,
+        imageUrls: urls,
+        description: document.getElementById('darshanMessage').value,
       };
 
       try {
@@ -833,10 +936,85 @@
           body: JSON.stringify(payload),
         });
 
-        showToast('Daily Darshan published successfully!');
-        document.getElementById('darshanForm').reset();
+        if (res.ok) {
+          showToast(`Daily Darshan published successfully with ${urls.length} photos!`);
+          document.getElementById('darshanForm').reset();
+          document.getElementById('darshanPreviewBox').style.display = 'none';
+          document.getElementById('darshanPreviewGrid').innerHTML = '';
+          darshanSelectedImages = [];
+        } else {
+          showToast('Failed to publish Daily Darshan', true);
+        }
       } catch (err) {
-        showToast('Daily Darshan published!');
+        showToast('Error publishing Darshan: ' + err.message, true);
+      }
+    }
+
+    // Load Preachers list from API
+    async function loadPreachers() {
+      try {
+        const res = await fetch(`${API_BASE}/admin/preachers`);
+        if (res.ok) {
+          const json = await res.json();
+          preachersList = Array.isArray(json) ? json : (json.data || []);
+          renderPreachers();
+        }
+      } catch (err) {
+        console.error('Failed to load preachers:', err);
+      }
+    }
+
+    function renderPreachers() {
+      const tbody = document.getElementById('preachersTableBody');
+      document.getElementById('statTotalPreachers').innerText = preachersList.length;
+
+      if (!preachersList || preachersList.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" style="padding: 20px; text-align: center; color: var(--text-muted);">No preachers created yet. Click 'Create New Preacher Account' above to add.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = preachersList.map(p => `
+        <tr style="border-bottom: 1px solid var(--border-color);">
+          <td style="padding: 12px; font-weight: 600; color: var(--text-main);">${p.name || p.full_name || 'Preacher'}</td>
+          <td style="padding: 12px; font-weight: bold; color: var(--accent);">${p.preacherCode || p.code || 'N/A'}</td>
+          <td style="padding: 12px; color: var(--text-muted);">${p.email || 'N/A'}</td>
+          <td style="padding: 12px; color: var(--text-muted);">${p.phoneNumber || p.phone || 'N/A'}</td>
+          <td style="padding: 12px;"><span style="background: rgba(11, 114, 231, 0.2); color: var(--primary); padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: bold;">PREACHER</span></td>
+        </tr>
+      `).join('');
+    }
+
+    // Submit New Preacher Account
+    async function submitNewPreacher(e) {
+      e.preventDefault();
+      const payload = {
+        name: document.getElementById('pName').value,
+        email: document.getElementById('pEmail').value,
+        phoneNumber: document.getElementById('pPhone').value,
+        password: document.getElementById('pPassword').value,
+      };
+
+      try {
+        const res = await fetch(`${API_BASE}/admin/preachers`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        const data = await res.json();
+        const preacherData = data.data || data;
+
+        if (res.ok && preacherData) {
+          const code = preacherData.preacherCode || preacherData.code || 'CREATED';
+          showToast(`Preacher Account Created! Code: ${code}`);
+          alert(`🎉 Preacher Account Successfully Created!\n\nName: ${payload.name}\nUser ID (Email): ${payload.email}\nPassword: ${payload.password}\nPreacher Code: ${code}\n\nThe preacher can now log into the mobile app!`);
+          closeAddPreacherModal();
+          loadPreachers();
+        } else {
+          showToast(data.message || 'Failed to create preacher account', true);
+        }
+      } catch (err) {
+        showToast('Error creating preacher: ' + err.message, true);
       }
     }
 
