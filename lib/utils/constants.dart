@@ -1,22 +1,27 @@
-/// App constants with secure configuration.
-/// API keys are loaded from environment variables (--dart-define) at build time.
-/// This prevents hardcoded secrets from being exposed in the APK.
+/// App constants with secure environment configuration.
 class Constants {
-  // Loaded from --dart-define at build time, with fallback for development only
-  static const String supabaseUrl = String.fromEnvironment(
-    'SUPABASE_URL',
-    defaultValue: 'https://plftorurxmtbzmdvttdm.supabase.co',
+  static const String apiBaseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'https://sadhana-tracker-qq6m.onrender.com/api/v1',
   );
-  static const String supabaseAnonKey = String.fromEnvironment(
-    'SUPABASE_ANON_KEY',
-    defaultValue: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsZnRvcnVyeG10YnptZHZ0dGRtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQxOTU4OTcsImV4cCI6MjA4OTc3MTg5N30.uFuYV62UEVn_lJxPJKU3uLGRsf695njDiRI4h4NmEI0',
-  );
+
   static const String oneSignalAppId = String.fromEnvironment(
     'ONESIGNAL_APP_ID',
-    defaultValue: 'YOUR_ONESIGNAL_APP_ID',
+    defaultValue: '',
   );
-  static const String oneSignalRestApiKey = String.fromEnvironment(
-    'ONESIGNAL_REST_API_KEY',
-    defaultValue: 'YOUR_ONESIGNAL_REST_API_KEY',
+
+  static const String environment = String.fromEnvironment(
+    'ENVIRONMENT',
+    defaultValue: 'development',
   );
+
+  /// Returns true if app is running in production environment.
+  static bool get isProduction => environment == 'production';
+
+  /// Validates environment configuration at runtime.
+  static void validate() {
+    if (isProduction && apiBaseUrl.contains('10.0.2.2')) {
+      assert(false, 'CRITICAL: Production build cannot use emulator 10.0.2.2 backend URL.');
+    }
+  }
 }

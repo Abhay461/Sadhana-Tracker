@@ -26,4 +26,9 @@ export class UpdateUserProfileDto {
   @IsOptional()
   @IsDateString()
   joiningDate?: string;
+
+  @ApiProperty({ description: 'Preacher User ID', required: false })
+  @IsOptional()
+  @IsString()
+  preacherId?: string;
 }

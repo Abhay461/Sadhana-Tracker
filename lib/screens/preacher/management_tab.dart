@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
-
+import '../../services/api_service.dart';
 
 class ManagementTab extends StatefulWidget {
   final List<dynamic> folkBoys;
   final Map<String, List<dynamic>> allUpdates;
   final Map<String, dynamic>? preacherProfile;
-  final SupabaseClient supabase;
   final Future<void> Function() onRefresh;
 
   const ManagementTab({
@@ -15,7 +13,6 @@ class ManagementTab extends StatefulWidget {
     required this.folkBoys,
     required this.allUpdates,
     required this.preacherProfile,
-    required this.supabase,
     required this.onRefresh,
   });
 
@@ -51,44 +48,15 @@ class _ManagementTabState extends State<ManagementTab> {
     super.dispose();
   }
 
-  // Toggle folk lock day targets
-  Future<void> _toggleLock(String boyId, String boyName, bool currentlyLocked) async {
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    try {
-      if (currentlyLocked) {
-        await widget.supabase
-            .from('updates')
-            .delete()
-            .eq('worker_id', boyId)
-            .eq('category', 'folk_lock')
-            .eq('date', today);
-      } else {
-        await widget.supabase.from('updates').insert({
-          'worker_id': boyId,
-          'worker_name': boyName,
-          'preacher_name': widget.preacherProfile?['name'] ?? 'Preacher',
-          'work_started': 'Sadhana Locked',
-          'description': 'Sadhana Tracking Locked',
-          'is_completed': true,
-          'category': 'folk_lock',
-          'date': today,
-        });
-      }
-      await widget.onRefresh();
-    } catch (e) {
-      debugPrint('Error toggling lock: $e');
-    }
-  }
+
 
   void _showBoyScreenTimeDetails(Map<String, dynamic> boy) {
     final boyId = boy['id'].toString();
     final boyUpdates = widget.allUpdates[boyId] ?? [];
     
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    var screenTimeUpdate = boyUpdates.firstWhere(
-      (u) => u['category'] == 'screen_time' && u['date'] == today,
-      orElse: () => null,
-    );
+    final todayMatches = boyUpdates.where((u) => u['category'] == 'screen_time' && u['date'] == today);
+    var screenTimeUpdate = todayMatches.isNotEmpty ? todayMatches.first : null;
     
     if (screenTimeUpdate == null) {
       final screenTimeUpdates = boyUpdates.where((u) => u['category'] == 'screen_time').toList();
@@ -394,8 +362,8 @@ class _ManagementTabState extends State<ManagementTab> {
                         final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
                         try {
-                          await widget.supabase.from('updates').insert({
-                            'worker_id': boy['id'].toString(),
+                          await ApiService.post('/sadhana', {
+                            'worker_id': (boy['id'] ?? boy['_id']).toString(),
                             'worker_name': boy['name'],
                             'category': chosenCategory,
                             'work_started': desc,
@@ -403,7 +371,6 @@ class _ManagementTabState extends State<ManagementTab> {
                             'is_completed': true,
                             'points': ptsVal,
                             'date': today,
-                            'created_at': DateTime.now().toIso8601String(),
                           });
 
                           await widget.onRefresh();
@@ -672,22 +639,7 @@ class _ManagementTabState extends State<ManagementTab> {
     );
   }
 
-  Widget _buildChoiceChip(String label, String value) {
-    final isSelected = _selectedRoleFilter == value;
-    return ChoiceChip(
-      label: Text(label, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isSelected ? Colors.white : Colors.black)),
-      selected: isSelected,
-      selectedColor: const Color(0xFF4F46E5),
-      backgroundColor: const Color(0xFFF1F5F9),
-      onSelected: (selected) {
-        if (selected) {
-          setState(() {
-            _selectedRoleFilter = value;
-          });
-        }
-      },
-    );
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -695,13 +647,39 @@ class _ManagementTabState extends State<ManagementTab> {
       return _buildBoyDetailView();
     }
 
-    final filteredList = widget.folkBoys.where((boy) {
-      final nameMatches = (boy['name'] ?? '').toString().toLowerCase().contains(_managementSearchTerm.toLowerCase());
-      if (_selectedRoleFilter == 'All') {
-        return nameMatches;
-      } else {
-        return nameMatches && (boy['role'] ?? '') == _selectedRoleFilter;
+    final allTasks = widget.allUpdates.values
+        .expand((list) => list)
+        .where((u) => u['category'] != 'screen_time')
+        .toList();
+
+    allTasks.sort((a, b) {
+      final aTime = a['created_at'] ?? '';
+      final bTime = b['created_at'] ?? '';
+      return bTime.compareTo(aTime);
+    });
+
+    final filteredTasks = allTasks.where((task) {
+      final workerName = (task['worker_name'] ?? '').toString().toLowerCase();
+      final workStarted = (task['work_started'] ?? '').toString().toLowerCase();
+      final description = (task['description'] ?? '').toString().toLowerCase();
+      final category = (task['category'] ?? '').toString().toLowerCase();
+      final matchesSearch = workerName.contains(_managementSearchTerm.toLowerCase()) ||
+                            workStarted.contains(_managementSearchTerm.toLowerCase()) ||
+                            description.contains(_managementSearchTerm.toLowerCase()) ||
+                            category.contains(_managementSearchTerm.toLowerCase());
+
+      bool matchesRole = true;
+      if (_selectedRoleFilter != 'All') {
+        final matches = widget.folkBoys.where((b) => b['id'].toString() == task['worker_id'].toString());
+        final boy = matches.isNotEmpty ? matches.first : null;
+        if (boy == null) {
+          matchesRole = false;
+        } else {
+          matchesRole = (boy['role'] ?? '') == _selectedRoleFilter;
+        }
       }
+
+      return matchesSearch && matchesRole;
     }).toList();
 
     return Column(
@@ -715,50 +693,105 @@ class _ManagementTabState extends State<ManagementTab> {
                 controller: _managementSearchController,
                 decoration: InputDecoration(
                   prefixIcon: const Icon(Icons.search),
-                  hintText: 'Search Folk Boy or Resident...',
+                  suffixIcon: PopupMenuButton<String>(
+                    icon: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF3F1200),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.tune,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                    ),
+                    tooltip: 'Filter by Role',
+                    onSelected: (String value) {
+                      setState(() {
+                        _selectedRoleFilter = value;
+                      });
+                    },
+                    itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                      PopupMenuItem<String>(
+                        value: 'All',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.all_inclusive,
+                              color: _selectedRoleFilter == 'All' ? const Color(0xFF3F1200) : Colors.grey,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'All',
+                              style: TextStyle(
+                                fontWeight: _selectedRoleFilter == 'All' ? FontWeight.bold : FontWeight.normal,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem<String>(
+                        value: 'folk_boy',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.person,
+                              color: _selectedRoleFilter == 'folk_boy' ? const Color(0xFF3F1200) : Colors.grey,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Folk Boy',
+                              style: TextStyle(
+                                fontWeight: _selectedRoleFilter == 'folk_boy' ? FontWeight.bold : FontWeight.normal,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem<String>(
+                        value: 'residency',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.home,
+                              color: _selectedRoleFilter == 'residency' ? const Color(0xFF3F1200) : Colors.grey,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Residency',
+                              style: TextStyle(
+                                fontWeight: _selectedRoleFilter == 'residency' ? FontWeight.bold : FontWeight.normal,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  hintText: 'Search student name or task...',
                   filled: true,
                   fillColor: const Color(0xFFF8FAFC),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
                 ),
               ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  const Text('Filter Circle: ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          _buildChoiceChip('All', 'All'),
-                          const SizedBox(width: 8),
-                          _buildChoiceChip('Folk Boy', 'folk_boy'),
-                          const SizedBox(width: 8),
-                          _buildChoiceChip('Residency', 'residency'),
-                        ],
-                      ),
-                    ),
-                  )
-                ],
-              )
             ],
           ),
         ),
         const Divider(height: 1),
         Expanded(
-          child: filteredList.isEmpty
-              ? const Center(child: Text('No matching Folk Boys or Residents found.'))
+          child: filteredTasks.isEmpty
+              ? const Center(child: Text('No student tasks found.'))
               : ListView.builder(
                   padding: const EdgeInsets.all(16),
-                  itemCount: filteredList.length,
+                  itemCount: filteredTasks.length,
                   itemBuilder: (context, index) {
-                    final boy = filteredList[index];
-                    final boyId = boy['id'].toString();
-                    final boyUpdates = widget.allUpdates[boyId] ?? [];
-                    
-                    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-                    final isLocked = boyUpdates.any((u) => u['category'] == 'folk_lock' && u['date'] == today);
+                    final task = filteredTasks[index];
+                    final isCompleted = task['is_completed'] ?? false;
+                    final boyId = task['worker_id']?.toString();
+                    final matches = widget.folkBoys.where((b) => b['id'].toString() == boyId);
+                    final boy = matches.isNotEmpty ? matches.first : null;
+                    final photoUrl = boy?['photo_url'];
 
                     return Card(
                       color: Colors.white,
@@ -768,33 +801,150 @@ class _ManagementTabState extends State<ManagementTab> {
                         side: BorderSide(color: Colors.grey[200]!),
                       ),
                       margin: const EdgeInsets.only(bottom: 12),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          radius: 20,
-                          backgroundImage: boy['photo_url'] != null ? NetworkImage(boy['photo_url']) : null,
-                          child: boy['photo_url'] == null ? Text(boy['name'][0].toUpperCase()) : null,
-                        ),
-                        title: Text(boy['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                        subtitle: Text('${boyUpdates.length} logged activities', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            IconButton(
-                              icon: Icon(
-                                isLocked ? Icons.lock : Icons.lock_open,
-                                color: isLocked ? Colors.redAccent : Colors.grey,
-                                size: 20,
+                            GestureDetector(
+                              onTap: boy != null
+                                  ? () {
+                                      setState(() {
+                                        _selectedBoy = boy;
+                                      });
+                                    }
+                                  : null,
+                              child: CircleAvatar(
+                                radius: 24,
+                                backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
+                                child: photoUrl == null
+                                    ? Text(
+                                        (task['worker_name'] ?? 'S')[0].toUpperCase(),
+                                        style: const TextStyle(fontWeight: FontWeight.bold),
+                                      )
+                                    : null,
                               ),
-                              onPressed: () => _toggleLock(boyId, boy['name'], isLocked),
                             ),
-                            const Icon(Icons.chevron_right, size: 18),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: GestureDetector(
+                                          onTap: boy != null
+                                              ? () {
+                                                  setState(() {
+                                                    _selectedBoy = boy;
+                                                  });
+                                                }
+                                              : null,
+                                          child: Text(
+                                            task['worker_name'] ?? 'Student',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 14,
+                                              color: Color(0xFF1E293B),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      Text(
+                                        task['date'] ?? '',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.grey[500],
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    task['work_started'] ?? 'No title',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                      color: Color(0xFF334155),
+                                    ),
+                                  ),
+                                  if (task['description'] != null &&
+                                      (task['description'] as String).trim().isNotEmpty &&
+                                      task['description'] != task['work_started']) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      task['description'],
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                  ],
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 6,
+                                    runSpacing: 4,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF3F1200).withValues(alpha: 0.06),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          (task['category'] ?? 'Task').toString().toUpperCase(),
+                                          style: const TextStyle(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFF3F1200),
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: isCompleted ? const Color(0xFFD1FAE5) : const Color(0xFFFEE2E2),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          isCompleted ? 'COMPLETED' : 'PENDING',
+                                          style: TextStyle(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.bold,
+                                            color: isCompleted ? const Color(0xFF059669) : const Color(0xFFEF4444),
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (task['photo_url'] != null)
+                              IconButton(
+                                icon: const Icon(Icons.image_outlined, color: Color(0xFF3F1200)),
+                                onPressed: () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (context) => Dialog(
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(20),
+                                        child: Image.network(task['photo_url']),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
                           ],
                         ),
-                        onTap: () {
-                          setState(() {
-                            _selectedBoy = boy;
-                          });
-                        },
                       ),
                     );
                   },

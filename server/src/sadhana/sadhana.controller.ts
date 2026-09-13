@@ -2,6 +2,8 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
+  Delete,
   Body,
   Query,
   Param,
@@ -26,14 +28,50 @@ export class SadhanaController {
   constructor(private readonly sadhanaService: SadhanaService) {}
 
   @Post()
-  @Roles('folk_boy', 'residency')
+  @Roles('folk_boy', 'residency', 'student', 'user', 'member')
   @ApiOperation({ summary: 'Log or update daily sadhana entry' })
   async logSadhana(@CurrentUser() user: any, @Body() dto: LogSadhanaDto) {
     return this.sadhanaService.logSadhana(user._id, dto);
   }
 
+  @Post('student-update')
+  @ApiOperation({ summary: 'Save student sadhana update log' })
+  async handleStudentUpdate(@CurrentUser() user: any, @Body() body: any) {
+    return this.sadhanaService.handleStudentUpdate(user._id, body);
+  }
+
+  @Post('updates')
+  @ApiOperation({ summary: 'Save sadhana update log' })
+  async postUpdates(@CurrentUser() user: any, @Body() body: any) {
+    return this.sadhanaService.handleStudentUpdate(user._id, body);
+  }
+
+  @Get('updates')
+  @ApiOperation({ summary: 'Get student sadhana update logs' })
+  async getUpdates(@CurrentUser() user: any) {
+    return this.sadhanaService.getUpdates(user._id);
+  }
+
+  @Patch('updates/:id')
+  @ApiOperation({ summary: 'Update sadhana update log' })
+  async patchUpdate(@Param('id') id: string, @Body() body: any) {
+    return this.sadhanaService.updateStudentUpdate(id, body);
+  }
+
+  @Delete('updates/:id')
+  @ApiOperation({ summary: 'Delete sadhana update log' })
+  async deleteUpdate(@Param('id') id: string) {
+    return this.sadhanaService.deleteUpdate(id);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete sadhana entry' })
+  async deleteSadhanaById(@Param('id') id: string) {
+    return this.sadhanaService.deleteUpdate(id);
+  }
+
   @Get('history')
-  @Roles('folk_boy', 'residency')
+  @Roles('folk_boy', 'residency', 'student', 'user', 'member')
   @ApiOperation({ summary: 'Get current student sadhana history (paginated)' })
   @ApiQuery({ name: 'page', required: false, example: 1 })
   @ApiQuery({ name: 'limit', required: false, example: 30 })

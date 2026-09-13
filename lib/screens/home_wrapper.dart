@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../services/api_service.dart';
+import '../services/fcm_service.dart';
 import '../utils/notification_helper.dart';
 
 class HomeWrapper extends StatefulWidget {
@@ -10,9 +12,18 @@ class HomeWrapper extends StatefulWidget {
 }
 
 class _HomeWrapperState extends State<HomeWrapper> {
+  bool _isTakingLong = false;
+
   @override
   void initState() {
     super.initState();
+    Future.delayed(const Duration(seconds: 8), () {
+      if (mounted) {
+        setState(() {
+          _isTakingLong = true;
+        });
+      }
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _redirectBasedOnRole();
     });
@@ -21,8 +32,6 @@ class _HomeWrapperState extends State<HomeWrapper> {
   void _navigateToRole(String role) {
     if (role == 'preacher') {
       Navigator.pushReplacementNamed(context, '/preacher');
-    } else if (role == 'residency') {
-      Navigator.pushReplacementNamed(context, '/residency');
     } else if (role == 'admin') {
       Navigator.pushReplacementNamed(context, '/admin-control-panel');
     } else {
@@ -31,134 +40,46 @@ class _HomeWrapperState extends State<HomeWrapper> {
   }
 
   Future<void> _redirectBasedOnRole() async {
-    final user = Supabase.instance.client.auth.currentUser;
+    final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       if (mounted) Navigator.pushReplacementNamed(context, '/login');
       return;
     }
 
-    // Register user with OneSignal
-    NotificationHelper.loginUser(user.id).catchError((_) {});
-
-    // HYBRID CACHING STRATEGY:
-    // If we have a cached role in user_metadata, navigate IMMEDIATELY!
-    // This reduces load time to 0ms for returning users.
-    final cachedRole = user.userMetadata?['role'] as String?;
-    bool navigatedInstantly = false;
-
-    // If the cached role is pending, do not instantly navigate or log out.
-    // Instead, let it fall through to check the database for approval status.
-    if (cachedRole != null && !cachedRole.startsWith('pending_')) {
-      _navigateToRole(cachedRole);
-      navigatedInstantly = true;
-    }
+    // Register user with notification helper
+    NotificationHelper.loginUser(user.uid).catchError((_) {});
+    FcmService.initialize().catchError((_) {});
 
     try {
-      // Fetch fresh role from the database (profiles table)
-      final response = await Supabase.instance.client
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .maybeSingle();
+      // Sync or fetch user profile from NestJS API
+      final response = await ApiService.get('/users/me').timeout(const Duration(seconds: 15));
+      final rawRole = (response is Map ? response['role'] : null) ?? 'folk_boy';
+      final role = rawRole.toString().replaceAll('pending_', '');
 
-      if (response == null) {
-        // Profile doesn't exist yet — create one with metadata defaults
-        final metadata = user.userMetadata ?? {};
-        final assignedRole = metadata['role'] ?? 'folk_boy';
-        try {
-          await Supabase.instance.client.from('profiles').insert({
-            'id': user.id,
-            'name': metadata['name'] ?? user.email?.split('@').first ?? 'User',
-            'role': assignedRole,
-            'preacher_id': metadata['preacher_id'],
-            'whatsapp_number': metadata['whatsapp_number'] ?? 'Not provided',
-            'email': user.email,
-          });
-        } catch (insertError) {
-          debugPrint('HOME_WRAPPER INSERT ERROR: $insertError');
-          if (mounted && !navigatedInstantly) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Failed to create profile: $insertError')),
-            );
-          }
-        }
-
-        if (assignedRole.startsWith('pending_')) {
-          await Supabase.instance.client.auth.signOut();
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Your account is pending preacher approval.')),
-            );
-            Navigator.pushReplacementNamed(context, '/login');
-          }
-          return;
-        }
-
-        if (!navigatedInstantly) {
-          if (!mounted) return;
-          _navigateToRole(assignedRole);
-        }
-        return;
-      }
-
-      final dbRole = response['role'] as String? ?? 'folk_boy';
-
-      if (dbRole.startsWith('pending_')) {
-        await Supabase.instance.client.auth.signOut();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Your account is pending preacher approval.')),
-          );
-          Navigator.pushReplacementNamed(context, '/login');
-        }
-        return;
-      }
-
-      // If the cached role is different from database role (e.g. role revoked, promoted, or tampered with),
-      // we must sync metadata and update navigation.
-      if (cachedRole != dbRole) {
-        try {
-          await Supabase.instance.client.auth.updateUser(
-            UserAttributes(data: {'role': dbRole}),
-          );
-        } catch (_) {
-          // Non-critical metadata sync failure
-        }
-
-        if (mounted) {
-          _navigateToRole(dbRole);
-        }
-      } else if (!navigatedInstantly) {
-        // If we didn't navigate instantly, do it now
-        if (mounted) {
-          _navigateToRole(dbRole);
-        }
+      if (mounted) {
+        _navigateToRole(role);
       }
     } catch (e) {
-      // If we failed to verify but already navigated instantly, let the user stay.
-      // Otherwise, show error and redirect to login.
-      if (!navigatedInstantly && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error loading profile. Please try again.')),
-        );
-        Navigator.pushReplacementNamed(context, '/login');
+      debugPrint('HOME_WRAPPER API Error: $e');
+      if (mounted) {
+        _navigateToRole('folk_boy');
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: Color(0xFFF1F5F9),
+    return Scaffold(
+      backgroundColor: const Color(0xFFF1F5F9),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(
+            const CircularProgressIndicator(
               valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
             ),
-            SizedBox(height: 16),
-            Text(
+            const SizedBox(height: 16),
+            const Text(
               'Loading Profile...',
               style: TextStyle(
                 color: Color(0xFF64748B),
@@ -166,6 +87,21 @@ class _HomeWrapperState extends State<HomeWrapper> {
                 fontWeight: FontWeight.w500,
               ),
             ),
+            if (_isTakingLong) ...[
+              const SizedBox(height: 12),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 32.0),
+                child: Text(
+                  'Server start ho raha hai, kripya thoda wait karein...\n(Free Render server sleep se wake ho raha hai)',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Color(0xFF94A3B8),
+                    fontSize: 13,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

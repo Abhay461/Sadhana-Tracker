@@ -1,7 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/services.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
+import '../services/api_service.dart';
 import '../services/cloudinary_service.dart';
 
 // Import modular tab widgets
@@ -20,6 +24,7 @@ import 'preacher/payment_tab.dart';
 import 'preacher/message_tab.dart';
 import 'preacher/settings_tab.dart';
 import 'preacher/residency_tab.dart';
+import 'preacher/student_list_tab.dart';
 
 class PreacherDashboard extends StatefulWidget {
   const PreacherDashboard({super.key});
@@ -29,7 +34,6 @@ class PreacherDashboard extends StatefulWidget {
 }
 
 class _PreacherDashboardState extends State<PreacherDashboard> {
-  final supabase = Supabase.instance.client;
   final _picker = ImagePicker();
 
   Map<String, dynamic>? _profile;
@@ -44,6 +48,20 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
 
   // Active View Tab identifier
   String? _activeTab;
+  int _selectedIndex = 0;
+  bool _initializedFromArgs = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_initializedFromArgs) {
+      _initializedFromArgs = true;
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is Map<String, dynamic>) {
+        _loadProfileAndData(initialProfile: args);
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -51,18 +69,19 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
     _loadProfileAndData();
   }
 
-  Future<void> _loadProfileAndData() async {
-    final user = supabase.auth.currentUser;
+  Future<void> _loadProfileAndData({Map<String, dynamic>? initialProfile}) async {
+    final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
     try {
-      final profileData = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single();
+      dynamic profileData;
+      if (initialProfile != null) {
+        profileData = initialProfile;
+      } else {
+        profileData = await ApiService.get('/users/me');
+      }
 
-      final role = profileData['role'] as String?;
+      final role = (profileData is Map ? profileData['role'] : null) as String?;
       if (role != 'preacher' && role != 'admin') {
         if (mounted) {
           Navigator.pushReplacementNamed(context, '/home');
@@ -72,7 +91,7 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
 
       if (mounted) {
         setState(() {
-          _profile = profileData;
+          _profile = profileData is Map ? Map<String, dynamic>.from(profileData) : null;
           _isLoadingProfile = false;
         });
       }
@@ -91,15 +110,11 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
     if (_profile == null) return;
     try {
       if (mounted) setState(() => _isLoadingBoys = true);
-      final data = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('preacher_id', _profile!['id'])
-          .order('name');
+      final data = await ApiService.get('/users/students');
 
       if (mounted) {
         setState(() {
-          _folkBoys = data;
+          _folkBoys = data is List ? data : [];
           _isLoadingBoys = false;
         });
       }
@@ -113,22 +128,13 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
 
   Future<void> _fetchTripAndEventBookings() async {
     try {
-      final tripData = await supabase
-          .from('updates')
-          .select('*')
-          .eq('category', 'trip_attendance')
-          .order('created_at', ascending: false);
-      
-      final eventData = await supabase
-          .from('updates')
-          .select('*')
-          .eq('category', 'event_attendance')
-          .order('created_at', ascending: false);
+      final tripData = await ApiService.get('/trips/registrations');
+      final eventData = await ApiService.get('/events/registrations');
 
       if (mounted) {
         setState(() {
-          _tripBookings = tripData;
-          _eventBookings = eventData;
+          _tripBookings = tripData is List ? tripData : [];
+          _eventBookings = eventData is List ? eventData : [];
         });
       }
     } catch (e) {
@@ -140,14 +146,8 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
     await _fetchTripAndEventBookings();
     if (_folkBoys.isEmpty) return;
     try {
-      final boyIds = _folkBoys.map((b) => b['id']).toList();
-      final List<dynamic> updatesData = await supabase
-          .from('updates')
-          .select('*')
-          .inFilter('worker_id', boyIds)
-          .order('created_at', ascending: false);
-
-      final List<dynamic> processedUpdates = List.from(updatesData);
+      final updatesData = await ApiService.get('/sadhana/students');
+      final List<dynamic> processedUpdates = updatesData is List ? List.from(updatesData) : [];
       
       // Process signals in-memory
       final approvalSignals = processedUpdates.where((u) => u['category'] == 'accommodation_approval_signal').toList();
@@ -242,14 +242,10 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
 
   Future<void> _fetchAnnouncements() async {
     try {
-      final data = await supabase
-          .from('announcements')
-          .select('*')
-          .order('created_at', ascending: false)
-          .limit(30);
+      final data = await ApiService.get('/announcements');
       if (mounted) {
         setState(() {
-          _announcements = data;
+          _announcements = data is List ? data : [];
         });
       }
     } catch (e) {
@@ -258,7 +254,7 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
   }
 
   Future<void> _updateMainProfilePhoto() async {
-    final user = supabase.auth.currentUser;
+    final user = FirebaseAuth.instance.currentUser;
     if (user == null || _profile == null) return;
 
     try {
@@ -275,9 +271,9 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
           _profile = Map<String, dynamic>.from(_profile!)..['photo_url'] = url;
         });
 
-        await supabase.from('profiles').update({
-          'photo_url': url,
-        }).eq('id', user.id);
+        await ApiService.patch('/users/me', {
+          'photoUrl': url,
+        });
 
         await _loadProfileAndData();
         
@@ -341,262 +337,371 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
   Widget build(BuildContext context) {
     if (_isLoadingProfile) {
       return const Scaffold(
-        backgroundColor: Color(0xFFF8FAFC),
+        backgroundColor: Color(0xFFFAF8F5),
         body: Center(child: CircularProgressIndicator()),
       );
     }
 
-    return PopScope(
-      canPop: _activeTab == null,
-      onPopInvokedWithResult: (didPop, result) {
-        if (didPop) return;
-        if (_activeTab != null) {
-          setState(() {
-            _activeTab = null;
-          });
-        }
-      },
-      child: Scaffold(
-        backgroundColor: const Color(0xFFF8FAFC),
-        appBar: AppBar(
-          title: Text(
-            _activeTab == null
-                ? 'Preacher Dashboard'
-                : _activeTab == 'payment'
-                    ? 'Payment Reminder'
-                    : _activeTab!.toUpperCase(),
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1.2, color: Color(0xFF1E293B)),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.white,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
+      ),
+      child: Container(
+        color: Colors.white,
+        child: SafeArea(
+          child: PopScope(
+            canPop: _selectedIndex == 0 && _activeTab == null,
+            onPopInvokedWithResult: (didPop, result) {
+              if (didPop) return;
+              if (_activeTab != null) {
+                setState(() {
+                  _activeTab = null;
+                });
+              } else if (_selectedIndex != 0) {
+                setState(() {
+                  _selectedIndex = 0;
+                });
+              }
+            },
+            child: Scaffold(
+              backgroundColor: const Color(0xFFFAF8F5),
+              appBar: _selectedIndex == 0
+                  ? AppBar(
+                      automaticallyImplyLeading: false,
+                      backgroundColor: const Color(0xFF3F1200),
+                      elevation: 0.5,
+                      toolbarHeight: 80,
+                      systemOverlayStyle: const SystemUiOverlayStyle(
+                        statusBarColor: Colors.white,
+                        statusBarIconBrightness: Brightness.dark,
+                        statusBarBrightness: Brightness.light,
+                      ),
+                      centerTitle: false,
+                      title: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                        child: Row(
+                          children: [
+                            GestureDetector(
+                              onTap: _updateMainProfilePhoto,
+                              child: CircleAvatar(
+                                radius: 24,
+                                backgroundImage: (_profile?['photo_url'] != null && _profile!['photo_url'].toString().trim().isNotEmpty)
+                                    ? NetworkImage(_profile!['photo_url'].toString().trim())
+                                    : null,
+                                backgroundColor: const Color(0xFFEEF2F6),
+                                child: (_profile?['photo_url'] == null || _profile!['photo_url'].toString().trim().isEmpty)
+                                    ? Text(
+                                        (_profile?['name'] ?? 'P')[0].toUpperCase(),
+                                        style: const TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF3F1200),
+                                        ),
+                                      )
+                                    : null,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    'Hare Krishna, ${_profile?['name'] ?? 'Preacher'}',
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 2),
+                                  const _LiveDateTimeWidget(color: Colors.white70),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : null,
+              body: IndexedStack(
+                index: _selectedIndex,
+                children: [
+                  _buildHomeTabContent(),
+                  _buildApprovalsTabContent(),
+                  _buildServicesTabContent(),
+                  _buildSettingsTabContent(),
+                ],
+              ),
+              bottomNavigationBar: Container(
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  border: Border(
+                    top: BorderSide(
+                      color: Color(0xFFE2E8F0),
+                      width: 1.0,
+                    ),
+                  ),
+                ),
+                child: SafeArea(
+                  top: false,
+                  bottom: true,
+                  child: NavigationBarTheme(
+                    data: NavigationBarThemeData(
+                      indicatorColor: const Color(0xFF3F1200).withValues(alpha: 0.12),
+                      labelTextStyle: WidgetStateProperty.resolveWith((states) {
+                        if (states.contains(WidgetState.selected)) {
+                          return const TextStyle(color: Color(0xFF3F1200), fontWeight: FontWeight.bold, fontSize: 12);
+                        }
+                        return TextStyle(color: const Color(0xFF3F1200).withValues(alpha: 0.6), fontSize: 12);
+                      }),
+                      iconTheme: WidgetStateProperty.resolveWith((states) {
+                        if (states.contains(WidgetState.selected)) {
+                          return const IconThemeData(color: Color(0xFF3F1200));
+                        }
+                        return IconThemeData(color: const Color(0xFF3F1200).withValues(alpha: 0.6));
+                      }),
+                    ),
+                    child: NavigationBar(
+                      selectedIndex: _selectedIndex,
+                      onDestinationSelected: (int index) {
+                        setState(() {
+                          _selectedIndex = index;
+                          _activeTab = null;
+                        });
+                      },
+                      backgroundColor: Colors.transparent,
+                      elevation: 0,
+                      height: 65,
+                      destinations: [
+                        const NavigationDestination(
+                          icon: Icon(Icons.home_outlined),
+                          selectedIcon: Icon(Icons.home_rounded),
+                          label: 'Home',
+                        ),
+                        NavigationDestination(
+                          icon: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              const Icon(Icons.fact_check_outlined),
+                              if (_pendingApprovalCount > 0)
+                                Positioned(
+                                  right: -4,
+                                  top: -4,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                                    constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
+                                    child: Center(
+                                      child: Text(
+                                        '$_pendingApprovalCount',
+                                        style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          selectedIcon: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              const Icon(Icons.fact_check_rounded),
+                              if (_pendingApprovalCount > 0)
+                                Positioned(
+                                  right: -4,
+                                  top: -4,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                                    constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
+                                    child: Center(
+                                      child: Text(
+                                        '$_pendingApprovalCount',
+                                        style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          label: 'Approvals',
+                        ),
+                        const NavigationDestination(
+                          icon: Icon(Icons.grid_view_outlined),
+                          selectedIcon: Icon(Icons.grid_view_rounded),
+                          label: 'Services',
+                        ),
+                        const NavigationDestination(
+                          icon: Icon(Icons.person_outline),
+                          selectedIcon: Icon(Icons.person_rounded),
+                          label: 'Profile',
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
-          backgroundColor: Colors.white,
-          elevation: 0,
-          centerTitle: true,
-          leading: _activeTab != null
-              ? IconButton(
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHomeTabContent() {
+    final activeFolkBoys = _folkBoys.where((b) => !(b['role'] as String? ?? '').startsWith('pending_')).toList();
+    return ManagementTab(
+      folkBoys: activeFolkBoys,
+      allUpdates: _allUpdates,
+      preacherProfile: _profile,
+      onRefresh: _loadProfileAndData,
+    );
+  }
+
+  Widget _buildApprovalsTabContent() {
+    return ApprovalTab(
+      allUpdates: _allUpdates,
+      onRefresh: _loadProfileAndData,
+      preacherProfile: _profile,
+      folkBoys: _folkBoys,
+    );
+  }
+
+  Widget _buildSettingsTabContent() {
+    return SettingsTab(
+      preacherProfile: _profile,
+
+      onRefresh: _loadProfileAndData,
+    );
+  }
+
+  Widget _buildServicesTabContent() {
+    if (_activeTab == null) {
+      return _buildServicesGrid();
+    } else {
+      return Column(
+        children: [
+          Container(
+            color: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                IconButton(
                   icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black, size: 18),
                   onPressed: () {
                     setState(() {
                       _activeTab = null;
                     });
                   },
-                )
-              : null,
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.logout, color: Colors.redAccent),
-              onPressed: () {
-                try {
-                  supabase.auth.signOut().catchError((_) {});
-                } catch (_) {}
-                Navigator.pushReplacementNamed(context, '/login');
-              },
-            ),
-          ],
-        ),
-        body: _activeTab == null ? _buildMainGrid() : _buildTabContent(),
-      ),
-    );
-  }
-
-  Widget _buildMainGrid() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                GestureDetector(
-                  onTap: _updateMainProfilePhoto,
-                  child: Stack(
-                    alignment: Alignment.bottomRight,
-                    children: [
-                      Container(
-                        width: 96,
-                        height: 96,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF4F46E5),
-                          shape: BoxShape.circle,
-                        ),
-                        child: ClipOval(
-                          child: (_profile?['photo_url'] != null && _profile!['photo_url'].toString().trim().isNotEmpty)
-                              ? Image.network(
-                                  _profile!['photo_url'].toString().trim(),
-                                  fit: BoxFit.cover,
-                                  loadingBuilder: (context, child, loadingProgress) {
-                                    if (loadingProgress == null) return child;
-                                    return const Center(
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
-                                        strokeWidth: 2,
-                                      ),
-                                    );
-                                  },
-                                  errorBuilder: (context, error, stackTrace) {
-                                    debugPrint('Image loading error: $error');
-                                    return Center(
-                                      child: Text(
-                                        (_profile?['name'] ?? 'P')[0].toUpperCase(),
-                                        style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white),
-                                      ),
-                                    );
-                                  },
-                                )
-                              : Center(
-                                  child: Text(
-                                    (_profile?['name'] ?? 'P')[0].toUpperCase(),
-                                    style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white),
-                                  ),
-                                ),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: const BoxDecoration(color: Color(0xFF4F46E5), shape: BoxShape.circle),
-                        child: const Icon(Icons.camera_alt, color: Colors.white, size: 14),
-                      )
-                    ],
-                  ),
                 ),
-                const SizedBox(height: 12),
                 Text(
-                  _profile?['name'] ?? 'Preacher Portal',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'PREACHER',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1),
+                  _activeTab == 'payment'
+                      ? 'Payment Reminder'
+                      : _activeTab == 'online'
+                          ? 'Online Session'
+                          : _activeTab == 'blocklist'
+                              ? 'Block List'
+                              : _activeTab == 'residency'
+                                  ? 'Residency Admission'
+                                  : _activeTab == 'notifications'
+                                      ? 'Notification'
+                                      : _activeTab == 'student_list'
+                                          ? 'Student List'
+                                          : _activeTab![0].toUpperCase() + _activeTab!.substring(1),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF1E293B)),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 28),
+          Expanded(child: _buildTabContent()),
+        ],
+      );
+    }
+  }
 
+  Widget _buildServicesGrid() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           const Text(
-            'Preacher Control Panel',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B), letterSpacing: 0.5),
+            'Services Control Panel',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
           ),
-          const SizedBox(height: 16),
-
-          GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 2,
-            childAspectRatio: 1.25,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
+          const SizedBox(height: 12),
+          Column(
             children: [
-              _buildGridItem(
-                title: 'Management',
-                icon: Icons.people_alt_outlined,
-                color: const Color(0xFFEEF2F6),
-                iconColor: const Color(0xFF4F46E5),
-                onTap: () => setState(() => _activeTab = 'management'),
-              ),
-              _buildGridItem(
+              _buildServiceListItem(
                 title: 'Online Session',
                 icon: Icons.video_camera_back_outlined,
-                color: const Color(0xFFE6F4EA),
-                iconColor: const Color(0xFF0F9D58),
                 onTap: () => setState(() => _activeTab = 'online'),
               ),
-              _buildGridItem(
+              _buildServiceListItem(
                 title: 'Announcements',
                 icon: Icons.campaign_outlined,
-                color: const Color(0xFFFEF3C7),
-                iconColor: const Color(0xFFD97706),
                 onTap: () => setState(() => _activeTab = 'announcements'),
               ),
-              _buildGridItem(
+              _buildServiceListItem(
                 title: 'Attendance',
                 icon: Icons.check_circle_outline_outlined,
-                color: const Color(0xFFE0F2FE),
-                iconColor: const Color(0xFF0284C7),
                 onTap: () => setState(() => _activeTab = 'attendance'),
               ),
-              _buildGridItem(
+              _buildServiceListItem(
                 title: 'Birthday Wishes',
                 icon: Icons.cake_outlined,
-                color: const Color(0xFFFCE7F3),
-                iconColor: const Color(0xFFDB2777),
                 onTap: () => setState(() => _activeTab = 'birthday'),
               ),
-              _buildGridItem(
+              _buildServiceListItem(
                 title: 'Plan Trip',
                 icon: Icons.alt_route_outlined,
-                color: const Color(0xFFDBEAFE),
-                iconColor: const Color(0xFF2563EB),
                 onTap: () => setState(() => _activeTab = 'trip'),
               ),
-              _buildGridItem(
+              _buildServiceListItem(
                 title: 'Post Event',
                 icon: Icons.calendar_month_outlined,
-                color: const Color(0xFFECFDF5),
-                iconColor: const Color(0xFF0D9488),
                 onTap: () => setState(() => _activeTab = 'event'),
               ),
-              _buildGridItem(
+              _buildServiceListItem(
                 title: 'Block List',
                 icon: Icons.block_outlined,
-                color: const Color(0xFFFFE4E6),
-                iconColor: const Color(0xFFE11D48),
                 onTap: () => setState(() => _activeTab = 'blocklist'),
               ),
-              _buildGridItem(
+              _buildServiceListItem(
                 title: 'Accommodation',
                 icon: Icons.home_outlined,
-                color: const Color(0xFFF3E8FF),
-                iconColor: const Color(0xFF9333EA),
                 onTap: () => setState(() => _activeTab = 'accommodation'),
               ),
-              _buildGridItem(
-                title: 'Approval',
-                icon: Icons.fact_check_outlined,
-                color: const Color(0xFFCCFBF1),
-                iconColor: const Color(0xFF0F766E),
-                onTap: () => setState(() => _activeTab = 'approval'),
-                badgeCount: _pendingApprovalCount,
-              ),
-              _buildGridItem(
+              _buildServiceListItem(
                 title: 'Residency Admission',
                 icon: Icons.school_outlined,
-                color: const Color(0xFFE0F2FE),
-                iconColor: const Color(0xFF0284C7),
                 onTap: () => setState(() => _activeTab = 'residency'),
               ),
-              _buildGridItem(
+              _buildServiceListItem(
                 title: 'Payment Reminder',
                 icon: Icons.account_balance_wallet_outlined,
-                color: const Color(0xFFFFEDD5),
-                iconColor: const Color(0xFFEA580C),
                 onTap: () => setState(() => _activeTab = 'payment'),
                 badgeCount: _pendingPaymentCount,
               ),
-              _buildGridItem(
+              _buildServiceListItem(
                 title: 'Notification',
                 icon: Icons.notifications_none_outlined,
-                color: const Color(0xFFFEE2E2),
-                iconColor: const Color(0xFFDC2626),
                 onTap: () => setState(() => _activeTab = 'notifications'),
               ),
-              _buildGridItem(
+              _buildServiceListItem(
                 title: 'Message',
                 icon: Icons.chat_bubble_outline_outlined,
-                color: const Color(0xFFE0F2FE),
-                iconColor: const Color(0xFF0369A1),
                 onTap: () => setState(() => _activeTab = 'message'),
               ),
-              _buildGridItem(
-                title: 'Settings',
-                icon: Icons.settings_outlined,
-                color: const Color(0xFFFFF1F2),
-                iconColor: const Color(0xFFF43F5E),
-                onTap: () => setState(() => _activeTab = 'settings'),
+              _buildServiceListItem(
+                title: 'Student List',
+                icon: Icons.people_outline_rounded,
+                onTap: () => setState(() => _activeTab = 'student_list'),
               ),
             ],
           ),
@@ -605,73 +710,52 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
     );
   }
 
-  Widget _buildGridItem({
+  Widget _buildServiceListItem({
     required String title,
     required IconData icon,
-    required Color color,
-    required Color iconColor,
     required VoidCallback onTap,
     int badgeCount = 0,
   }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(24),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(24),
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 12),
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.grey[200]!),
+      ),
+      child: ListTile(
+        onTap: onTap,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        leading: CircleAvatar(
+          backgroundColor: const Color(0xFF3F1200).withValues(alpha: 0.08),
+          child: Icon(icon, color: const Color(0xFF3F1200), size: 22),
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
+        title: Text(
+          title,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1E293B)),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: Colors.white,
-                  child: Icon(icon, color: iconColor, size: 28),
+            if (badgeCount > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                margin: const EdgeInsets.only(right: 8),
+                decoration: BoxDecoration(
+                  color: Colors.redAccent.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                if (badgeCount > 0)
-                  Positioned(
-                    right: -4,
-                    top: -4,
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: const BoxDecoration(
-                        color: Colors.red,
-                        shape: BoxShape.circle,
-                      ),
-                      constraints: const BoxConstraints(
-                        minWidth: 20,
-                        minHeight: 20,
-                      ),
-                      child: Center(
-                        child: Text(
-                          '$badgeCount',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
+                child: Text(
+                  '$badgeCount',
+                  style: const TextStyle(
+                    color: Colors.redAccent,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
                   ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-                color: Color(0xFF1E293B),
+                ),
               ),
-            ),
+            const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey),
           ],
         ),
       ),
@@ -687,7 +771,7 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
           folkBoys: activeFolkBoys,
           allUpdates: _allUpdates,
           preacherProfile: _profile,
-          supabase: supabase,
+    
           onRefresh: _loadProfileAndData,
         );
       case 'online':
@@ -695,7 +779,6 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
           folkBoys: activeFolkBoys,
           allUpdates: _allUpdates,
           preacherProfile: _profile,
-          supabase: supabase,
           onRefresh: _loadProfileAndData,
         );
       case 'notifications':
@@ -703,14 +786,12 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
           folkBoys: activeFolkBoys,
           allUpdates: _allUpdates,
           preacherProfile: _profile,
-          supabase: supabase,
           onRefresh: _loadProfileAndData,
         );
       case 'announcements':
         return AnnouncementsTab(
           announcements: _announcements,
           preacherProfile: _profile,
-          supabase: supabase,
           onRefresh: _loadProfileAndData,
         );
       case 'attendance':
@@ -718,7 +799,6 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
           folkBoys: activeFolkBoys,
           allUpdates: _allUpdates,
           preacherProfile: _profile,
-          supabase: supabase,
           onRefresh: _loadProfileAndData,
         );
       case 'birthday':
@@ -731,7 +811,6 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
           tripBookings: _tripBookings,
           folkBoys: activeFolkBoys,
           preacherProfile: _profile,
-          supabase: supabase,
           onRefresh: _loadProfileAndData,
         );
       case 'event':
@@ -740,7 +819,6 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
           eventBookings: _eventBookings,
           folkBoys: activeFolkBoys,
           preacherProfile: _profile,
-          supabase: supabase,
           onRefresh: _loadProfileAndData,
         );
       case 'blocklist':
@@ -748,7 +826,7 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
           folkBoys: activeFolkBoys,
           allUpdates: _allUpdates,
           preacherProfile: _profile,
-          supabase: supabase,
+    
           onRefresh: _loadProfileAndData,
         );
       case 'accommodation':
@@ -756,13 +834,13 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
           folkBoys: activeFolkBoys,
           allUpdates: _allUpdates,
           preacherProfile: _profile,
-          supabase: supabase,
+    
           onRefresh: _loadProfileAndData,
         );
       case 'approval':
         return ApprovalTab(
           allUpdates: _allUpdates,
-          supabase: supabase,
+    
           onRefresh: _loadProfileAndData,
           preacherProfile: _profile,
           folkBoys: _folkBoys,
@@ -772,14 +850,14 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
           folkBoys: activeFolkBoys,
           allUpdates: _allUpdates,
           preacherProfile: _profile,
-          supabase: supabase,
+    
           onRefresh: _loadProfileAndData,
         );
       case 'payment':
         return PaymentTab(
           folkBoys: activeFolkBoys,
           allUpdates: _allUpdates,
-          supabase: supabase,
+    
           onRefresh: _loadProfileAndData,
         );
       case 'message':
@@ -790,10 +868,65 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
       case 'settings':
         return SettingsTab(
           preacherProfile: _profile,
-          supabase: supabase,
+    
+          onRefresh: _loadProfileAndData,
+        );
+      case 'student_list':
+        return StudentListTab(
+          folkBoys: activeFolkBoys,
+          allUpdates: _allUpdates,
+    
           onRefresh: _loadProfileAndData,
         );
     }
     return const SizedBox.shrink();
+  }
+}
+
+class _LiveDateTimeWidget extends StatefulWidget {
+  final Color? color;
+  const _LiveDateTimeWidget({this.color});
+
+  @override
+  State<_LiveDateTimeWidget> createState() => _LiveDateTimeWidgetState();
+}
+
+class _LiveDateTimeWidgetState extends State<_LiveDateTimeWidget> {
+  late Timer _timer;
+  late String _dateTimeStr;
+
+  @override
+  void initState() {
+    super.initState();
+    _updateTime();
+    _timer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      _updateTime();
+    });
+  }
+
+  void _updateTime() {
+    if (mounted) {
+      setState(() {
+        _dateTimeStr = DateFormat('EEEE, d MMM • hh:mm a').format(DateTime.now());
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      _dateTimeStr,
+      style: TextStyle(
+        fontSize: 12,
+        color: widget.color ?? const Color(0xFF64748B),
+        fontWeight: FontWeight.w500,
+      ),
+    );
   }
 }

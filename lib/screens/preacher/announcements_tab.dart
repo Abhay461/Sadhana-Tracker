@@ -1,17 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../services/api_service.dart';
 
 class AnnouncementsTab extends StatefulWidget {
   final List<dynamic> announcements;
   final Map<String, dynamic>? preacherProfile;
-  final SupabaseClient supabase;
   final Future<void> Function() onRefresh;
 
   const AnnouncementsTab({
     super.key,
     required this.announcements,
     required this.preacherProfile,
-    required this.supabase,
     required this.onRefresh,
   });
 
@@ -33,9 +31,9 @@ class _AnnouncementsTabState extends State<AnnouncementsTab> {
     if (text.isEmpty) return;
 
     try {
-      await widget.supabase.from('announcements').insert({
+      await ApiService.post('/announcements', {
         'content': text,
-        'preacher_id': widget.preacherProfile?['id'],
+        'preacher_id': widget.preacherProfile?['id'] ?? widget.preacherProfile?['_id'],
       });
       _announcementController.clear();
       await widget.onRefresh();
@@ -51,7 +49,7 @@ class _AnnouncementsTabState extends State<AnnouncementsTab> {
 
   Future<void> _deleteAnnouncement(String id) async {
     try {
-      await widget.supabase.from('announcements').delete().eq('id', id);
+      await ApiService.delete('/announcements/$id');
       await widget.onRefresh();
     } catch (e) {
       debugPrint('Error deleting announcement: $e');

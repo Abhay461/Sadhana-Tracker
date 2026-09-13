@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../services/api_service.dart';
 import '../../utils/notification_helper.dart';
 import 'dart:convert';
 import '../../utils/residency_pdf_helper.dart';
 
 class ApprovalTab extends StatefulWidget {
   final Map<String, List<dynamic>> allUpdates;
-  final SupabaseClient supabase;
   final Future<void> Function() onRefresh;
   final Map<String, dynamic>? preacherProfile;
   final List<dynamic> folkBoys;
@@ -16,7 +15,6 @@ class ApprovalTab extends StatefulWidget {
   const ApprovalTab({
     super.key,
     required this.allUpdates,
-    required this.supabase,
     required this.onRefresh,
     this.preacherProfile,
     required this.folkBoys,
@@ -304,15 +302,9 @@ class _ApprovalTabState extends State<ApprovalTab> {
                           final messenger = ScaffoldMessenger.of(context);
                           try {
                             final targetRole = rawRole.replaceFirst('pending_', '');
-                            final List<dynamic> response = await widget.supabase
-                                .from('profiles')
-                                .update({'role': targetRole})
-                                .eq('id', account['id'])
-                                .select();
-
-                            if (response.isEmpty) {
-                              throw Exception('Permission denied: No rows updated. Please check if RLS policies are applied in your Supabase SQL editor.');
-                            }
+                            await ApiService.patch('/users/${account['id'] ?? account['_id']}', {
+                              'role': targetRole,
+                            });
 
                             await widget.onRefresh();
                             
@@ -381,10 +373,7 @@ class _ApprovalTabState extends State<ApprovalTab> {
                           if (confirm != true) return;
 
                           try {
-                            await widget.supabase
-                                .from('profiles')
-                                .delete()
-                                .eq('id', account['id']);
+                            await ApiService.delete('/users/${account['id'] ?? account['_id']}');
 
                             await widget.onRefresh();
                             if (mounted) {
@@ -517,15 +506,17 @@ class _ApprovalTabState extends State<ApprovalTab> {
                           final messenger = ScaffoldMessenger.of(context);
                           try {
                             final category = u['category'];
+                            final updateId = u['id'] ?? u['_id'];
+
                             if (category == 'residency_admission') {
-                              await widget.supabase.from('updates').update({
+                              await ApiService.patch('/sadhana/updates/$updateId', {
                                 'is_completed': true,
-                              }).eq('id', u['id']);
+                              });
                               
                               final workerId = u['worker_id'];
                               if (workerId != null) {
                                 try {
-                                  await widget.supabase.from('profiles').update({'role': 'residency'}).eq('id', workerId);
+                                  await ApiService.patch('/users/$workerId', {'role': 'residency'});
                                 } catch (pe) {
                                   debugPrint('Profile role update fallback failed: $pe');
                                 }
@@ -552,19 +543,19 @@ class _ApprovalTabState extends State<ApprovalTab> {
                               final roomNum = roomController.text.trim();
                               final roomText = roomNum.isEmpty ? 'Approved' : 'Room $roomNum';
 
-                              await widget.supabase.from('updates').update({
+                              await ApiService.patch('/sadhana/updates/$updateId', {
                                 'is_completed': true,
                                 'work_completed': roomText,
-                              }).eq('id', u['id']);
+                              });
                             } else if (category == 'payment') {
-                              await widget.supabase.from('updates').update({
+                              await ApiService.patch('/payments/$updateId', {
                                 'is_completed': true,
                                 'work_completed': 'PAID',
-                              }).eq('id', u['id']);
+                              });
                             } else {
-                              await widget.supabase.from('updates').update({'is_completed': true}).eq('id', u['id']);
+                              await ApiService.patch('/sadhana/updates/$updateId', {'is_completed': true});
                             }
-                            
+                           
                             await widget.onRefresh();
                             final workerId = u['worker_id'];
                             if (workerId != null) {
@@ -582,39 +573,40 @@ class _ApprovalTabState extends State<ApprovalTab> {
                             debugPrint('Error approving: $e');
                           }
                         },
-                        child: const Text('APPROVE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.redAccent,
-                          side: const BorderSide(color: Colors.redAccent),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          child: const Text('APPROVE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
                         ),
-                        onPressed: () async {
-                          final messenger = ScaffoldMessenger.of(context);
-                          try {
-                            final category = u['category'];
-                            if (category == 'residency_admission') {
-                              await widget.supabase.from('updates').update({
-                                'is_completed': true,
-                                'work_completed': 'REJECTED',
-                              }).eq('id', u['id']);
-                            } else if (category == 'accommodation') {
-                              await widget.supabase.from('updates').update({
-                                'is_completed': true,
-                                'work_completed': 'REJECTED',
-                              }).eq('id', u['id']);
-                            } else if (category == 'payment') {
-                              await widget.supabase.from('updates').update({
-                                'is_completed': false,
-                                'work_completed': 'PENDING',
-                              }).eq('id', u['id']);
-                            } else {
-                              await widget.supabase.from('updates').delete().eq('id', u['id']);
-                            }
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.redAccent,
+                            side: const BorderSide(color: Colors.redAccent),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: () async {
+                            final messenger = ScaffoldMessenger.of(context);
+                            try {
+                              final updateId = u['id'] ?? u['_id'];
+                              final category = u['category'];
+                              if (category == 'residency_admission') {
+                                await ApiService.patch('/sadhana/updates/$updateId', {
+                                  'is_completed': true,
+                                  'work_completed': 'REJECTED',
+                                });
+                              } else if (category == 'accommodation') {
+                                await ApiService.patch('/sadhana/updates/$updateId', {
+                                  'is_completed': true,
+                                  'work_completed': 'REJECTED',
+                                });
+                              } else if (category == 'payment') {
+                                await ApiService.patch('/payments/$updateId', {
+                                  'is_completed': false,
+                                  'work_completed': 'PENDING',
+                                });
+                              } else {
+                                await ApiService.delete('/sadhana/updates/$updateId');
+                              }
                             
                             await widget.onRefresh();
                             final workerId = u['worker_id'];

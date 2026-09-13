@@ -9,7 +9,7 @@ export class UsersService {
   constructor(@InjectModel(User.name) private readonly userModel: Model<UserDocument>) {}
 
   async getProfile(userId: string) {
-    const user = await this.userModel.findById(userId).populate('preacherId', 'name email photoUrl whatsapp_number');
+    const user = await this.userModel.findById(userId).populate('preacherId', 'name email photoUrl phoneNumber whatsapp_number');
     if (!user) {
       throw new NotFoundException('User profile not found.');
     }
@@ -23,8 +23,9 @@ export class UsersService {
     if (dto.email) updateData.email = dto.email;
     if (dto.dob) updateData.dob = new Date(dto.dob);
     if (dto.joiningDate) updateData.joiningDate = new Date(dto.joiningDate);
+    if (dto.preacherId) updateData.preacherId = dto.preacherId;
 
-    const user = await this.userModel.findByIdAndUpdate(userId, { $set: updateData }, { new: true });
+    const user = await this.userModel.findByIdAndUpdate(userId, { $set: updateData }, { new: true }).populate('preacherId', 'name email photoUrl phoneNumber whatsapp_number');
     if (!user) {
       throw new NotFoundException('User profile not found.');
     }
@@ -34,7 +35,7 @@ export class UsersService {
   async getPublicPreachers() {
     const preachers = await this.userModel
       .find({ role: 'preacher', status: 'ACTIVE' })
-      .select('_id name email preacherCode photoUrl')
+      .select('_id name email preacherCode photoUrl phoneNumber')
       .sort({ name: 1 });
 
     return preachers.map((p) => ({
@@ -44,6 +45,8 @@ export class UsersService {
       email: p.email,
       preacherCode: p.preacherCode,
       photoUrl: p.photoUrl,
+      phoneNumber: p.phoneNumber,
+      whatsapp_number: p.phoneNumber,
     }));
   }
 }

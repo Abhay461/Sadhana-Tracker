@@ -1,19 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import '../../services/api_service.dart';
 import '../../utils/notification_helper.dart';
 
 class PaymentTab extends StatefulWidget {
   final List<dynamic> folkBoys;
   final Map<String, List<dynamic>> allUpdates;
-  final SupabaseClient supabase;
   final Future<void> Function() onRefresh;
 
   const PaymentTab({
     super.key,
     required this.folkBoys,
     required this.allUpdates,
-    required this.supabase,
     required this.onRefresh,
   });
 
@@ -57,8 +55,8 @@ class _PaymentTabState extends State<PaymentTab> {
     final wasImmediatelyPaid = _markAsPaidImmediately;
     setState(() => _isPaymentSaving = true);
     try {
-      await widget.supabase.from('updates').insert({
-        'worker_id': boy['id'].toString(),
+      await ApiService.post('/sadhana', {
+        'worker_id': (boy['id'] ?? boy['_id']).toString(),
         'worker_name': boy['name'],
         'category': 'payment',
         'work_started': '₹$amt',
@@ -66,7 +64,6 @@ class _PaymentTabState extends State<PaymentTab> {
         'is_completed': wasImmediatelyPaid,
         'work_completed': wasImmediatelyPaid ? 'PAID' : 'PENDING',
         'date': DateFormat('yyyy-MM-dd').format(DateTime.now()),
-        'created_at': DateTime.now().toIso8601String(),
       });
       _paymentAmountController.clear();
       _paymentPurposeController.clear();
@@ -95,10 +92,11 @@ class _PaymentTabState extends State<PaymentTab> {
   Future<void> _approvePayment(dynamic payment) async {
     setState(() => _isPaymentSaving = true);
     try {
-      await widget.supabase.from('updates').update({
+      final paymentId = payment['id'] ?? payment['_id'];
+      await ApiService.patch('/payments/$paymentId', {
         'is_completed': true,
         'work_completed': 'PAID',
-      }).eq('id', payment['id']);
+      });
 
       final studentId = payment['worker_id'];
       if (studentId != null) {

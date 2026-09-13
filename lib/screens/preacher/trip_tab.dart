@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../services/api_service.dart';
 import '../../services/cloudinary_service.dart';
 
 class TripTab extends StatefulWidget {
@@ -10,7 +10,6 @@ class TripTab extends StatefulWidget {
   final List<dynamic> tripBookings;
   final List<dynamic> folkBoys;
   final Map<String, dynamic>? preacherProfile;
-  final SupabaseClient supabase;
   final Future<void> Function() onRefresh;
 
   const TripTab({
@@ -19,7 +18,6 @@ class TripTab extends StatefulWidget {
     required this.tripBookings,
     required this.folkBoys,
     required this.preacherProfile,
-    required this.supabase,
     required this.onRefresh,
   });
 
@@ -97,9 +95,9 @@ class _TripTabState extends State<TripTab> {
     final formattedContent = '[TRIP] $dest | $dateRange | ${_tripPosterUrl ?? ''} | $link';
 
     try {
-      await widget.supabase.from('announcements').insert({
+      await ApiService.post('/announcements', {
         'content': formattedContent,
-        'preacher_id': widget.preacherProfile!['id'],
+        'preacher_id': widget.preacherProfile?['id'] ?? widget.preacherProfile?['_id'],
       });
       _tripDestinationController.clear();
       _tripBookingLinkController.clear();
@@ -132,7 +130,7 @@ class _TripTabState extends State<TripTab> {
 
   Future<void> _deleteAnnouncement(String id) async {
     try {
-      await widget.supabase.from('announcements').delete().eq('id', id);
+      await ApiService.delete('/announcements/$id');
       await widget.onRefresh();
     } catch (e) {
       debugPrint('Error deleting announcement: $e');

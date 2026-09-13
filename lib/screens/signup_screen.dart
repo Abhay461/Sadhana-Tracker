@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
-import '../utils/security_utils.dart';
+import '../services/api_service.dart';
+import '../utils/notification_helper.dart';
+import '../widgets/auth_components.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -36,12 +38,14 @@ class _SignupScreenState extends State<SignupScreen> {
   DateTime? _selectedDob;
   DateTime? _selectedJoiningDate;
 
-
   @override
   void initState() {
     super.initState();
     _fetchPreachers();
   }
+
+  final _otpController = TextEditingController();
+  String? _verificationId;
 
   @override
   void dispose() {
@@ -52,30 +56,21 @@ class _SignupScreenState extends State<SignupScreen> {
     _whatsappController.dispose();
     _dobController.dispose();
     _joiningDateController.dispose();
+    _otpController.dispose();
     super.dispose();
   }
 
   Future<void> _fetchPreachers() async {
     try {
-      final List<dynamic> data = await Supabase.instance.client
-          .from('profiles')
-          .select('id, name, photo_url')
-          .eq('role', 'preacher')
-          .order('name');
-
+      final data = await ApiService.get('/users/preachers');
       if (!mounted) return;
       setState(() {
-        _preachers = data;
+        _preachers = data is List ? data : [];
       });
     } catch (err) {
       debugPrint('Error fetching preachers: $err');
     }
   }
-
-
-
-
-
 
   Future<void> _handleSignup() async {
     setState(() {
@@ -84,69 +79,299 @@ class _SignupScreenState extends State<SignupScreen> {
       _successMessage = null;
     });
 
-    try {
-      final String rawWhatsapp = _whatsappController.text.trim();
-      final String dobStr = _selectedDob != null ? DateFormat('yyyy-MM-dd').format(_selectedDob!) : 'N/A';
-      final String joinStr = _selectedJoiningDate != null ? DateFormat('yyyy-MM-dd').format(_selectedJoiningDate!) : 'N/A';
-      final String formattedWhatsappWithDates = '$rawWhatsapp | DOB:$dobStr | JOIN:$joinStr';
+    final String email = _emailController.text.trim();
 
-      // 1. Sign up the user in Supabase Auth
-      final AuthResponse response = await Supabase.instance.client.auth.signUp(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-        data: {
-          'name': _nameController.text.trim(),
-          'role': 'pending_$_role',
-          'preacher_id': _selectedPreacher?['id'],
-          'whatsapp_number': formattedWhatsappWithDates,
-        },
+    try {
+      final res = await ApiService.post('/auth/send-email-otp', {'email': email})
+          .timeout(const Duration(seconds: 45));
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
+      _showOtpDialog(email);
+    } catch (e) {
+      if (!mounted) return;
+      final String rawErr = e is ApiException ? e.message : e.toString().replaceAll('Exception: ', '');
+      setState(() {
+        _isLoading = false;
+        if (rawErr.contains('already linked') || rawErr.contains('ACCOUNT_CONFLICT') || rawErr.contains('email-already-in-use')) {
+          _errorMessage = 'An account with this email already exists! Please tap Sign In below.';
+        } else {
+          _errorMessage = rawErr;
+        }
+      });
+    }
+  }
+
+
+  void _showOtpDialog(String email) {
+    _otpController.clear();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            bool isVerifying = false;
+            String? modalError;
+
+            return Dialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 320),
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'Verify Email OTP',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF0F172A),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Enter the 6-digit verification code sent to:\n$email',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 13,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+
+                      // Error Banner
+                      if (modalError != null) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFFCA5A5)),
+                          ),
+                          child: Text(
+                            modalError!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 12,
+                              color: Color(0xFF991B1B),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
+                      // OTP Input Field
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            '6-Digit OTP',
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF1E293B),
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          TextFormField(
+                            controller: _otpController,
+                            keyboardType: TextInputType.number,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 18,
+                              letterSpacing: 4,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF0F172A),
+                            ),
+                            decoration: InputDecoration(
+                              hintText: '000000',
+                              hintStyle: const TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 16,
+                                letterSpacing: 4,
+                                color: Color(0xFFCBD5E1),
+                              ),
+                              filled: true,
+                              fillColor: const Color(0xFFF8FAFC),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: const BorderSide(color: Color(0xFF0F172A), width: 1.5),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+
+                      // Verify Button
+                      SizedBox(
+                        height: 44,
+                        child: ElevatedButton(
+                          onPressed: isVerifying
+                              ? null
+                              : () async {
+                                  final otpCode = _otpController.text.trim();
+                                  if (otpCode.length != 6) {
+                                    setModalState(() {
+                                      modalError = 'Please enter 6-digit OTP code';
+                                    });
+                                    return;
+                                  }
+                                  setModalState(() {
+                                    isVerifying = true;
+                                    modalError = null;
+                                  });
+                                  try {
+                                    await ApiService.post('/auth/verify-email-otp', {
+                                      'email': email,
+                                      'otp': otpCode,
+                                    });
+                                    Navigator.pop(context);
+                                    await _completeRegistration();
+                                  } catch (err) {
+                                    setModalState(() {
+                                      isVerifying = false;
+                                      modalError = err is ApiException
+                                          ? err.message
+                                          : err.toString().replaceAll('Exception: ', '');
+                                    });
+                                  }
+                                },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0F172A),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: isVerifying
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2.5,
+                                  ),
+                                )
+                              : const Text(
+                                  'Verify & Register',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Cancel Button
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 13,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _completeRegistration() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final email = _emailController.text.trim();
+      final password = _passwordController.text.trim();
+
+      final userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
       );
 
-      final user = response.user;
+      final user = userCredential.user;
+
       if (user != null) {
-        // 2. Ensure profile exists in profiles table
-        try {
-          await Supabase.instance.client.from('profiles').insert({
-            'id': user.id,
-            'name': _nameController.text.trim(),
-            'role': 'pending_$_role',
-            'preacher_id': _selectedPreacher?['id'],
-            'whatsapp_number': formattedWhatsappWithDates,
-            'email': _emailController.text.trim(),
-          });
-        } on PostgrestException catch (error) {
-          if (error.code != '23505' && error.code != '42501') rethrow;
+        final String rawWhatsapp = _whatsappController.text.trim();
+        final String dobStr = _selectedDob != null ? DateFormat('yyyy-MM-dd').format(_selectedDob!) : 'N/A';
+        final String joinStr = _selectedJoiningDate != null ? DateFormat('yyyy-MM-dd').format(_selectedJoiningDate!) : 'N/A';
+        final String formattedWhatsappWithDates = '$rawWhatsapp | DOB:$dobStr | JOIN:$joinStr';
+
+        await ApiService.post('/auth/sync', {
+          'name': _nameController.text.trim(),
+          'role': _role,
+          'preacherId': _selectedPreacher?['id'] ?? _selectedPreacher?['_id'],
+          'phoneNumber': formattedWhatsappWithDates,
+          'email': email,
+        });
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _successMessage = 'Email verified & registration successful!';
+      });
+
+      Future.delayed(const Duration(seconds: 1), () {
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/home');
         }
-
-        if (!mounted) return;
-        setState(() {
-          _successMessage =
-              'Registration successful! Your account is pending preacher approval. Please verify your email if required and wait for your preacher to approve your account before logging in.';
-        });
-
-        // Redirect after 5 seconds
-        Future.delayed(const Duration(seconds: 5), () {
-          if (mounted) {
-            Navigator.pushReplacementNamed(context, '/login');
-          }
-        });
-      }
-    } on AuthException catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _errorMessage = SecurityUtils.sanitizeErrorMessage(error.message);
       });
-    } catch (err) {
+    } catch (e) {
       if (!mounted) return;
+      final String rawErr = e is ApiException ? e.message : e.toString().replaceAll('Exception: ', '');
       setState(() {
-        _errorMessage = SecurityUtils.sanitizeErrorMessage(err);
+        _isLoading = false;
+        if (rawErr.contains('already linked') || rawErr.contains('ACCOUNT_CONFLICT') || rawErr.contains('email-already-in-use')) {
+          _errorMessage = 'An account with this email already exists! Please tap Sign In below.';
+        } else {
+          _errorMessage = rawErr;
+        }
       });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
     }
   }
 
@@ -164,52 +389,68 @@ class _SignupScreenState extends State<SignupScreen> {
             }).toList();
 
             return Container(
-              height: MediaQuery.of(context).size.height * 0.7,
+              height: MediaQuery.of(context).size.height * 0.70,
               decoration: const BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(24),
-                  topRight: Radius.circular(24),
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
                 ),
               ),
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
               child: Column(
                 children: [
-                  Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(2),
+                  // Drag handle
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE2E8F0),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text(
-                        'Select Preacher',
+                        'Select Assigned Preacher',
                         style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+                          fontFamily: 'Poppins',
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF0F172A),
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.close),
+                        icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B), size: 20),
                         onPressed: () => Navigator.pop(context),
                       )
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 10),
                   TextField(
+                    style: const TextStyle(fontFamily: 'Inter', fontSize: 14, color: Color(0xFF0F172A)),
                     decoration: InputDecoration(
-                      hintText: 'Search by name...',
-                      prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                      hintText: 'Search preacher by name...',
+                      hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
+                      prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF94A3B8), size: 20),
                       filled: true,
-                      fillColor: const Color(0xFFF1F5F9),
+                      fillColor: const Color(0xFFF8FAFC),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xFF0F172A), width: 1.5),
                       ),
                     ),
                     onChanged: (value) {
@@ -218,60 +459,56 @@ class _SignupScreenState extends State<SignupScreen> {
                       });
                     },
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                   Expanded(
                     child: filteredPreachers.isNotEmpty
-                        ? ListView.builder(
+                        ? ListView.separated(
                             itemCount: filteredPreachers.length,
+                            separatorBuilder: (context, index) => const Divider(color: Color(0xFFF1F5F9), height: 1),
                             itemBuilder: (context, index) {
                               final p = filteredPreachers[index];
-                              final isSelected =
-                                  _selectedPreacher?['id'] == p['id'];
-                              return ListTile(
-                                leading: CircleAvatar(
-                                  backgroundImage: p['photo_url'] != null
-                                      ? NetworkImage(p['photo_url'])
-                                      : null,
-                                  backgroundColor: const Color(0xFFEEF2F6),
-                                  child: p['photo_url'] == null
-                                      ? Text(
-                                          (p['name'] ?? 'P')[0].toUpperCase(),
-                                          style: const TextStyle(
-                                            color: Color(0xFF6366F1),
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        )
-                                      : null,
-                                ),
-                                title: Text(
-                                  p['name'] ?? '',
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold),
-                                ),
-                                trailing: isSelected
-                                    ? const Icon(Icons.check_circle,
-                                        color: Color(0xFF6366F1))
-                                    : null,
-                                selected: isSelected,
-                                selectedColor: const Color(0xFF6366F1),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
+                              final isSelected = _selectedPreacher?['id'] == p['id'] || _selectedPreacher?['_id'] == p['_id'];
+                              return InkWell(
                                 onTap: () {
                                   setState(() {
                                     _selectedPreacher = p;
                                   });
                                   Navigator.pop(context);
                                 },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 14),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          p['name'] ?? '',
+                                          style: TextStyle(
+                                            fontFamily: 'Inter',
+                                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                                            fontSize: 15,
+                                            color: isSelected ? const Color(0xFF0F172A) : const Color(0xFF334155),
+                                          ),
+                                        ),
+                                      ),
+                                      if (isSelected)
+                                        const Icon(
+                                          Icons.check_rounded,
+                                          color: Color(0xFF0F172A),
+                                          size: 18,
+                                        ),
+                                    ],
+                                  ),
+                                ),
                               );
                             },
                           )
                         : const Center(
                             child: Text(
-                              'No mentors found',
+                              'No preachers found',
                               style: TextStyle(
-                                color: Colors.grey,
-                                fontWeight: FontWeight.bold,
+                                fontFamily: 'Inter',
+                                color: Color(0xFF64748B),
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                           ),
@@ -285,210 +522,197 @@ class _SignupScreenState extends State<SignupScreen> {
     );
   }
 
-  Widget _buildSinglePageForm() {
+  Widget _buildSimpleTextField({
+    required TextEditingController controller,
+    required String label,
+    required String hintText,
+    TextInputType keyboardType = TextInputType.text,
+    bool obscureText = false,
+    String? Function(String?)? validator,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Full Name Field
+        Text(
+          label,
+          style: const TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF1E293B),
+          ),
+        ),
+        const SizedBox(height: 5),
         TextFormField(
+          controller: controller,
+          keyboardType: keyboardType,
+          obscureText: obscureText,
+          style: const TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 14,
+            color: Color(0xFF0F172A),
+          ),
+          decoration: InputDecoration(
+            hintText: hintText,
+            hintStyle: const TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 13,
+              color: Color(0xFF94A3B8),
+            ),
+            filled: true,
+            fillColor: const Color(0xFFF8FAFC),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFF0F172A), width: 1.5),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFFEF4444)),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.5),
+            ),
+          ),
+          validator: validator,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSinglePageForm() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // 1. Full Name Field
+        _buildSimpleTextField(
           controller: _nameController,
+          label: 'Full Name',
+          hintText: 'Enter your full name',
           keyboardType: TextInputType.name,
-          textInputAction: TextInputAction.next,
-          decoration: InputDecoration(
-            labelText: 'Full Name',
-            prefixIcon: const Icon(
-              Icons.person_outline,
-              color: Color(0xFF6366F1),
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
           validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'Please enter your name';
+            if (value == null || value.trim().isEmpty) {
+              return 'Please enter your full name';
             }
             return null;
           },
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
 
-        // Email Field
-        TextFormField(
+        // 2. Email Address Field
+        _buildSimpleTextField(
           controller: _emailController,
+          label: 'Email Address',
+          hintText: 'Enter your email address',
           keyboardType: TextInputType.emailAddress,
-          textInputAction: TextInputAction.next,
-          decoration: InputDecoration(
-            labelText: 'Email',
-            prefixIcon: const Icon(
-              Icons.mail_outline,
-              color: Color(0xFF10B981),
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
           validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'Please enter your email';
+            if (value == null || value.trim().isEmpty) {
+              return 'Please enter your email address';
             }
-            if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
-              return 'Please enter a valid email';
+            if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value.trim())) {
+              return 'Please enter a valid email address';
             }
             return null;
           },
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
 
-        // Date of Birth Field
-        TextFormField(
-          controller: _dobController,
-          readOnly: true,
-          decoration: InputDecoration(
-            labelText: 'Date of Birth',
-            prefixIcon: const Icon(
-              Icons.cake_outlined,
-              color: Colors.pink,
-            ),
-            suffixIcon: const Icon(Icons.calendar_today, color: Colors.grey, size: 18),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'Please select your Date of Birth';
-            }
-            return null;
-          },
-          onTap: () async {
-            final date = await showDatePicker(
-              context: context,
-              initialDate: _selectedDob ?? DateTime(2000, 1, 1),
-              firstDate: DateTime(1950),
-              lastDate: DateTime.now(),
-            );
-            if (date != null) {
-              setState(() {
-                _selectedDob = date;
-                _dobController.text = DateFormat('dd MMMM yyyy').format(date);
-              });
-            }
-          },
-        ),
-        const SizedBox(height: 16),
-
-        // Folk Joining Date Field
-        TextFormField(
-          controller: _joiningDateController,
-          readOnly: true,
-          decoration: InputDecoration(
-            labelText: 'Folk Joining Date',
-            prefixIcon: const Icon(
-              Icons.flag_outlined,
-              color: Colors.blue,
-            ),
-            suffixIcon: const Icon(Icons.calendar_today, color: Colors.grey, size: 18),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'Please select your Folk Joining Date';
-            }
-            return null;
-          },
-          onTap: () async {
-            final date = await showDatePicker(
-              context: context,
-              initialDate: _selectedJoiningDate ?? DateTime.now(),
-              firstDate: DateTime(2000),
-              lastDate: DateTime.now().add(const Duration(days: 30)),
-            );
-            if (date != null) {
-              setState(() {
-                _selectedJoiningDate = date;
-                _joiningDateController.text = DateFormat('dd MMMM yyyy').format(date);
-              });
-            }
-          },
-        ),
-        const SizedBox(height: 16),
-
-        // Password Field
-        TextFormField(
-          controller: _passwordController,
-          obscureText: _obscurePassword,
-          textInputAction: TextInputAction.next,
-          decoration: InputDecoration(
-            labelText: 'Password',
-            prefixIcon: const Icon(
-              Icons.lock_outline,
-              color: Color(0xFFF43F5E),
-            ),
-            suffixIcon: IconButton(
-              icon: Icon(
-                _obscurePassword
-                    ? Icons.visibility_outlined
-                    : Icons.visibility_off_outlined,
-                color: const Color(0xFF64748B),
+        // 3. Assigned Preacher Field
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Assigned Preacher',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF1E293B),
               ),
-              onPressed: () {
-                setState(() {
-                  _obscurePassword = !_obscurePassword;
-                });
-              },
             ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+            const SizedBox(height: 5),
+            InkWell(
+              onTap: _showPreacherPicker,
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: _selectedPreacher != null ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0),
+                    width: _selectedPreacher != null ? 1.5 : 1.0,
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _selectedPreacher != null
+                            ? (_selectedPreacher!['name'] ?? 'Selected Preacher')
+                            : 'Select assigned preacher',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 14,
+                          color: _selectedPreacher != null ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
+                          fontWeight: _selectedPreacher != null ? FontWeight.w600 : FontWeight.w400,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: Color(0xFF64748B),
+                      size: 20,
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        // 4. Password Field
+        _buildSimpleTextField(
+          controller: _passwordController,
+          label: 'Password',
+          hintText: 'Enter your password',
+          obscureText: true,
           validator: (value) {
-            if (value == null || value.isEmpty) {
+            if (value == null || value.trim().isEmpty) {
               return 'Please enter your password';
             }
-            if (value.length < 6) {
+            if (value.trim().length < 6) {
               return 'Password must be at least 6 characters';
             }
             return null;
           },
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
 
-        // Confirm Password Field
-        TextFormField(
+        // 5. Confirm Password Field
+        _buildSimpleTextField(
           controller: _confirmPasswordController,
-          obscureText: _obscureConfirmPassword,
-          textInputAction: TextInputAction.next,
-          decoration: InputDecoration(
-            labelText: 'Confirm Password',
-            prefixIcon: const Icon(
-              Icons.lock_outline,
-              color: Color(0xFFF43F5E),
-            ),
-            suffixIcon: IconButton(
-              icon: Icon(
-                _obscureConfirmPassword
-                    ? Icons.visibility_outlined
-                    : Icons.visibility_off_outlined,
-                color: const Color(0xFF64748B),
-              ),
-              onPressed: () {
-                setState(() {
-                  _obscureConfirmPassword = !_obscureConfirmPassword;
-                });
-              },
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
+          label: 'Confirm Password',
+          hintText: 'Re-enter your password',
+          obscureText: true,
           validator: (value) {
-            if (value == null || value.isEmpty) {
+            if (value == null || value.trim().isEmpty) {
               return 'Please confirm your password';
             }
-            if (value != _passwordController.text) {
+            if (value.trim() != _passwordController.text.trim()) {
               return 'Passwords do not match';
             }
             return null;
@@ -496,244 +720,92 @@ class _SignupScreenState extends State<SignupScreen> {
         ),
         const SizedBox(height: 16),
 
-        // WhatsApp Field
-        TextFormField(
-          controller: _whatsappController,
-          keyboardType: TextInputType.phone,
-          textInputAction: TextInputAction.done,
-          decoration: InputDecoration(
-            labelText: 'WhatsApp Number',
-            prefixIcon: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(width: 12),
-                Container(
-                  width: 24,
-                  height: 24,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF25D366),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Center(
-                    child: Icon(
-                      Icons.phone,
-                      size: 14,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-              ],
-            ),
-            hintText: '10 digit number',
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'Please enter WhatsApp number';
-            }
-            if (!RegExp(r'^[0-9]{10}$').hasMatch(value)) {
-              return 'Enter a valid 10-digit number';
-            }
-            return null;
-          },
-        ),
-        const SizedBox(height: 16),
-
-        // Role Selector (Folk Boy / Residency)
-        const Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            'I am registering as',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF64748B),
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _role == 'folk_boy'
-                      ? const Color(0xFF6366F1)
-                      : Colors.white,
-                  foregroundColor: _role == 'folk_boy'
-                      ? Colors.white
-                      : const Color(0xFF475569),
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(
-                      color: _role == 'folk_boy'
-                          ? Colors.transparent
-                          : const Color(0xFFE2E8F0),
-                    ),
-                  ),
-                ),
-                onPressed: () {
-                  setState(() {
-                    _role = 'folk_boy';
-                  });
-                },
-                child: const Text('Folk Boy'),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _role == 'residency'
-                      ? const Color(0xFF6366F1)
-                      : Colors.white,
-                  foregroundColor: _role == 'residency'
-                      ? Colors.white
-                      : const Color(0xFF475569),
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(
-                      color: _role == 'residency'
-                          ? Colors.transparent
-                          : const Color(0xFFE2E8F0),
-                    ),
-                  ),
-                ),
-                onPressed: () {
-                  setState(() {
-                    _role = 'residency';
-                  });
-                },
-                child: const Text('Residency'),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-
-        // Preacher Selector Trigger
-        const Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            'Select Your Preacher',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF64748B),
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        InkWell(
-          onTap: _showPreacherPicker,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 12,
-            ),
+        // Error Banner
+        if (_errorMessage != null) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              border: Border.all(color: const Color(0xFFCBD5E1)),
-              borderRadius: BorderRadius.circular(12),
+              color: const Color(0xFFFEF2F2),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFFCA5A5)),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _selectedPreacher != null
-                    ? Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 12,
-                            backgroundImage: _selectedPreacher!['photo_url'] != null
-                                ? NetworkImage(_selectedPreacher!['photo_url'])
-                                : null,
-                            child: _selectedPreacher!['photo_url'] == null
-                                ? Text(
-                                    _selectedPreacher!['name'][0].toUpperCase(),
-                                    style: const TextStyle(fontSize: 10),
-                                  )
-                                : null,
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            _selectedPreacher!['name'] ?? '',
-                            style: const TextStyle(
-                              color: Color(0xFF6366F1),
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      )
-                    : const Text(
-                        'Click to choose preacher...',
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                const Icon(Icons.search, color: Colors.grey),
-              ],
+            child: Text(
+              _errorMessage!,
+              style: const TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 13,
+                color: Color(0xFF991B1B),
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 16),
+          const SizedBox(height: 14),
+        ],
 
-        // Register Button
-        SizedBox(
-          width: double.infinity,
-          height: 50,
-          child: ElevatedButton(
-            onPressed: _isLoading ? null : () {
-              if (!_formKey.currentState!.validate()) return;
-              if (_selectedPreacher == null) {
-                setState(() {
-                  _errorMessage = 'Please select your preacher';
-                });
-                return;
-              }
-              if (_selectedDob == null) {
-                setState(() {
-                  _errorMessage = 'Please select your Date of Birth';
-                });
-                return;
-              }
-              setState(() {
-                _errorMessage = null;
-              });
-              _handleSignup();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF6366F1),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+        // Success Banner
+        if (_successMessage != null) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0FDF4),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFF86EFAC)),
+            ),
+            child: Text(
+              _successMessage!,
+              style: const TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 13,
+                color: Color(0xFF166534),
               ),
-              elevation: 2,
+            ),
+          ),
+          const SizedBox(height: 14),
+        ],
+
+        // Primary Button: "Create Account" (Dark Slate)
+        SizedBox(
+          height: 44,
+          child: ElevatedButton(
+            onPressed: _isLoading
+                ? null
+                : () {
+                    if (!_formKey.currentState!.validate()) return;
+                    if (_selectedPreacher == null) {
+                      setState(() {
+                        _errorMessage = 'Please select your assigned preacher';
+                      });
+                      return;
+                    }
+                    setState(() {
+                      _errorMessage = null;
+                    });
+                    _handleSignup();
+                  },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0F172A),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             child: _isLoading
                 ? const SizedBox(
-                    height: 20,
                     width: 20,
+                    height: 20,
                     child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      color: Colors.white,
+                      strokeWidth: 2.5,
                     ),
                   )
-                : const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        'Register',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      SizedBox(width: 8),
-                      Icon(Icons.person_add_outlined, size: 18),
-                    ],
+                : const Text(
+                    'Create Account',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
                   ),
           ),
         ),
@@ -744,177 +816,92 @@ class _SignupScreenState extends State<SignupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFFF1F5F9),
-              Color(0xFFE2E8F0),
-            ],
-          ),
-        ),
+      backgroundColor: Colors.white,
+      body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40.0),
-            child: Card(
-              elevation: 8,
-              shadowColor: Colors.black12,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24.0,
-                  vertical: 36.0,
-                ),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Logo Image
-                      Container(
-                        height: 90,
-                        width: 90,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Colors.black12,
-                              blurRadius: 20,
-                              offset: Offset(0, 8),
-                            )
-                          ],
+            padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 24.0),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 320),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Top Logo & Header
+                    Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(14),
+                        child: Image.asset(
+                          'assets/logo.jpg',
+                          fit: BoxFit.cover,
                         ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(20),
-                          child: Image.asset(
-                            'assets/logo.jpg',
-                            fit: BoxFit.cover,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Create Account',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF0F172A),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Enter your details to create an account',
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 14,
+                        color: Color(0xFF64748B),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 28),
+
+                    // Form with 3 Fields, Primary Button & Google Sign-In
+                    _buildSinglePageForm(),
+
+                    const SizedBox(height: 24),
+
+                    // Footer Link
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text(
+                          "Already have an account? ",
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 14,
+                            color: Color(0xFF64748B),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 20),
-
-                      const Text(
-                        'Create Account',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1E293B),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Create your account to get started',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Color(0xFF64748B),
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Error message banner
-                      if (_errorMessage != null) ...[
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFEE2E2),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: const Color(0xFFFECACA),
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.pushReplacementNamed(context, '/login');
+                          },
+                          child: const Text(
+                            'Sign In',
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF0F172A),
                             ),
                           ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.error_outline,
-                                color: Color(0xFFEF4444),
-                                size: 20,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  _errorMessage!,
-                                  style: const TextStyle(
-                                    color: Color(0xFF991B1B),
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
                         ),
-                        const SizedBox(height: 16),
                       ],
-
-                      // Success message banner
-                      if (_successMessage != null) ...[
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFD1FAE5),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: const Color(0xFFA7F3D0),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.check_circle_outline,
-                                color: Color(0xFF10B981),
-                                size: 20,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  _successMessage!,
-                                  style: const TextStyle(
-                                    color: Color(0xFF065F46),
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-
-                      // RENDER FORM DIRECTLY
-                      _buildSinglePageForm(),
-
-                      const SizedBox(height: 24),
-
-                      // Footer
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Text(
-                            "Already have an account? ",
-                            style: TextStyle(color: Color(0xFF64748B)),
-                          ),
-                          GestureDetector(
-                            onTap: () {
-                              Navigator.pushReplacementNamed(context, '/login');
-                            },
-                            child: const Text(
-                              'Sign In',
-                              style: TextStyle(
-                                color: Color(0xFF6366F1),
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),

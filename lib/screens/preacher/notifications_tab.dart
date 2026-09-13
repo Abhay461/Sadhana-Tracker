@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 
 class NotificationsTab extends StatefulWidget {
   final List<dynamic> folkBoys;
   final Map<String, List<dynamic>> allUpdates;
   final Map<String, dynamic>? preacherProfile;
-  final SupabaseClient supabase;
   final Future<void> Function() onRefresh;
 
   const NotificationsTab({
@@ -14,7 +12,6 @@ class NotificationsTab extends StatefulWidget {
     required this.folkBoys,
     required this.allUpdates,
     required this.preacherProfile,
-    required this.supabase,
     required this.onRefresh,
   });
 

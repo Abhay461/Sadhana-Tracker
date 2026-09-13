@@ -1,10 +1,16 @@
 import 'dart:async';
-import 'dart:io' show Platform;
+import 'dart:convert';
+import 'dart:io' show File, Platform;
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:image_picker/image_picker.dart';
+import '../services/api_service.dart';
+import '../services/cloudinary_service.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
+import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'resident_enrollment_form_screen.dart';
 import 'student_payment_screen.dart';
 import '../utils/notification_helper.dart';
@@ -17,67 +23,233 @@ class FolkBoyDashboard extends StatefulWidget {
 }
 
 class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
-  final supabase = Supabase.instance.client;
   static const _screenTimeChannel = MethodChannel('com.example.mobile_app/screen_time');
   
   Map<String, dynamic>? _profile;
   Map<String, dynamic>? _preacher;
   List<dynamic> _updates = [];
   List<Map<String, dynamic>> _announcements = [];
+  Map<String, dynamic>? _todayDarshan;
+  Map<String, dynamic>? _todayQuote;
   bool _isLoadingProfile = true;
-  bool _isLoadingUpdates = true;
-  bool _isAutoPromoting = false; // Guard against infinite recursion (Bug 4)
+  bool _isAutoPromoting = false;
 
-  // Carousel controller and timer
+  int _selectedIndex = 0;
+  DateTime? _selectedHistoryDate;
+  DateTime? _lastBackPressTime;
+
+  String? _photoUrl;
+  bool _isSavingProfile = false;
+  final ImagePicker _picker = ImagePicker();
+
+  final Map<String, bool> _savingStatus = {};
+
+  final _roundsController = TextEditingController(text: '16');
+  final _bookController = TextEditingController();
+  final _readingValueController = TextEditingController();
+  final String _readingUnit = 'Pages';
+  final _serviceNameController = TextEditingController();
+  final _serviceMinutesController = TextEditingController();
+
+  TimeOfDay _manglaStartTime = const TimeOfDay(hour: 4, minute: 30);
+  final TimeOfDay _onlineStartTime = const TimeOfDay(hour: 8, minute: 0);
+  final TimeOfDay _onlineEndTime = const TimeOfDay(hour: 9, minute: 0);
+  final TimeOfDay _sbStartTime = const TimeOfDay(hour: 8, minute: 0);
+  final TimeOfDay _sbEndTime = const TimeOfDay(hour: 9, minute: 0);
+  final TimeOfDay _bgStartTime = const TimeOfDay(hour: 8, minute: 0);
+  final TimeOfDay _bgEndTime = const TimeOfDay(hour: 9, minute: 0);
+  TimeOfDay _wakeUpTime = const TimeOfDay(hour: 5, minute: 0);
+  TimeOfDay _sleepTime = const TimeOfDay(hour: 22, minute: 0);
+  final DateTime _templeVisitDate = DateTime.now();
+
   final PageController _pageController = PageController();
   int _currentAnnouncementIndex = 0;
   Timer? _carouselTimer;
 
+  static const String _razorpayApiKey = 'rzp_test_Tb22VLcoOG6jA0';
+  static const String _razorpaySecret = 'PX2qUQCiLui8JEdzuzwzTdbK';
+  Razorpay? _razorpay;
+
+  List<Map<String, dynamic>> _dynamicCourses = [];
+  bool _isLoadingCourses = true;
+
+  bool _initializedFromArgs = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_initializedFromArgs) {
+      _initializedFromArgs = true;
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is Map<String, dynamic>) {
+        _loadProfileAndData(initialProfile: args);
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    _ensureFolkLogoAsset();
+    _ensureMalaAsset();
     _loadProfileAndData();
     _fetchAnnouncements();
+    _fetchDailyDarshan();
+    _fetchDailyQuote();
+    _fetchCourses();
+    _initRazorpay();
+  }
+
+  Future<void> _fetchCourses() async {
+    try {
+      final response = await ApiService.get('/courses');
+      if (response != null && response is List && response.isNotEmpty) {
+        if (mounted) {
+          setState(() {
+            _dynamicCourses = List<Map<String, dynamic>>.from(response);
+            _isLoadingCourses = false;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching backend courses: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingCourses = false;
+        });
+      }
+    }
+  }
+
+  void _initRazorpay() {
+    _razorpay = Razorpay();
+    _razorpay?.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
+    _razorpay?.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
+    _razorpay?.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
+  }
+
+  void _handlePaymentSuccess(PaymentSuccessResponse response) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Payment Successful! Payment ID: ${response.paymentId}'),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 5),
+      ),
+    );
+  }
+
+  void _handlePaymentError(PaymentFailureResponse response) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Payment Failed/Cancelled: ${response.message ?? "User cancelled"}'),
+        backgroundColor: Colors.orange,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  void _handleExternalWallet(ExternalWalletResponse response) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('External Wallet: ${response.walletName}'),
+        backgroundColor: Colors.blue,
+      ),
+    );
+  }
+
+  void _ensureFolkLogoAsset() {
+    try {
+      final source = File(r'C:\Users\LENOVO\.gemini\antigravity-ide\brain\a1f70f4f-b3fa-4396-93cf-9341234f786e\media__1788678205664.png');
+      final target = File(r'd:\work update app\mobile_app\assets\folk_logo.png');
+      if (source.existsSync() && (!target.existsSync() || target.lengthSync() != source.lengthSync())) {
+        source.copySync(target.path);
+      }
+    } catch (_) {}
+  }
+
+  void _ensureMalaAsset() {
+    try {
+      final source = File(r'C:\Users\LENOVO\.gemini\antigravity-ide\brain\67ab79e3-d4b0-402f-89e2-f291e8a4076b\media__1789215025049.png');
+      final target = File(r'd:\work update app\mobile_app\assets\mala.png');
+      if (source.existsSync() && (!target.existsSync() || target.lengthSync() != source.lengthSync())) {
+        source.copySync(target.path);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _fetchDailyDarshan() async {
+    try {
+      final response = await ApiService.get('/daily-darshan/today');
+      if (response != null && response is Map<String, dynamic>) {
+        if (mounted) {
+          setState(() {
+            _todayDarshan = response;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching daily darshan: $e');
+    }
+  }
+
+  Future<void> _fetchDailyQuote() async {
+    try {
+      final response = await ApiService.get('/daily-quotes/today');
+      if (response != null && response is Map<String, dynamic>) {
+        if (mounted) {
+          setState(() {
+            _todayQuote = response;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching daily quote: $e');
+    }
   }
 
   @override
   void dispose() {
+    try {
+      _razorpay?.clear();
+    } catch (_) {}
     _carouselTimer?.cancel();
     _pageController.dispose();
+    _roundsController.dispose();
+    _bookController.dispose();
+    _readingValueController.dispose();
+    _serviceNameController.dispose();
+    _serviceMinutesController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadProfileAndData() async {
-    final user = supabase.auth.currentUser;
+  Future<void> _loadProfileAndData({Map<String, dynamic>? initialProfile}) async {
+    final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
     try {
       Map<String, dynamic> profileData;
-      try {
-        profileData = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', user.id)
-            .single();
-      } catch (e) {
-        debugPrint('Profile fetch error: $e');
-        // EMERGENCY BYPASS: Create a dummy profile so the dashboard OPENS even if DB fails
-        final metadata = user.userMetadata ?? {};
-        profileData = {
-          'id': user.id,
-          'name': metadata['name'] ?? user.email?.split('@').first ?? 'Folk Boy',
-          'role': 'folk_boy',
-          'preacher_id': null,
-          'photo_url': null,
-        };
+      if (initialProfile != null) {
+        profileData = Map<String, dynamic>.from(initialProfile);
+      } else {
+        final response = await ApiService.get('/users/me');
+        if (response is! Map) {
+          throw StateError('The profile service returned an invalid response.');
+        }
+        profileData = Map<String, dynamic>.from(response);
       }
 
+      profileData['id'] ??= profileData['_id'];
+      profileData['photo_url'] ??= profileData['photoUrl'];
+      profileData['preacher_id'] ??= profileData['preacherId'];
+
       final role = profileData['role'] as String?;
-      if (role != 'folk_boy' && role != 'admin') {
+      if (role != 'folk_boy' && role != 'residency' && role != 'admin') {
         if (mounted) {
-          if (role == 'residency') {
-            Navigator.pushReplacementNamed(context, '/residency');
-          } else if (role == 'preacher') {
+          if (role == 'preacher') {
             Navigator.pushReplacementNamed(context, '/preacher');
           } else {
             Navigator.pushReplacementNamed(context, '/home');
@@ -86,15 +258,54 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         return;
       }
 
+      Map<String, dynamic>? resolvedPreacher;
+      if (profileData['preacher'] is Map) {
+        resolvedPreacher = Map<String, dynamic>.from(profileData['preacher'] as Map);
+      } else if (profileData['preacher_id'] is Map) {
+        resolvedPreacher = Map<String, dynamic>.from(profileData['preacher_id'] as Map);
+      } else if (profileData['preacherId'] is Map) {
+        resolvedPreacher = Map<String, dynamic>.from(profileData['preacherId'] as Map);
+      } else {
+        final preacherId = (profileData['preacher_id'] ?? profileData['preacherId'] ?? profileData['preacher'])?.toString();
+        final preacherName = (profileData['preacher_name'] ?? profileData['preacherName'])?.toString();
+
+        if (preacherId != null && preacherId.isNotEmpty) {
+          try {
+            final preachersData = await ApiService.get('/users/preachers');
+            if (preachersData is List) {
+              final match = preachersData.firstWhere(
+                (p) => (p['id'] ?? p['_id'])?.toString() == preacherId || p['name'] == preacherName,
+                orElse: () => null,
+              );
+              if (match is Map) {
+                resolvedPreacher = Map<String, dynamic>.from(match);
+              }
+            }
+          } catch (err) {
+            debugPrint('Error resolving preacher from API: $err');
+          }
+        }
+
+        if (resolvedPreacher == null && ((preacherId != null && preacherId.isNotEmpty) || (preacherName != null && preacherName.isNotEmpty))) {
+          resolvedPreacher = {
+            'id': preacherId ?? 'preacher_default',
+            'name': (preacherName != null && preacherName.isNotEmpty) ? preacherName : 'Assigned Preacher',
+          };
+        }
+      }
+
+      if (resolvedPreacher != null) {
+        profileData['preacher_id'] ??= resolvedPreacher['id'] ?? resolvedPreacher['_id'];
+      }
+
       setState(() {
         _profile = profileData;
+        _preacher = resolvedPreacher;
+        _photoUrl = profileData['photo_url'];
         _isLoadingProfile = false;
       });
 
-      if (profileData['preacher_id'] != null) {
-        _fetchPreacherProfile(profileData['preacher_id']);
-      }
-      _fetchUpdates();
+      await _fetchUpdates();
     } catch (e) {
       debugPrint('Error loading profile: $e');
       if (mounted) {
@@ -103,53 +314,225 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     }
   }
 
-  Future<void> _fetchPreacherProfile(String preacherId) async {
-    try {
-      final preacherData = await supabase
-          .from('profiles')
-          .select('name, photo_url')
-          .eq('id', preacherId)
-          .single();
-      if (mounted) {
-        setState(() {
-          _preacher = preacherData;
-        });
+  List<dynamic> _normalizeSadhanaItems(List<dynamic> rawList) {
+    List<dynamic> result = [];
+
+    for (var u in rawList) {
+      if (u is! Map) continue;
+
+      if (u.containsKey('work_started') || (u.containsKey('category') && u['category'] != 'folk_sadhna')) {
+        result.add(u);
+        continue;
       }
-    } catch (e) {
-      debugPrint('Error fetching preacher: $e');
+
+      final String date = (u['dateString'] ?? u['date'] ?? '').toString();
+      if (date.isEmpty) continue;
+
+      final activities = u['activities'];
+      if (activities is Map) {
+        if (activities.containsKey('wakeUpTime') && activities['wakeUpTime'] != null) {
+          final val = activities['wakeUpTime'].toString();
+          result.add({
+            'id': u['_id'] ?? u['id'],
+            'date': date,
+            'category': 'folk_sadhna',
+            'work_started': 'Morning (Wake-up: $val)',
+            'work_completed': val,
+            'is_completed': true,
+            'points': 5,
+          });
+        }
+
+        if (activities.containsKey('sleepTime') && activities['sleepTime'] != null) {
+          final val = activities['sleepTime'].toString();
+          result.add({
+            'id': u['_id'] ?? u['id'],
+            'date': date,
+            'category': 'folk_sadhna',
+            'work_started': 'Sleep (Time: $val)',
+            'work_completed': val,
+            'is_completed': true,
+            'points': 5,
+          });
+        }
+
+        if (activities.containsKey('manglaArti') && activities['manglaArti'] is Map) {
+          final m = activities['manglaArti'] as Map;
+          if (m['attended'] == true) {
+            final time = m['time'] ?? '04:30 AM';
+            result.add({
+              'id': u['_id'] ?? u['id'],
+              'date': date,
+              'category': 'folk_sadhna',
+              'work_started': 'Mangla Arti ($time)',
+              'work_completed': time,
+              'is_completed': true,
+              'points': 10,
+            });
+          }
+        }
+
+        if (activities.containsKey('chanting') && activities['chanting'] is Map) {
+          final c = activities['chanting'] as Map;
+          final rounds = c['rounds'] ?? 16;
+          result.add({
+            'id': u['_id'] ?? u['id'],
+            'date': date,
+            'category': 'folk_sadhna',
+            'work_started': 'Chanting - $rounds rounds',
+            'work_completed': '$rounds rounds',
+            'is_completed': true,
+            'points': 10,
+          });
+        }
+
+        if (activities.containsKey('onlineSession') && activities['onlineSession'] is Map) {
+          final o = activities['onlineSession'] as Map;
+          if (o['attended'] == true) {
+            final timeSpan = o['timeSpan'] ?? 'Attended';
+            result.add({
+              'id': u['_id'] ?? u['id'],
+              'date': date,
+              'category': 'folk_sadhna',
+              'work_started': 'Online Session ($timeSpan)',
+              'work_completed': timeSpan,
+              'is_completed': true,
+              'points': 5,
+            });
+          }
+        }
+
+        if (activities.containsKey('bookReading') && activities['bookReading'] is Map) {
+          final b = activities['bookReading'] as Map;
+          final book = b['bookName'] ?? 'Bhagavad Gita';
+          final pages = b['pagesOrMinutes'] ?? '30 mins';
+          result.add({
+            'id': u['_id'] ?? u['id'],
+            'date': date,
+            'category': 'folk_sadhna',
+            'work_started': 'Book Reading - $book',
+            'work_completed': pages,
+            'is_completed': true,
+            'points': 5,
+          });
+        }
+
+        if (activities.containsKey('service') && activities['service'] is Map) {
+          final s = activities['service'] as Map;
+          final name = s['serviceName'] ?? 'Service';
+          result.add({
+            'id': u['_id'] ?? u['id'],
+            'date': date,
+            'category': 'folk_sadhna',
+            'work_started': 'Service - $name',
+            'work_completed': '${s['durationMinutes'] ?? 30} mins',
+            'is_completed': true,
+            'points': 5,
+          });
+        }
+
+        if (activities.containsKey('templeVisit') && activities['templeVisit'] is Map) {
+          final t = activities['templeVisit'] as Map;
+          if (t['visited'] == true) {
+            result.add({
+              'id': u['_id'] ?? u['id'],
+              'date': date,
+              'category': 'folk_sadhna',
+              'work_started': 'Temple Visit',
+              'work_completed': 'Visited',
+              'is_completed': true,
+              'points': 5,
+            });
+          }
+        }
+
+        if (activities.containsKey('srimadBhagavatamClass') && activities['srimadBhagavatamClass'] is Map) {
+          final sb = activities['srimadBhagavatamClass'] as Map;
+          if (sb['attended'] == true) {
+            result.add({
+              'id': u['_id'] ?? u['id'],
+              'date': date,
+              'category': 'folk_sadhna',
+              'work_started': 'Srimad Bhagavatam Class',
+              'work_completed': 'Attended',
+              'is_completed': true,
+              'points': 5,
+            });
+          }
+        }
+
+        if (activities.containsKey('bhagavadGitaClass') && activities['bhagavadGitaClass'] is Map) {
+          final bg = activities['bhagavadGitaClass'] as Map;
+          if (bg['attended'] == true) {
+            result.add({
+              'id': u['_id'] ?? u['id'],
+              'date': date,
+              'category': 'folk_sadhna',
+              'work_started': 'Bhagavad Gita Class',
+              'work_completed': 'Attended',
+              'is_completed': true,
+              'points': 5,
+            });
+          }
+        }
+
+        if (activities.containsKey('ekadashiFasting') && activities['ekadashiFasting'] is Map) {
+          final e = activities['ekadashiFasting'] as Map;
+          final type = e['fastingType'] ?? 'Fasting';
+          if (type != 'No Fasting') {
+            result.add({
+              'id': u['_id'] ?? u['id'],
+              'date': date,
+              'category': 'folk_sadhna',
+              'work_started': 'Ekadashi Fasting ($type)',
+              'work_completed': type,
+              'is_completed': true,
+              'points': 10,
+            });
+          }
+        }
+      }
     }
+
+    return result;
   }
 
   Future<void> _fetchUpdates() async {
     if (_profile == null) return;
     try {
-      setState(() => _isLoadingUpdates = true);
-      final data = await supabase
-          .from('updates')
-          .select('*')
-          .eq('worker_id', _profile!['id'])
-          .order('created_at', ascending: false)
-          .limit(70);
+      List<dynamic> data = [];
+      dynamic res;
+      try {
+        res = await ApiService.get('/sadhana/history');
+        if (res is Map && res.containsKey('items')) {
+          data = res['items'] as List;
+        } else if (res is List) {
+          data = res;
+        }
+      } catch (_) {
+        try {
+          res = await ApiService.get('/sadhana/updates');
+          if (res is List) data = res;
+        } catch (_) {}
+      }
 
-      // Exclude RLS signal rows from Folk Boy / Resident activity list
-      final cleanUpdates = data.where((u) => 
+      final normalizedData = _normalizeSadhanaItems(data);
+      final cleanUpdates = normalizedData.where((u) => 
         u['category'] != 'accommodation_approval_signal' && 
         u['category'] != 'accommodation_delete_signal'
       ).toList();
 
       setState(() {
         _updates = cleanUpdates;
-        _isLoadingUpdates = false;
       });
 
-      // Auto-promote to residency if residency admission request has been approved
       final approvedResidency = cleanUpdates.any((u) =>
         u['category'] == 'residency_admission' && u['is_completed'] == true
       );
       if (approvedResidency && _profile != null && _profile!['role'] == 'folk_boy' && !_isAutoPromoting) {
         try {
-          _isAutoPromoting = true; // Prevent infinite recursion
-          await supabase.from('profiles').update({'role': 'residency'}).eq('id', _profile!['id']);
+          _isAutoPromoting = true;
+          await ApiService.patch('/users/me', {'role': 'residency'});
           await _loadProfileAndData();
           return;
         } catch (e) {
@@ -159,174 +542,56 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         }
       }
 
-      // Process signals silently in the background
-      _processClientSignals(data);
-
-      _autoSyncScreenTime(); // Automatically and silently sync screen time in background!
+      _autoSyncScreenTime();
     } catch (e) {
       debugPrint('Error fetching updates: $e');
-      setState(() => _isLoadingUpdates = false);
-    }
-  }
-
-  Future<void> _processClientSignals(List<dynamic> rawUpdates) async {
-    bool didChange = false;
-    for (var u in rawUpdates) {
-      final category = u['category'];
-      final signalId = u['id'];
-      
-      if (category == 'accommodation_approval_signal') {
-        final String signal = u['work_started'] ?? '';
-        if (signal.startsWith('SIGNAL: ')) {
-          final targetIdStr = signal.replaceAll('SIGNAL: ', '');
-          final targetId = int.tryParse(targetIdStr);
-          final room = u['work_completed'] ?? '';
-          
-          if (targetId != null) {
-            try {
-              // Folk Boy / Resident client has full RLS permission to update/delete their own rows!
-              await supabase.from('updates').update({
-                'is_completed': true,
-                'work_completed': room,
-              }).eq('id', targetId);
-              await supabase.from('updates').delete().eq('id', signalId);
-              didChange = true;
-            } catch (e) {
-              debugPrint('Error executing client approval signal: $e');
-            }
-          }
-        }
-      } else if (category == 'accommodation_delete_signal') {
-        final String signal = u['work_started'] ?? '';
-        if (signal.startsWith('SIGNAL: ')) {
-          final targetIdStr = signal.replaceAll('SIGNAL: ', '');
-          final targetId = int.tryParse(targetIdStr);
-          
-          if (targetId != null) {
-            try {
-              // Folk Boy / Resident client has full RLS permission to delete their own rows!
-              await supabase.from('updates').delete().eq('id', targetId);
-              await supabase.from('updates').delete().eq('id', signalId);
-              didChange = true;
-            } catch (e) {
-              debugPrint('Error executing client delete signal: $e');
-            }
-          }
-        }
-      } else if (category == 'residency_admission_approval_signal') {
-        final String signal = u['work_started'] ?? '';
-        if (signal.startsWith('SIGNAL: ')) {
-          final targetIdStr = signal.replaceAll('SIGNAL: ', '');
-          final targetId = targetIdStr;
-          
-          if (targetId.isNotEmpty) {
-            try {
-              // 1. Update residency request to completed
-              await supabase.from('updates').update({
-                'is_completed': true,
-              }).eq('id', targetId);
-              
-              // 2. Promote current user to residency
-              await supabase.from('profiles').update({
-                'role': 'residency',
-              }).eq('id', _profile!['id']);
-              
-              // 3. Delete the signal
-              await supabase.from('updates').delete().eq('id', signalId);
-              didChange = true;
-            } catch (e) {
-              debugPrint('Error executing residency approval signal: $e');
-            }
-          }
-        }
-      } else if (category == 'residency_admission_delete_signal') {
-        final String signal = u['work_started'] ?? '';
-        if (signal.startsWith('SIGNAL: ')) {
-          final targetIdStr = signal.replaceAll('SIGNAL: ', '');
-          final targetId = targetIdStr;
-          
-          if (targetId.isNotEmpty) {
-            try {
-              await supabase.from('updates').delete().eq('id', targetId);
-              await supabase.from('updates').delete().eq('id', signalId);
-              didChange = true;
-            } catch (e) {
-              debugPrint('Error executing residency delete signal: $e');
-            }
-          }
-        }
-      }
-    }
-    
-    if (didChange && mounted) {
-      _loadProfileAndData();
     }
   }
 
   Future<void> _fetchAnnouncements() async {
     try {
-      // 1. Fetch Online Session
-      final sessionData = await supabase
-          .from('online_announcements')
-          .select('*')
-          .eq('id', '00000000-0000-0000-0000-000000000001')
-          .maybeSingle();
-
-      // 2. Fetch Trips
-      final tripsData = await supabase
-          .from('announcements')
-          .select('*')
-          .like('content', '[TRIP]%')
-          .order('created_at', ascending: false);
-
-      // 3. Fetch Events
-      final eventsData = await supabase
-          .from('announcements')
-          .select('*')
-          .like('content', '[EVENT]%')
-          .order('created_at', ascending: false);
-
-      final List<Map<String, dynamic>> loadedAnnouncements = [];
-
-      if (sessionData != null) {
-        loadedAnnouncements.add({
-          'type': 'session',
-          'id': sessionData['id'],
-          'title': sessionData['title'],
-          'time': sessionData['session_time'] ?? '',
-          'link': sessionData['link'] ?? '',
-          'banner': sessionData['banner_url'] ?? '',
-        });
+      final data = await ApiService.get('/announcements');
+      if (data is List) {
+        final List<Map<String, dynamic>> loadedAnnouncements = [];
+        for (var ann in data) {
+          final content = (ann['content'] ?? '').toString();
+          if (content.startsWith('[TRIP]')) {
+            final parts = content.replaceFirst('[TRIP] ', '').split(' | ');
+            loadedAnnouncements.add({
+              'type': 'trip',
+              'id': ann['id'] ?? ann['_id'],
+              'title': parts.isNotEmpty ? parts[0] : 'Upcoming Trip',
+              'time': parts.length > 1 ? parts[1] : '',
+              'banner': parts.length > 2 ? parts[2] : '',
+              'link': parts.length > 3 ? parts[3] : '',
+            });
+          } else if (content.startsWith('[EVENT]')) {
+            final parts = content.replaceFirst('[EVENT] ', '').split(' | ');
+            loadedAnnouncements.add({
+              'type': 'event',
+              'id': ann['id'] ?? ann['_id'],
+              'title': parts.isNotEmpty ? parts[0] : 'Upcoming Event',
+              'time': parts.length > 2 ? '${parts[1]} • ${parts[2]}' : (parts.length > 1 ? parts[1] : ''),
+              'banner': parts.length > 3 ? parts[3] : '',
+              'link': parts.length > 4 ? parts[4] : '',
+            });
+          } else {
+            loadedAnnouncements.add({
+              'type': ann['category'] == 'online_session' ? 'session' : 'announcement',
+              'id': ann['id'] ?? ann['_id'],
+              'title': ann['title'] ?? 'Announcement',
+              'time': ann['session_time'] ?? ann['time'] ?? '',
+              'link': ann['link'] ?? '',
+              'banner': ann['banner_url'] ?? ann['photo_url'] ?? '',
+            });
+          }
+        }
+        if (mounted) {
+          setState(() {
+            _announcements = loadedAnnouncements;
+          });
+        }
       }
-
-      for (var trip in tripsData) {
-        final parts = trip['content'].toString().replaceFirst('[TRIP] ', '').split(' | ');
-        loadedAnnouncements.add({
-          'type': 'trip',
-          'id': trip['id'],
-          'title': parts.isNotEmpty ? parts[0] : 'Upcoming Trip',
-          'time': parts.length > 1 ? parts[1] : '',
-          'banner': parts.length > 2 ? parts[2] : '',
-          'link': parts.length > 3 ? parts[3] : '',
-        });
-      }
-
-      for (var event in eventsData) {
-        final parts = event['content'].toString().replaceFirst('[EVENT] ', '').split(' | ');
-        loadedAnnouncements.add({
-          'type': 'event',
-          'id': event['id'],
-          'title': parts.isNotEmpty ? parts[0] : 'Upcoming Event',
-          'time': parts.length > 2 ? '${parts[1]} • ${parts[2]}' : (parts.length > 1 ? parts[1] : ''),
-          'banner': parts.length > 3 ? parts[3] : '',
-          'link': parts.length > 4 ? parts[4] : '',
-        });
-      }
-
-      setState(() {
-        _announcements = loadedAnnouncements;
-      });
-
       _startCarouselTimer();
     } catch (e) {
       debugPrint('Error fetching announcements: $e');
@@ -349,13 +614,11 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     }
   }
 
-  // Smarter locks detection
   bool get _isDayLockedByPreacher {
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
     return _updates.any((u) => u['category'] == 'folk_lock' && (u['date'] == today));
   }
 
-  // Get Today's pending Mangla Arti
   Map<String, dynamic>? get _pendingManglaArti {
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
     try {
@@ -369,7 +632,6 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     }
   }
 
-  // Open Log Sadhana modal bottom sheet
   void _openSadhanaModal(String type) {
     if (_profile == null) return;
     if (_isDayLockedByPreacher) {
@@ -379,20 +641,27 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       return;
     }
 
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      barrierDismissible: true,
       builder: (context) {
-        return _SadhanaLogSheet(
-          logDate: type,
-          profileId: _profile!['id'],
-          profileName: _profile!['name'],
-          preacherName: _preacher?['name'] ?? 'Preacher',
-          updates: _updates,
-          onSaveSuccess: () {
-            _fetchUpdates();
-          },
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: Colors.white,
+          clipBehavior: Clip.antiAlias,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+          child: _SadhanaLogSheet(
+            logDate: 'Today',
+            initialOption: type,
+            profileId: _profile!['id'] ?? _profile!['_id'],
+            profileName: _profile!['name'],
+            preacherName: _preacher?['name'] ?? 'Preacher',
+            updates: _updates,
+            onSaveSuccess: (msg) {
+              _fetchUpdates();
+              _showSuccessDialog(msg);
+            },
+          ),
         );
       },
     );
@@ -464,7 +733,6 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     }
 
     try {
-      // 1. Check permission via native channel
       final bool hasPermission = await _screenTimeChannel.invokeMethod('checkPermission');
       if (!hasPermission) {
         if (mounted) {
@@ -496,7 +764,6 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         return;
       }
 
-      // Wait a moment for any preceding dialog transitions to complete
       await Future.delayed(const Duration(milliseconds: 100));
 
       if (!mounted) return;
@@ -509,7 +776,6 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         dialogShown = false;
       });
 
-      // 2. Get screen time from native Kotlin code
       final dynamic rawResult = await _screenTimeChannel.invokeMethod('getScreenTime');
       final Map<dynamic, dynamic> result = rawResult is Map<dynamic, dynamic>
           ? rawResult
@@ -517,40 +783,19 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       
       final String timeLabel = result['totalLabel']?.toString() ?? '0m';
       
-      // Safely convert apps — platform channel may return List or Map
       final dynamic rawApps = result['apps'];
-      final List<dynamic> apps;
-      if (rawApps is List) {
-        apps = rawApps;
-      } else if (rawApps is Map) {
-        apps = rawApps.values.toList();
-      } else {
-        apps = [];
-      }
-      
-      // Safely convert debug log
+      final List<dynamic> apps = rawApps is List ? rawApps : (rawApps is Map ? rawApps.values.toList() : []);
       final dynamic rawDebug = result['debug'];
-      final List<dynamic> debugLog;
-      if (rawDebug is List) {
-        debugLog = rawDebug;
-      } else if (rawDebug is Map) {
-        debugLog = rawDebug.values.toList();
-      } else {
-        debugLog = [];
-      }
+      final List<dynamic> debugLog = rawDebug is List ? rawDebug : (rawDebug is Map ? rawDebug.values.toList() : []);
       
       final String method = result['method']?.toString() ?? 'none';
       final int totalMs = (result['totalMs'] is int) ? result['totalMs'] as int : 0;
 
       debugPrint('ScreenTime: total=$timeLabel, method=$method');
-      for (var line in debugLog) {
-        debugPrint('ScreenTime Debug: $line');
-      }
 
       final List<Map<String, dynamic>> topApps = [];
       for (var app in apps) {
         if (app is Map) {
-          // Use native app name from Kotlin, fallback to _cleanAppName
           final String appName = (app['name'] as String?) ?? _cleanAppName(app['package'] as String? ?? '');
           topApps.add({
             'name': appName,
@@ -561,11 +806,10 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
 
       if (!mounted) return;
       if (dialogShown) {
-        Navigator.pop(context); // Dismiss loading
+        Navigator.pop(context);
         dialogShown = false;
       }
 
-      // If total is 0, show debug dialog so user can share what's happening
       if (totalMs == 0) {
         showDialog(
           context: context,
@@ -614,21 +858,6 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                         )).toList(),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.red[50],
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Text(
-                        'Please check:\n'
-                        '1. Settings > Apps > Special Access > Usage Access — toggle ON for this app\n'
-                        '2. Settings > Battery — set this app to "Unrestricted"\n'
-                        '3. Then restart the app and try again',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -644,7 +873,6 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         return;
       }
 
-      // 3. Confirm and log
       final todayDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
       final isAlreadyLogged = _updates.any(
         (u) => u['category'] == 'screen_time' && u['date'] == todayDate,
@@ -732,13 +960,6 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                       },
                     ),
                   ),
-                const SizedBox(height: 16),
-                Text(
-                  isAlreadyLogged
-                      ? 'Screen time has been automatically synchronized with your preacher.'
-                      : 'Screen time will be automatically synchronized with your preacher.',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.grey),
-                ),
               ],
             ),
           ),
@@ -751,7 +972,6 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
               ),
               onPressed: () {
                 Navigator.pop(context);
-                // Silently sync/update screen time in background
                 _saveScreenTime(timeLabel, todayDate, isAlreadyLogged, description: description);
               },
               child: const Text('OK', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -783,14 +1003,11 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   }
 
   Future<void> _autoSyncScreenTime() async {
-    if (_profile == null || !Platform.isAndroid) return;
-
     try {
+      if (!Platform.isAndroid || _profile == null) return;
+
       final bool hasPermission = await _screenTimeChannel.invokeMethod('checkPermission');
-      if (!hasPermission) {
-        debugPrint('AutoSyncScreenTime: Permission not granted. Skipping.');
-        return;
-      }
+      if (!hasPermission) return;
 
       final dynamic rawResult = await _screenTimeChannel.invokeMethod('getScreenTime');
       final Map<dynamic, dynamic> result = rawResult is Map<dynamic, dynamic> ? rawResult : <dynamic, dynamic>{};
@@ -820,16 +1037,15 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         final existingRecord = _updates.firstWhere(
           (u) => u['category'] == 'screen_time' && u['date'] == todayDate
         );
-        final id = existingRecord['id'];
-        await supabase.from('updates').update({
+        final id = existingRecord['id'] ?? existingRecord['_id'];
+        await ApiService.patch('/sadhana/updates/$id', {
           'work_started': 'Screen Time: $timeLabel',
           'description': description,
           'work_completed': timeLabel,
-        }).eq('id', id);
-        debugPrint('AutoSyncScreenTime: Silently updated today\'s screen time.');
+        });
       } else {
         final updateData = {
-          'worker_id': _profile!['id'],
+          'worker_id': _profile!['id'] ?? _profile!['_id'],
           'worker_name': _profile!['name'],
           'preacher_name': _preacher?['name'] ?? 'Preacher',
           'work_started': 'Screen Time: $timeLabel',
@@ -840,29 +1056,11 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
           'date': todayDate,
           'points': 0,
         };
-        await supabase.from('updates').insert(updateData);
+        await ApiService.post('/sadhana', updateData);
         NotificationHelper.sendUpdateNotification(updateData).catchError((_) {});
-        debugPrint('AutoSyncScreenTime: Silently inserted today\'s screen time.');
       }
       
-      // Silently refetch updates to show in feed
-      final data = await supabase
-          .from('updates')
-          .select('*')
-          .eq('worker_id', _profile!['id'])
-          .order('created_at', ascending: false)
-          .limit(50);
-      
-      final cleanUpdates = data.where((u) => 
-        u['category'] != 'accommodation_approval_signal' && 
-        u['category'] != 'accommodation_delete_signal'
-      ).toList();
-
-      if (mounted) {
-        setState(() {
-          _updates = cleanUpdates;
-        });
-      }
+      await _fetchUpdates();
     } catch (e) {
       debugPrint('AutoSyncScreenTime error: $e');
     }
@@ -874,19 +1072,18 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     try {
       final desc = description ?? 'Mobile screen time: $duration';
       if (isUpdate) {
-        // Find existing record ID
         final existingRecord = _updates.firstWhere(
           (u) => u['category'] == 'screen_time' && u['date'] == date
         );
-        final id = existingRecord['id'];
-        await supabase.from('updates').update({
+        final id = existingRecord['id'] ?? existingRecord['_id'];
+        await ApiService.patch('/sadhana/updates/$id', {
           'work_started': 'Screen Time: $duration',
           'description': desc,
           'work_completed': duration,
-        }).eq('id', id);
+        });
       } else {
         final updateData = {
-          'worker_id': _profile!['id'],
+          'worker_id': _profile!['id'] ?? _profile!['_id'],
           'worker_name': _profile!['name'],
           'preacher_name': _preacher?['name'] ?? 'Preacher',
           'work_started': 'Screen Time: $duration',
@@ -897,26 +1094,11 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
           'date': date,
           'points': 0,
         };
-        await supabase.from('updates').insert(updateData);
+        await ApiService.post('/sadhana', updateData);
         NotificationHelper.sendUpdateNotification(updateData).catchError((_) {});
       }
       
-      // Silent fetch to update state
-      final data = await supabase
-          .from('updates')
-          .select('*')
-          .eq('worker_id', _profile!['id'])
-          .order('created_at', ascending: false)
-          .limit(50);
-      final cleanUpdates = data.where((u) => 
-        u['category'] != 'accommodation_approval_signal' && 
-        u['category'] != 'accommodation_delete_signal'
-      ).toList();
-      if (mounted) {
-        setState(() {
-          _updates = cleanUpdates;
-        });
-      }
+      await _fetchUpdates();
     } catch (e) {
       debugPrint('Error saving screen time: $e');
       if (mounted) {
@@ -928,31 +1110,35 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   }
 
   Future<void> _showTripJoinDialog(String title, String link) async {
-    // Check for duplicate booking first!
     try {
-      final existingBookings = await supabase
-          .from('updates')
-          .select('*')
-          .eq('worker_id', _profile!['id'])
-          .eq('category', 'trip_attendance')
-          .eq('work_started', 'Trip: $title')
-          .limit(1);
-
-      if (existingBookings.isNotEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('You are already registered for $title! Opening link...'),
-              backgroundColor: Colors.blueAccent,
-            ),
-          );
-        }
+      dynamic data;
+      try {
+        data = await ApiService.get('/sadhana/updates');
+      } catch (_) {
         try {
-          launchUrl(Uri.parse(link), mode: LaunchMode.externalApplication);
-        } catch (e) {
-          debugPrint('Could not launch trip link: $e');
+          final h = await ApiService.get('/sadhana/history');
+          if (h is Map && h.containsKey('items')) data = h['items'];
+        } catch (_) {}
+      }
+      if (data is List) {
+        final existingBookings = data.where((u) => u['category'] == 'trip_attendance' && u['work_started'] == 'Trip: $title').toList();
+
+        if (existingBookings.isNotEmpty) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('You are already registered for $title! Opening link...'),
+                backgroundColor: Colors.blueAccent,
+              ),
+            );
+          }
+          try {
+            launchUrl(Uri.parse(link), mode: LaunchMode.externalApplication);
+          } catch (e) {
+            debugPrint('Could not launch trip link: $e');
+          }
+          return;
         }
-        return; // Skip showing dialog
       }
     } catch (e) {
       debugPrint('Error checking duplicate trip booking: $e');
@@ -975,7 +1161,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
             }
             try {
               final updateData = {
-                'worker_id': _profile!['id'],
+                'worker_id': _profile!['id'] ?? _profile!['_id'],
                 'worker_name': confirmedName,
                 'preacher_name': _preacher?['name'] ?? 'Preacher',
                 'work_started': 'Trip: $title',
@@ -986,7 +1172,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                 'date': DateFormat('yyyy-MM-dd').format(DateTime.now()),
                 'points': 0,
               };
-              await supabase.from('updates').insert(updateData);
+              await ApiService.post('/sadhana', updateData);
               NotificationHelper.sendUpdateNotification(updateData).catchError((_) {});
               _fetchUpdates();
             } catch (e) {
@@ -1005,31 +1191,34 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   }
 
   Future<void> _showEventJoinDialog(String title, String link) async {
-    // Check for duplicate booking first!
     try {
-      final existingBookings = await supabase
-          .from('updates')
-          .select('*')
-          .eq('worker_id', _profile!['id'])
-          .eq('category', 'event_attendance')
-          .eq('work_started', 'Event: $title')
-          .limit(1);
+      dynamic data;
+      try {
+        data = await ApiService.get('/sadhana/updates');
+      } catch (_) {
+        data = await ApiService.get('/sadhana/history');
+      }
+      if (data is List) {
+        final existingBookings = data.where((u) => u['category'] == 'event_attendance' && u['work_started'] == 'Event: $title').toList();
 
-      if (existingBookings.isNotEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('You are already registered for $title! Opening link...'),
-              backgroundColor: Colors.teal,
-            ),
-          );
+        if (existingBookings.isNotEmpty) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('You are already registered for $title! Opening link...'),
+                backgroundColor: Colors.teal,
+              ),
+            );
+          }
+          try {
+            if (link.isNotEmpty) {
+              launchUrl(Uri.parse(link), mode: LaunchMode.externalApplication);
+            }
+          } catch (e) {
+            debugPrint('Could not launch event link: $e');
+          }
+          return;
         }
-        try {
-          launchUrl(Uri.parse(link), mode: LaunchMode.externalApplication);
-        } catch (e) {
-          debugPrint('Could not launch event link: $e');
-        }
-        return; // Skip showing dialog
       }
     } catch (e) {
       debugPrint('Error checking duplicate event booking: $e');
@@ -1052,7 +1241,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
             }
             try {
               final updateData = {
-                'worker_id': _profile!['id'],
+                'worker_id': _profile!['id'] ?? _profile!['_id'],
                 'worker_name': confirmedName,
                 'preacher_name': _preacher?['name'] ?? 'Preacher',
                 'work_started': 'Event: $title',
@@ -1063,7 +1252,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                 'date': DateFormat('yyyy-MM-dd').format(DateTime.now()),
                 'points': 0,
               };
-              await supabase.from('updates').insert(updateData);
+              await ApiService.post('/sadhana', updateData);
               NotificationHelper.sendUpdateNotification(updateData).catchError((_) {});
               _fetchUpdates();
             } catch (e) {
@@ -1071,7 +1260,9 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
             }
 
             try {
-              launchUrl(Uri.parse(link), mode: LaunchMode.externalApplication);
+              if (link.isNotEmpty) {
+                launchUrl(Uri.parse(link), mode: LaunchMode.externalApplication);
+              }
             } catch (e) {
               debugPrint('Could not launch event link: $e');
             }
@@ -1098,7 +1289,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
             }
             try {
               final updateData = {
-                'worker_id': _profile!['id'],
+                'worker_id': _profile!['id'] ?? _profile!['_id'],
                 'worker_name': confirmedName,
                 'preacher_name': _preacher?['name'] ?? 'Preacher',
                 'work_started': 'Session: $title',
@@ -1109,7 +1300,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                 'date': DateFormat('yyyy-MM-dd').format(DateTime.now()),
                 'points': 0,
               };
-              await supabase.from('updates').insert(updateData);
+              await ApiService.post('/sadhana', updateData);
               NotificationHelper.sendUpdateNotification(updateData).catchError((_) {});
               _fetchUpdates();
             } catch (e) {
@@ -1140,15 +1331,15 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       return Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
-          title: const Text('Folk Boy Dashboard', style: TextStyle(fontWeight: FontWeight.bold)),
+          title: const Text('Folk Boy Dashboard', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
           backgroundColor: Colors.white,
           elevation: 0,
           actions: [
             IconButton(
-              icon: const Icon(Icons.logout, color: Colors.redAccent),
+              icon: const Icon(Icons.logout, color: Color(0xFF64748B)),
               onPressed: () {
                 try {
-                  supabase.auth.signOut().catchError((_) {});
+                  FirebaseAuth.instance.signOut().catchError((_) {});
                 } catch (_) {}
                 Navigator.pushReplacementNamed(context, '/login');
               },
@@ -1178,39 +1369,24 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
               ElevatedButton.icon(
                 onPressed: () async {
                   setState(() => _isLoadingProfile = true);
-                  // Auto-recover: Try to insert the profile before fetching again
                   try {
-                    final user = supabase.auth.currentUser;
+                    final user = FirebaseAuth.instance.currentUser;
                     if (user != null) {
-                      final metadata = user.userMetadata ?? {};
-                      await supabase.from('profiles').upsert({
-                        'id': user.id,
-                        'name': metadata['name'] ?? user.email?.split('@').first ?? 'User',
-                        'role': metadata['role'] ?? 'folk_boy',
-                        'preacher_id': metadata['preacher_id'],
-                        'whatsapp_number': metadata['whatsapp_number'] ?? 'Not provided',
+                      await ApiService.post('/auth/sync', {
+                        'name': user.displayName ?? user.email?.split('@').first ?? 'User',
                         'email': user.email,
+                        'photoUrl': user.photoURL,
                       });
                     }
                   } catch (e) {
-                    debugPrint('Auto-recover insert failed: $e');
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Error fixing profile: $e', style: const TextStyle(color: Colors.white)),
-                          backgroundColor: Colors.red,
-                          duration: const Duration(seconds: 10),
-                        ),
-                      );
-                    }
+                    debugPrint('Auto-recover sync failed: $e');
                   }
-                  
-                  _loadProfileAndData();
+                  await _loadProfileAndData();
                 },
                 icon: const Icon(Icons.refresh),
                 label: const Text('Retry / Fix Profile'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF4F46E5),
+                  backgroundColor: const Color(0xFF0F172A),
                   foregroundColor: Colors.white,
                 ),
               ),
@@ -1220,112 +1396,197 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       );
     }
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        title: const Text('Folk Boy Dashboard', style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.redAccent),
-            onPressed: () {
-              try {
-                supabase.auth.signOut().catchError((_) {});
-              } catch (_) {}
-              Navigator.pushReplacementNamed(context, '/login');
-            },
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+
+        if (_selectedIndex == 3 && _servicesSubTab != 0) {
+          setState(() {
+            _servicesSubTab = 0;
+          });
+          return;
+        }
+
+        if (_selectedIndex != 0) {
+          setState(() {
+            _selectedIndex = 0;
+          });
+          return;
+        }
+
+        final now = DateTime.now();
+        if (_lastBackPressTime == null || now.difference(_lastBackPressTime!) > const Duration(seconds: 2)) {
+          _lastBackPressTime = now;
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Press back again to exit app'),
+                duration: Duration(seconds: 2),
+                backgroundColor: Color(0xFF0F172A),
+              ),
+            );
+          }
+          return;
+        }
+
+        SystemNavigator.pop();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          toolbarHeight: 95,
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0xFFBAE6FD),
+                  Color(0xFFE0F2FE),
+                  Color(0xFFF8FAFC),
+                ],
+              ),
+            ),
           ),
-        ],
+          systemOverlayStyle: const SystemUiOverlayStyle(
+            statusBarColor: Colors.transparent,
+            statusBarIconBrightness: Brightness.dark,
+            statusBarBrightness: Brightness.light,
+          ),
+          centerTitle: true,
+          title: _buildHeaderLogo(),
+        ),
+        body: IndexedStack(
+          index: _selectedIndex > 4 ? 0 : _selectedIndex,
+          children: [
+            _buildHomeTab(),
+            _buildEventsTab(),
+            _buildCoursesTab(),
+            _buildServicesTab(),
+            _buildProfileTab(),
+          ],
+        ),
+        bottomNavigationBar: Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            border: Border(
+              top: BorderSide(
+                color: Color(0xFFF1F5F9),
+                width: 1.0,
+              ),
+            ),
+          ),
+          child: SafeArea(
+            top: false,
+            bottom: true,
+            child: NavigationBarTheme(
+              data: NavigationBarThemeData(
+                indicatorColor: const Color(0xFF0F172A).withValues(alpha: 0.08),
+                labelTextStyle: WidgetStateProperty.resolveWith((states) {
+                  if (states.contains(WidgetState.selected)) {
+                    return const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 11);
+                  }
+                  return const TextStyle(color: Color(0xFF94A3B8), fontSize: 11);
+                }),
+                iconTheme: WidgetStateProperty.resolveWith((states) {
+                  if (states.contains(WidgetState.selected)) {
+                    return const IconThemeData(color: Color(0xFF0F172A));
+                  }
+                  return const IconThemeData(color: Color(0xFF94A3B8));
+                }),
+              ),
+              child: NavigationBar(
+                selectedIndex: _selectedIndex > 4 ? 0 : _selectedIndex,
+                onDestinationSelected: (int index) {
+                  setState(() {
+                    _selectedIndex = index;
+                  });
+                },
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                height: 65,
+                destinations: const [
+                  NavigationDestination(
+                    icon: Icon(Icons.home_outlined),
+                    selectedIcon: Icon(Icons.home_rounded),
+                    label: 'Home',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.event_outlined),
+                    selectedIcon: Icon(Icons.event_rounded),
+                    label: 'Events',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.auto_stories_outlined),
+                    selectedIcon: Icon(Icons.auto_stories_rounded),
+                    label: 'Courses',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.explore_outlined),
+                    selectedIcon: Icon(Icons.explore_rounded),
+                    label: 'Explore',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.person_outline),
+                    selectedIcon: Icon(Icons.person_rounded),
+                    label: 'Profile',
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
-      body: SingleChildScrollView(
+    );
+  }
+
+  Widget _buildHeaderLogo() {
+    return Image.asset(
+      'assets/folk_logo.png',
+      height: 82,
+      fit: BoxFit.contain,
+      errorBuilder: (context, error, stackTrace) => Image.asset(
+        'assets/logo.jpg',
+        height: 82,
+        fit: BoxFit.contain,
+      ),
+    );
+  }
+
+  Widget _buildHomeTab() {
+    return RefreshIndicator(
+      onRefresh: () async {
+        await _loadProfileAndData();
+        await _fetchAnnouncements();
+        await _fetchDailyDarshan();
+        await _fetchDailyQuote();
+      },
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
+        physics: const AlwaysScrollableScrollPhysics(),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Profile Card Section
-            Card(
-              elevation: 2,
-              shadowColor: Colors.black12,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              color: Colors.white,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 32,
-                      backgroundImage: _profile?['photo_url'] != null
-                          ? NetworkImage(_profile!['photo_url'])
-                          : null,
-                      backgroundColor: const Color(0xFFEEF2F6),
-                      child: _profile?['photo_url'] == null
-                          ? Text(
-                              (_profile?['name'] ?? 'U')[0].toUpperCase(),
-                              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                            )
-                          : null,
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _profile?['name'] ?? 'User',
-                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
-                          ),
-                          const SizedBox(height: 4),
-                          if (_preacher != null) ...[
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF1F5F9),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: const Color(0xFFE2E8F0)),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  CircleAvatar(
-                                    radius: 10,
-                                    backgroundImage: _preacher!['photo_url'] != null
-                                        ? NetworkImage(_preacher!['photo_url'])
-                                        : null,
-                                    child: _preacher!['photo_url'] == null
-                                        ? Text(_preacher!['name'][0].toUpperCase(), style: const TextStyle(fontSize: 8))
-                                        : null,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'Preacher: ${_preacher!['name']}',
-                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF475569)),
-                                  ),
-                                ],
-                              ),
-                            )
-                          ]
-                        ],
-                      ),
-                    )
-                  ],
-                ),
-              ),
-            ),
+            _buildInlineSadhanaCard(),
             const SizedBox(height: 20),
-
-            // Announcement Carousel
+            _buildDailyDarshanCard(),
+            _buildDailyQuoteCard(),
             if (_announcements.isNotEmpty) ...[
               SizedBox(
                 height: 180,
                 child: PageView.builder(
                   controller: _pageController,
-                  itemCount: _announcements.length,
                   onPageChanged: (index) {
                     setState(() {
                       _currentAnnouncementIndex = index;
                     });
                   },
+                  itemCount: _announcements.length,
                   itemBuilder: (context, index) {
                     final ann = _announcements[index];
                     return GestureDetector(
@@ -1344,80 +1605,78 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                         }
                       },
                       child: Card(
-                      elevation: 4,
-                      shadowColor: Colors.black26,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                      clipBehavior: Clip.antiAlias,
-                      child: Stack(
-                        children: [
-                          if (ann['banner'] != '') ...[
-                            Image.network(
-                              ann['banner'],
-                              width: double.infinity,
-                              height: double.infinity,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => Container(
-                                color: const Color(0xFF4F46E5),
-                                child: const Center(child: Icon(Icons.image_not_supported, color: Colors.white38, size: 40)),
-                              ),
-                            ),
-                            Container(
-                              decoration: const BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [Colors.black12, Colors.black87],
+                        clipBehavior: Clip.antiAlias,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        child: Stack(
+                          children: [
+                            if (ann['banner'] != '') ...[
+                              Image.network(
+                                ann['banner'],
+                                width: double.infinity,
+                                height: double.infinity,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) => Container(
+                                  color: const Color(0xFF3F1200),
+                                  child: const Center(child: Icon(Icons.image_not_supported, color: Colors.white38, size: 40)),
                                 ),
                               ),
-                            ),
-                          ] else ...[
-                            Container(
-                              decoration: const BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [Color(0xFF4F46E5), Color(0xFF1E1B4B)],
+                              Container(
+                                decoration: const BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [Colors.black12, Colors.black87],
+                                  ),
                                 ),
+                              ),
+                            ] else ...[
+                              Container(
+                                decoration: const BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [Color(0xFF3F1200), Color(0xFF1B0B00)],
+                                  ),
+                                ),
+                              ),
+                            ],
+                            Padding(
+                              padding: const EdgeInsets.all(16.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.redAccent,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      ann['type'].toString().toUpperCase(),
+                                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    ann['title'],
+                                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  if (ann['time'] != '') ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      ann['time'],
+                                      style: TextStyle(color: Colors.white.withAlpha(204), fontSize: 12),
+                                    ),
+                                  ]
+                                ],
                               ),
                             ),
                           ],
-                          Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: Colors.redAccent,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    ann['type'].toString().toUpperCase(),
-                                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  ann['title'],
-                                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                if (ann['time'] != '') ...[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    ann['time'],
-                                    style: TextStyle(color: Colors.white.withAlpha(204), fontSize: 12),
-                                  ),
-                                ]
-                              ],
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
                     );
                   },
                 ),
@@ -1431,7 +1690,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                     height: 6,
                     margin: const EdgeInsets.symmetric(horizontal: 3),
                     decoration: BoxDecoration(
-                      color: index == _currentAnnouncementIndex ? const Color(0xFF4F46E5) : Colors.grey[400],
+                      color: index == _currentAnnouncementIndex ? const Color(0xFF0F172A) : Colors.grey[300],
                       borderRadius: BorderRadius.circular(3),
                     ),
                   );
@@ -1440,7 +1699,6 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
               const SizedBox(height: 20),
             ],
 
-            // Locked Day Banner
             if (_isDayLockedByPreacher) ...[
               Container(
                 padding: const EdgeInsets.all(12),
@@ -1465,7 +1723,6 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
               const SizedBox(height: 20),
             ],
 
-            // Pending Mangla Arti Banner
             if (_pendingManglaArti != null) ...[
               _PendingManglaArtiWidget(
                 pendingUpdate: _pendingManglaArti!,
@@ -1475,111 +1732,153 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
               ),
               const SizedBox(height: 20),
             ],
+          ],
+        ),
+      ),
+    );
+  }
 
-            // Action Buttons / Categories
-            const Text('Log Activities', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
-            const SizedBox(height: 12),
-            GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 2,
-              childAspectRatio: 1.25,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-              children: [
-                _buildCategoryButton(
-                  title: 'Today Sadhana',
-                  icon: Icons.calendar_today_outlined,
-                  color: const Color(0xFFEEF2F6),
-                  iconColor: const Color(0xFF4F46E5),
-                  onTap: () => _openSadhanaModal('Today'),
-                ),
-                _buildCategoryButton(
-                  title: 'Yesterday Sadhana',
-                  icon: Icons.history_outlined,
-                  color: const Color(0xFFFEF3C7),
-                  iconColor: const Color(0xFFD97706),
-                  onTap: () => _openSadhanaModal('Yesterday'),
-                ),
-                _buildCategoryButton(
-                  title: 'Screen Time',
-                  icon: Icons.phone_android_outlined,
-                  color: const Color(0xFFFCE7F3),
-                  iconColor: const Color(0xFFDB2777),
-                  onTap: _handleScreenTimeLog,
-                ),
-                _buildCategoryButton(
-                  title: 'Ekadashi',
-                  icon: Icons.star_border,
-                  color: const Color(0xFFD1FAE5),
-                  iconColor: const Color(0xFF059669),
-                  onTap: () => _openSadhanaModal('Ekadashi'),
-                ),
-                _buildCategoryButton(
-                  title: 'Accommodation',
-                  icon: Icons.hotel_outlined,
-                  color: const Color(0xFFF3E8FF),
-                  iconColor: const Color(0xFF9333EA),
-                  onTap: _handleAccommodationBooking,
-                ),
-                _buildCategoryButton(
-                  title: 'Residency Admission',
-                  icon: Icons.school_outlined,
-                  color: const Color(0xFFE0F2FE),
-                  iconColor: const Color(0xFF0284C7),
-                  onTap: _handleResidencyAdmission,
-                ),
-                _buildCategoryButton(
-                  title: 'Quiz (Soon)',
-                  icon: Icons.quiz_outlined,
-                  color: const Color(0xFFFFEDD5),
-                  iconColor: const Color(0xFFEA580C),
-                  onTap: _handleQuiz,
-                ),
-                _buildCategoryButton(
-                  title: 'Preacher Appointment',
-                  icon: Icons.chat_bubble_outline,
-                  color: const Color(0xFFEFF6FF),
-                  iconColor: const Color(0xFF1D4ED8),
-                  onTap: _handlePreacherAppointmentBooking,
-                ),
-                _buildCategoryButton(
-                  title: 'Payment Reminder',
-                  icon: Icons.account_balance_wallet_outlined,
-                  color: const Color(0xFFFEE2E2),
-                  iconColor: const Color(0xFFEA580C),
-                  onTap: _handlePaymentReminder,
-                  badgeCount: _updates.where((u) => u['category'] == 'payment' && u['is_completed'] == false && u['work_completed'] != 'SUBMITTED' && u['work_completed'] != 'WAITING_APPROVAL').length,
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
+  Widget _buildHistoryTab() {
+    final filteredUpdates = _updates.where((u) {
+      if (_selectedHistoryDate == null) return true;
+      final selectedDateStr = DateFormat('yyyy-MM-dd').format(_selectedHistoryDate!);
+      final itemDate = u['date'] as String? ?? '';
+      return itemDate == selectedDateStr;
+    }).toList();
 
-            // Recent Updates Activity Log
-            const Text('Recent Logged Sadhana', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
-            const SizedBox(height: 12),
-            _isLoadingUpdates
-                ? const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
-                : _updates.isEmpty
-                    ? const Center(child: Padding(padding: EdgeInsets.all(20), child: Text('No logged activities found', style: TextStyle(color: Colors.grey))))
-                    : ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: _updates.length,
-                        itemBuilder: (context, index) {
-                          final u = _updates[index];
-                          final date = u['date'] ?? '';
-                          final isScreenTime = u['category'] == 'screen_time';
-                          final isCompleted = u['is_completed'] ?? false;
+    final Map<String, List<dynamic>> groupedUpdates = {};
+    for (var u in filteredUpdates) {
+      final date = u['date'] as String? ?? 'No Date';
+      groupedUpdates.putIfAbsent(date, () => []).add(u);
+    }
 
+    final sortedDates = groupedUpdates.keys.toList()
+      ..sort((a, b) => b.compareTo(a));
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 8, 16, 0),
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFF0F172A)),
+                onPressed: () => setState(() => _servicesSubTab = 0),
+              ),
+              const Text(
+                'Sadhana History',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Container(
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: InkWell(
+                    onTap: () async {
+                      final DateTime? picked = await showDatePicker(
+                        context: context,
+                        initialDate: _selectedHistoryDate ?? DateTime.now(),
+                        firstDate: DateTime(2025),
+                        lastDate: DateTime.now().add(const Duration(days: 30)),
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          _selectedHistoryDate = picked;
+                        });
+                      }
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.calendar_month, color: Color(0xFF3F1200)),
+                          const SizedBox(width: 12),
+                          Text(
+                            _selectedHistoryDate != null
+                                ? DateFormat('dd MMM yyyy').format(_selectedHistoryDate!)
+                                : 'Filter by Date',
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              if (_selectedHistoryDate != null) ...[
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.cancel, color: Colors.redAccent),
+                  onPressed: () {
+                    setState(() {
+                      _selectedHistoryDate = null;
+                    });
+                  },
+                )
+              ]
+            ],
+          ),
+        ),
+        Expanded(
+          child: filteredUpdates.isEmpty
+              ? const Center(child: Text('No records found for this date', style: TextStyle(color: Colors.grey)))
+              : RefreshIndicator(
+                  onRefresh: () async {
+                    await _loadProfileAndData();
+                  },
+                  child: ListView.builder(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    itemCount: sortedDates.length,
+                    itemBuilder: (context, index) {
+                      final dateStr = sortedDates[index];
+                      final items = groupedUpdates[dateStr]!;
+
+                      String displayDate = '';
+                      try {
+                        final parsedDate = DateTime.parse(dateStr);
+                        displayDate = DateFormat('EEEE, dd MMMM yyyy').format(parsedDate);
+                      } catch (_) {
+                        displayDate = dateStr;
+                      }
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(left: 20, right: 20, top: 16, bottom: 8),
+                            child: Text(
+                              displayDate,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF3F1200),
+                              ),
+                            ),
+                          ),
+                          ...items.map((u) {
+                            final isScreenTime = u['category'] == 'screen_time';
+                            final isCompleted = u['is_completed'] ?? false;
+                            final id = u['id'] ?? u['_id'];
                             return Card(
                               elevation: 0,
+                              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                               color: Colors.white,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
                                 side: BorderSide(color: Colors.grey[200]!),
                               ),
-                              margin: const EdgeInsets.only(bottom: 10),
                               child: ListTile(
                                 leading: CircleAvatar(
                                   backgroundColor: isScreenTime
@@ -1596,25 +1895,2158 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                                 ),
                                 title: Text(
                                   u['work_started'] ?? '',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1E293B)),
                                 ),
                                 subtitle: Text(
                                   isScreenTime
-                                      ? 'Date: $date • Screen Time Log'
-                                      : 'Date: $date • ${isCompleted ? 'Completed' : 'Pending'}',
+                                      ? 'Screen Time Track Log'
+                                      : (isCompleted ? 'Completed' : 'Pending for Preacher Approval'),
                                   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                                 ),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                                onPressed: () {
-                                  debugPrint('Delete button pressed directly for update: ${u['id']}');
-                                  _handleDeleteUpdate(u['id'], u['work_started'] ?? '');
-                                },
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                  onPressed: () {
+                                    _handleDeleteUpdate(id, u['work_started'] ?? '');
+                                  },
+                                ),
+                              ),
+                            );
+                          }),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+
+  int _servicesSubTab = 0;
+
+  Widget _buildServicesTab() {
+    return _servicesSubTab == 0 ? _buildServicesList() : _buildHistoryTab();
+  }
+
+  Widget _buildServicesList() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Column(
+            children: [
+              _buildServiceListItem(
+                title: 'Sadhana & Activity History',
+                icon: Icons.history_rounded,
+                onTap: () => setState(() => _servicesSubTab = 1),
+              ),
+              _buildServiceListItem(
+                title: 'Accommodation Booking',
+                icon: Icons.hotel_outlined,
+                onTap: _handleAccommodationBooking,
+              ),
+              _buildServiceListItem(
+                title: 'Residency Admission Form',
+                icon: Icons.apartment_outlined,
+                onTap: _handleResidencyAdmission,
+              ),
+              _buildServiceListItem(
+                title: 'Preacher Appointment',
+                icon: Icons.chat_bubble_outline,
+                onTap: _handlePreacherAppointmentBooking,
+              ),
+              _buildServiceListItem(
+                title: 'Payment Details',
+                icon: Icons.account_balance_wallet_outlined,
+                onTap: _handlePaymentReminder,
+                badgeCount: _updates.where((u) => u['category'] == 'payment' && u['is_completed'] == false && u['work_completed'] != 'SUBMITTED' && u['work_completed'] != 'WAITING_APPROVAL').length,
+              ),
+              _buildServiceListItem(
+                title: 'Contact Preacher',
+                icon: Icons.message_outlined,
+                onTap: _contactPreacher,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEventsTab() {
+    final List<Map<String, dynamic>> defaultEvents = [
+      {
+        'title': 'Sri Krishna Janmashtami Festival & Abhishek',
+        'type': 'Festival',
+        'date': 'Coming Soon',
+        'venue': 'Vrindavan Chandrodaya Mandir',
+        'image': 'https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=600&q=80',
+        'description': 'Grand celebration with Kirtan, Abhishek, and Prasadam distribution.',
+      },
+      {
+        'title': 'Govardhan Parikrama & Yatra Retreat',
+        'type': 'Yatra',
+        'date': 'Upcoming Weekend',
+        'venue': 'Govardhan Dham',
+        'image': 'https://images.unsplash.com/photo-1609137144813-7d9921338f24?auto=format&fit=crop&w=600&q=80',
+        'description': 'Spiritual retreat with ecstatic Kirtan, Parikrama, and Preacher lectures.',
+      },
+      {
+        'title': 'Youth Awakening Workshop & Meditation',
+        'type': 'Workshop',
+        'date': 'Every Sunday 5:00 PM',
+        'venue': 'FOLK Youth Hall',
+        'image': 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=600&q=80',
+        'description': 'Interactive sessions on mind management, meditation, and leadership.',
+      },
+    ];
+
+    final eventList = _announcements.where((a) => a['type'] == 'event' || a['type'] == 'trip').toList();
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Upcoming Events & Yatra',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEEF2FF),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${eventList.length + defaultEvents.length} Active',
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF4F46E5)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          ...eventList.map((ann) {
+            return Card(
+              margin: const EdgeInsets.only(bottom: 14),
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: const BorderSide(color: Color(0xFFE2E8F0)),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if ((ann['banner'] as String? ?? '').isNotEmpty)
+                    AspectRatio(
+                      aspectRatio: 16 / 9,
+                      child: Image.network(
+                        ann['banner'],
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        cacheWidth: 600,
+                        errorBuilder: (_, __, ___) => Container(color: const Color(0xFF3F1200)),
+                      ),
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.all(14.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFDCFCE7),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                ann['type'].toString().toUpperCase(),
+                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
                               ),
                             ),
-                          );
+                            const Spacer(),
+                            if ((ann['time'] as String? ?? '').isNotEmpty)
+                              Text(
+                                ann['time'],
+                                style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          ann['title'] ?? '',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              final link = ann['link'] as String? ?? '';
+                              if (link.isNotEmpty) {
+                                launchUrl(Uri.parse(link), mode: LaunchMode.externalApplication);
+                              } else {
+                                _showEventJoinDialog(ann['title'] ?? 'Event', link);
+                              }
+                            },
+                            icon: const Icon(Icons.event_available_rounded, size: 18),
+                            label: const Text('Register / View Event'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF3F1200),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+
+          ...defaultEvents.map((evt) {
+            return Card(
+              margin: const EdgeInsets.only(bottom: 14),
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: const BorderSide(color: Color(0xFFE2E8F0)),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: Image.network(
+                      evt['image'],
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      cacheWidth: 600,
+                      errorBuilder: (_, __, ___) => Container(color: const Color(0xFF3F1200)),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(14.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFEF3C7),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                evt['type'].toString().toUpperCase(),
+                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFD97706)),
+                              ),
+                            ),
+                            const Spacer(),
+                            Row(
+                              children: [
+                                const Icon(Icons.calendar_month, size: 13, color: Color(0xFF64748B)),
+                                const SizedBox(width: 4),
+                                Text(
+                                  evt['date'],
+                                  style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          evt['title'],
+                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          evt['description'],
+                          style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              _showEventJoinDialog(evt['title'], '');
+                            },
+                            icon: const Icon(Icons.check_circle_outline, size: 18),
+                            label: const Text('Join Event'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF3F1200),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBannerTag(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: Colors.white),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: Colors.white),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCoursePaymentDialog(Map<String, dynamic> crs) {
+    _openRazorpayCheckout(crs, 'ALL');
+  }
+
+  void _openRazorpayCheckout(Map<String, dynamic> crs, String method) async {
+    final priceStr = (crs['price'] as String? ?? '').replaceAll('₹', '').trim();
+    final double priceVal = double.tryParse(priceStr) ?? 499;
+    final int amountInPaise = (priceVal * 100).round();
+
+    var options = {
+      'key': _razorpayApiKey,
+      'amount': amountInPaise,
+      'name': 'FOLK Vrindavan',
+      'description': 'Course: ${crs['title']}',
+      'prefill': {
+        'contact': _profile?['mobile_number'] ?? _profile?['whatsapp_number'] ?? '',
+        'email': _profile?['email'] ?? '',
+        'name': _profile?['full_name'] ?? 'Student',
+      },
+      'external': {
+        'wallets': ['paytm']
+      }
+    };
+
+    bool openedNatively = false;
+    try {
+      if (_razorpay != null) {
+        _razorpay!.open(options);
+        openedNatively = true;
+      }
+    } catch (e) {
+      debugPrint('Razorpay native open error: $e');
+    }
+
+    if (!openedNatively) {
+      _openRazorpayWebCheckout(crs, amountInPaise);
+    }
+  }
+
+  Future<void> _openRazorpayWebCheckout(Map<String, dynamic> crs, int amountInPaise) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: const Padding(
+          padding: EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(width: 44, height: 44, child: CircularProgressIndicator(color: Color(0xFF0B72E7), strokeWidth: 3)),
+              SizedBox(height: 18),
+              Text('Opening Razorpay...', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F172A))),
+              SizedBox(height: 6),
+              Text('Please wait...', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    try {
+      final credentials = base64Encode(utf8.encode('$_razorpayApiKey:$_razorpaySecret'));
+      final response = await http.post(
+        Uri.parse('https://api.razorpay.com/v1/payment_links'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Basic $credentials',
+        },
+        body: jsonEncode({
+          'amount': amountInPaise,
+          'currency': 'INR',
+          'description': 'Course Payment: ${crs['title']}',
+          'customer': {
+            'name': _profile?['full_name'] ?? 'Student',
+            'contact': _profile?['mobile_number'] ?? _profile?['whatsapp_number'] ?? '',
+            'email': _profile?['email'] ?? '',
+          },
+          'notify': {'sms': true, 'email': true},
+        }),
+      );
+
+      if (mounted) Navigator.pop(context);
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        final shortUrl = data['short_url'] as String?;
+
+        if (shortUrl != null && shortUrl.isNotEmpty) {
+          final uri = Uri.parse(shortUrl);
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Razorpay payment page opened. Complete payment there.'),
+                backgroundColor: Color(0xFF0B72E7),
+                duration: Duration(seconds: 4),
+              ),
+            );
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Payment link not available. Try again.'), backgroundColor: Colors.red),
+            );
+          }
+        }
+      } else {
+        debugPrint('Razorpay error: ${response.statusCode} ${response.body}');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Payment error (${response.statusCode}). Try again.'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) Navigator.pop(context);
+      debugPrint('Razorpay error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Network error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Widget _buildCoursesTab() {
+    final List<Map<String, dynamic>> courses = [
+      {
+        'title': 'Discover Yourself (DYS)',
+        'subtitle': 'Science of Self, Mind & Meditation',
+        'duration': '6 Sessions',
+        'category': 'Foundational',
+        'price': '₹499',
+        'originalPrice': '₹999',
+        'icon': Icons.psychology_rounded,
+        'color': const Color(0xFF4F46E5),
+        'bg': const Color(0xFFEEF2FF),
+        'image': 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=600&q=80',
+        'description': 'Systematic course exploring life purpose, mind control, karma & meditation practices.',
+      },
+      {
+        'title': 'Bhagavad Gita As It Is',
+        'subtitle': '18 Chapters In-Depth Study',
+        'duration': '12 Weeks',
+        'category': 'Vedic Wisdom',
+        'price': '₹999',
+        'originalPrice': '₹1999',
+        'icon': Icons.auto_stories_rounded,
+        'color': const Color(0xFFD97706),
+        'bg': const Color(0xFFFFFBEB),
+        'image': 'https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=600&q=80',
+        'description': 'Learn timeless wisdom for daily life, duty, devotion, and inner peace.',
+      },
+      {
+        'title': 'Spiritual Scientist',
+        'subtitle': 'Consciousness & Scientific Evidence',
+        'duration': '4 Sessions',
+        'category': 'Science & Spirituality',
+        'price': '₹349',
+        'originalPrice': '₹699',
+        'icon': Icons.science_rounded,
+        'color': const Color(0xFF059669),
+        'bg': const Color(0xFFECFDF5),
+        'image': 'https://images.unsplash.com/photo-1507413245164-6160d8298b31?auto=format&fit=crop&w=600&q=80',
+        'description': 'Scientific inquiry into life, origin of species, consciousness, and cosmology.',
+      },
+      {
+        'title': 'Japa Yoga & Habit Building',
+        'subtitle': 'Mastering Mantra Meditation',
+        'duration': '3 Weeks',
+        'category': 'Practicum',
+        'price': '₹299',
+        'originalPrice': '₹599',
+        'icon': Icons.spa_rounded,
+        'color': const Color(0xFFDB2777),
+        'bg': const Color(0xFFFDF2F8),
+        'image': 'https://images.unsplash.com/photo-1609137144813-7d9921338f24?auto=format&fit=crop&w=600&q=80',
+        'description': 'Practical guide to morning habits, mantra meditation focus, and spiritual discipline.',
+      },
+    ];
+
+    final List<Map<String, dynamic>> displayCourses = _dynamicCourses.isNotEmpty
+        ? _dynamicCourses
+        : courses;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            margin: const EdgeInsets.only(bottom: 18),
+            width: double.infinity,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: const LinearGradient(
+                colors: [Color(0xFF3F1200), Color(0xFF7C2D12)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF3F1200).withValues(alpha: 0.25),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Stack(
+                children: [
+                  Positioned(
+                    right: -15,
+                    bottom: -15,
+                    child: Icon(
+                      Icons.auto_stories_rounded,
+                      size: 130,
+                      color: Colors.white.withValues(alpha: 0.08),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(18.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFDE68A),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Icon(Icons.stars_rounded, size: 14, color: Color(0xFF92400E)),
+                              SizedBox(width: 4),
+                              Text(
+                                'FOLK ACADEMY BANNER',
+                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Color(0xFF92400E), letterSpacing: 0.5),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Transform Your Life with Vedic Wisdom',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white, height: 1.2),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Explore interactive youth workshops, mind management & mantra meditation courses guided by experienced preachers.',
+                          style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.9), height: 1.35),
+                        ),
+                        const SizedBox(height: 14),
+                        Row(
+                          children: [
+                            _buildBannerTag(Icons.workspace_premium_rounded, 'Certificate'),
+                            const SizedBox(width: 8),
+                            _buildBannerTag(Icons.groups_rounded, 'Live Sessions'),
+                            const SizedBox(width: 8),
+                            _buildBannerTag(Icons.sell_rounded, 'Paid Courses'),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Vedic & Youth Growth Courses',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDCFCE7),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${displayCourses.length} Available',
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ...displayCourses.map((crs) {
+            final Color themeColor = crs['color'] is Color
+                ? crs['color'] as Color
+                : const Color(0xFF4F46E5);
+            final Color bgColor = crs['bg'] is Color
+                ? crs['bg'] as Color
+                : const Color(0xFFEEF2FF);
+            final IconData icon = crs['icon'] is IconData
+                ? crs['icon'] as IconData
+                : Icons.auto_stories_rounded;
+            final String imageUrl = (crs['image'] ?? crs['bannerImage'] ?? 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=600&q=80').toString();
+
+            return Card(
+              margin: const EdgeInsets.only(bottom: 14),
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: const BorderSide(color: Color(0xFFE2E8F0)),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: Image.network(
+                      imageUrl,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      cacheWidth: 600,
+                      errorBuilder: (_, __, ___) => Container(color: themeColor),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: bgColor,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(icon, color: themeColor, size: 22),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: bgColor,
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      crs['category'].toString().toUpperCase(),
+                                      style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: themeColor),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    crs['title'],
+                                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                                  ),
+                                  Text(
+                                    crs['subtitle'],
+                                    style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          crs['description'],
+                          style: const TextStyle(fontSize: 12.5, color: Color(0xFF475569), height: 1.4),
+                        ),
+                        const SizedBox(height: 14),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.schedule, size: 13, color: Color(0xFF64748B)),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      crs['duration'],
+                                      style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    Text(
+                                      crs['originalPrice'] ?? '',
+                                      style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8), decoration: TextDecoration.lineThrough),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      crs['price'] ?? '',
+                                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                _showCoursePaymentDialog(crs);
+                              },
+                              icon: const Icon(Icons.shopping_cart_outlined, size: 16),
+                              label: Text('Buy Course (${crs['price']})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF3F1200),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfileTab() {
+    final rawWhatsapp = _profile?['whatsapp_number'] as String? ?? '';
+    String displayWhatsapp = '';
+    String displayDob = _profile?['dob'] ?? '';
+    String displayJoin = _profile?['joining_date'] ?? '';
+
+    if (rawWhatsapp.contains('|')) {
+      final parts = rawWhatsapp.split('|');
+      displayWhatsapp = parts[0].trim();
+      for (var part in parts) {
+        if (part.contains('DOB:')) {
+          displayDob = part.replaceAll('DOB:', '').trim();
+        } else if (part.contains('JOIN:')) {
+          displayJoin = part.replaceAll('JOIN:', '').trim();
+        }
+      }
+    } else {
+      displayWhatsapp = rawWhatsapp.trim();
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      child: Column(
+        children: [
+          Card(
+            color: Colors.white,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+              side: const BorderSide(color: Color(0xFFE2E8F0)),
+            ),
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
+                    children: [
+                      InkWell(
+                        onTap: _isSavingProfile ? null : _updatePhoto,
+                        child: CircleAvatar(
+                          radius: 40,
+                          backgroundImage: _photoUrl != null ? NetworkImage(_photoUrl!) : null,
+                          backgroundColor: const Color(0xFFF1F5F9),
+                          child: _photoUrl == null
+                              ? Text(
+                                  (_profile?['name'] ?? 'U')[0].toUpperCase(),
+                                  style: const TextStyle(
+                                    fontSize: 32,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF3F1200),
+                                  ),
+                                )
+                              : null,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _profile?['name'] ?? 'Folk Boy Student',
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              'FOLK BOY STUDENT',
+                              style: TextStyle(color: Color(0xFF3F1200), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1),
+                            ),
+                          ],
+                        ),
+                      )
+                    ],
+                  ),
+                ),
+                
+                const Divider(height: 1, color: Color(0xFFF1F5F9), thickness: 1.5),
+
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const CircleAvatar(
+                            backgroundColor: Color(0xFFEEF2F6),
+                            child: Icon(Icons.person_outline, color: Color(0xFF3F1200)),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Personal Information',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black87),
+                                ),
+                                const SizedBox(height: 2),
+                                const Text(
+                                  'Your profile details',
+                                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 32),
+                      _buildProfileInfoRow(Icons.person_outline, 'Full Name', _profile?['name'] ?? ''),
+                      const Divider(height: 20, color: Color(0xFFF1F5F9)),
+                      _buildProfileInfoRow(Icons.psychology_outlined, 'Preacher', _preacher?['name'] ?? 'Preacher'),
+                      const Divider(height: 20, color: Color(0xFFF1F5F9)),
+                      _buildProfileInfoRow(Icons.phone_android_outlined, 'WhatsApp Number', displayWhatsapp),
+                      const Divider(height: 20, color: Color(0xFFF1F5F9)),
+                      _buildProfileInfoRow(Icons.cake_outlined, 'Date of Birth', displayDob),
+                      const Divider(height: 20, color: Color(0xFFF1F5F9)),
+                      _buildProfileInfoRow(Icons.calendar_month_outlined, 'Joining Date', displayJoin),
+                      const Divider(height: 20, color: Color(0xFFF1F5F9)),
+                      _buildProfileInfoRow(Icons.email_outlined, 'Email Address', _profile?['email'] ?? ''),
+                    ],
+                  ),
+                ),
+
+                const Divider(height: 1, color: Color(0xFFF1F5F9), thickness: 1.5),
+
+                Padding(
+                  padding: const EdgeInsets.only(top: 20, bottom: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ListTile(
+                        leading: const CircleAvatar(
+                          backgroundColor: Color(0xFFF8FAFC),
+                          child: Icon(Icons.help_outline_rounded, color: Color(0xFF3F1200)),
+                        ),
+                        title: const Text('About the App', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        subtitle: const Text('View app version and description', style: TextStyle(fontSize: 12)),
+                        onTap: _showAboutDialog,
+                      ),
+                      const Divider(indent: 56),
+                      ListTile(
+                        leading: const CircleAvatar(
+                          backgroundColor: Color(0xFFF8FAFC),
+                          child: Icon(Icons.rate_review_outlined, color: Color(0xFF3F1200)),
+                        ),
+                        title: const Text('Feedback & Suggestions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        subtitle: const Text('Send us your valuable feedback', style: TextStyle(fontSize: 12)),
+                        onTap: _showFeedbackDialog,
+                      ),
+                      const Divider(indent: 56),
+                      ListTile(
+                        leading: const CircleAvatar(
+                          backgroundColor: Color(0xFFF8FAFC),
+                          child: Icon(Icons.privacy_tip_outlined, color: Color(0xFF3F1200)),
+                        ),
+                        title: const Text('Privacy Policy', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        subtitle: const Text('Read our data and privacy terms', style: TextStyle(fontSize: 12)),
+                        onTap: _showPrivacyPolicyDialog,
+                      ),
+                      const Divider(indent: 56),
+                      ListTile(
+                        leading: const CircleAvatar(
+                          backgroundColor: Color(0xFFF8FAFC),
+                          child: Icon(Icons.star_outline_rounded, color: Color(0xFF3F1200)),
+                        ),
+                        title: const Text('Rate the App', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        subtitle: const Text('Show your support in the store', style: TextStyle(fontSize: 12)),
+                        onTap: _showRateAppDialog,
+                      ),
+                      const Divider(indent: 56),
+                      ListTile(
+                        leading: const CircleAvatar(
+                          backgroundColor: Color(0xFFF8FAFC),
+                          child: Icon(Icons.share_outlined, color: Color(0xFF3F1200)),
+                        ),
+                        title: const Text('Share App', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        subtitle: const Text('Invite other students to track sadhana', style: TextStyle(fontSize: 12)),
+                        onTap: _shareApp,
+                      ),
+                    ],
+                  ),
+                ),
+                
+                const Divider(height: 1, color: Color(0xFFF1F5F9), thickness: 1.5),
+
+                Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Session Management',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF94A3B8), letterSpacing: 1),
+                      ),
+                      const SizedBox(height: 12),
+                      _SwipeToLogoutButton(
+                        onSwipeCompleted: () async {
+                          try {
+                            await FirebaseAuth.instance.signOut();
+                          } catch (_) {}
+                          if (mounted) {
+                            Navigator.pushReplacementNamed(context, '/login');
+                          }
                         },
                       ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfileInfoRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 20,
+            backgroundColor: const Color(0xFF3F1200).withValues(alpha: 0.06),
+            child: Icon(icon, color: const Color(0xFF3F1200), size: 20),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  value.isNotEmpty ? value : 'Not specified',
+                  style: const TextStyle(fontSize: 14, color: Color(0xFF1E293B), fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _updatePhoto() async {
+    setState(() => _isSavingProfile = true);
+    try {
+      final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+      if (pickedFile != null) {
+        final url = await CloudinaryService.uploadToCloudinary(File(pickedFile.path));
+        await ApiService.patch('/users/me', {'photo_url': url});
+        setState(() {
+          _photoUrl = url;
+          _profile!['photo_url'] = url;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Profile photo updated successfully!')),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error selecting photo: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error updating photo: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSavingProfile = false);
+      }
+    }
+  }
+
+  void _showAboutDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('About the App', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Sadhana Path Tracker', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF3F1200))),
+            SizedBox(height: 8),
+            Text('Version: 1.0.0', style: TextStyle(color: Colors.grey, fontSize: 13)),
+            SizedBox(height: 12),
+            Text(
+              'This application is built to help preachers track the daily devotional sadhana practices (chanting, hearing, reading, and attendance) of their students, building a spiritually active community.',
+              style: TextStyle(fontSize: 14, height: 1.4),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('CLOSE', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF3F1200))),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showFeedbackDialog() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('Feedback & Suggestions', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: TextField(
+          controller: controller,
+          maxLines: 4,
+          decoration: const InputDecoration(
+            hintText: 'Enter your suggestions or report issues here...',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('CANCEL', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Thank you for your feedback!')),
+              );
+            },
+            child: const Text('SUBMIT', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF3F1200))),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showPrivacyPolicyDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('Privacy Policy', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: const SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Last updated: July 9, 2026\n\nThis privacy policy governs your use of the mobile application "Sadhana Path Tracker". The Application helps students record daily spiritual activities (sadhana) and share them with their assigned preachers.',
+                  style: TextStyle(fontSize: 13, height: 1.4),
+                ),
+                SizedBox(height: 12),
+                Text('1. Information We Collect', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                SizedBox(height: 4),
+                Text(
+                  '• Account Info: Name, Email, Phone/WhatsApp, Profile Photo.\n'
+                  '• Sadhana Data: Daily spiritual activity entries (chanting rounds, reading logs, wake-up/sleep hours, fasts).\n'
+                  '• Usage Stats: Screen time usage statistics (optional).',
+                  style: TextStyle(fontSize: 13, height: 1.4),
+                ),
+                SizedBox(height: 12),
+                Text('2. Permissions Required', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                SizedBox(height: 4),
+                Text(
+                  '• Gallery Access: For uploading profile photo.\n'
+                  '• Notification Permission: For daily sadhana reminders.\n'
+                  '• Usage Stats Access: To log daily device screen time.',
+                  style: TextStyle(fontSize: 13, height: 1.4),
+                ),
+                SizedBox(height: 12),
+                Text('3. Data Sharing & Security', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                SizedBox(height: 4),
+                Text(
+                  'We do not sell, rent or share your data with commercial third parties. Your data is encrypted and shared only with your explicitly assigned preacher.\n\nUser data is stored securely using cloud database systems (MongoDB & Cloudinary) protected by NestJS security filters.',
+                  style: TextStyle(fontSize: 13, height: 1.4),
+                ),
+                SizedBox(height: 12),
+                Text('4. Data Deletion Rights', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                SizedBox(height: 4),
+                Text(
+                  'You have the right to request deletion of your account and data at any time. For support or deletion, contact us at: abhaykumarsalempur8521@gmail.com',
+                  style: TextStyle(fontSize: 13, height: 1.4),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('CLOSE', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF3F1200))),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRateAppDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('Rate the App', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: const Text('Would you like to support us by rating this app in the app store?', style: TextStyle(fontSize: 14)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('LATER', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Redirecting to App Store...')),
+              );
+            },
+            child: const Text('RATE NOW', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF3F1200))),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _shareApp() {
+    Clipboard.setData(const ClipboardData(text: 'Check out the Sadhana Tracker App to track your daily sadhana! https://sadhana-tracker.example.com'));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('App sharing link copied to clipboard!')),
+    );
+  }
+
+  void _contactPreacher() {
+    if (_profile == null) return;
+    if (_preacher == null) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: const Text('No Preacher Assigned', style: TextStyle(fontWeight: FontWeight.bold)),
+          content: const Text('You do not have a preacher assigned to your profile yet. Please contact the administrator.', style: TextStyle(fontSize: 14)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF3F1200))),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final rawWhatsapp = (_preacher!['phoneNumber'] ?? _preacher!['whatsapp_number'] ?? _preacher!['phone'] ?? '') as String;
+    String preacherWhatsapp = '';
+    if (rawWhatsapp.contains('|')) {
+      preacherWhatsapp = rawWhatsapp.split('|')[0].trim();
+    } else {
+      preacherWhatsapp = rawWhatsapp.trim();
+    }
+
+    final preacherName = _preacher!['name'] ?? 'Preacher';
+    final studentName = _profile!['name'] ?? 'Student';
+    final preacherPhoto = _preacher!['photoUrl'] ?? _preacher!['photo_url'];
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('Message Preacher', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircleAvatar(
+              radius: 36,
+              backgroundImage: preacherPhoto != null ? NetworkImage(preacherPhoto) : null,
+              backgroundColor: const Color(0xFFF1F5F9),
+              child: preacherPhoto == null
+                  ? Text(
+                      preacherName[0].toUpperCase(),
+                      style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF3F1200)),
+                    )
+                  : null,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              preacherName,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF3F1200)),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'For approvals, questions, or guidance, you can send a message to your preacher directly on WhatsApp.',
+              style: TextStyle(fontSize: 13, color: Colors.grey, height: 1.3),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('CANCEL', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              if (preacherWhatsapp.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Preacher WhatsApp number is not available.')),
+                );
+                return;
+              }
+              String cleanPhone = preacherWhatsapp.replaceAll(RegExp(r'[^0-9]'), '');
+              if (cleanPhone.length == 10) {
+                cleanPhone = '91$cleanPhone';
+              }
+              final message = 'Hare Krishna, Preacher! I am $studentName. I have a query/request regarding...';
+              final whatsappUrl = 'https://wa.me/$cleanPhone?text=${Uri.encodeComponent(message)}';
+              final uri = Uri.parse(whatsappUrl);
+              try {
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                } else {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Could not launch WhatsApp')),
+                    );
+                  }
+                }
+              } catch (e) {
+                debugPrint('WhatsApp launch error: $e');
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF25D366),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('WHATSAPP', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInlineSadhanaCard() {
+    final List<String> activities = [
+      'Morning',
+      'Mangla Arti',
+      'Chanting',
+      'Online Session',
+      'Book Reading',
+      'Service',
+      'Temple Visit',
+      'Srimad Bhagavatam Class',
+      'Bhagavad Gita Class',
+      'Ekadashi Fasting',
+      'Sleep',
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Your Sadhana',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF0F172A),
+          ),
+        ),
+        const SizedBox(height: 12),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: activities.length,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+            childAspectRatio: 3.0,
+          ),
+          itemBuilder: (context, index) {
+            return _buildSadhanaGridCard(activities[index]);
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSadhanaGridCard(String activity) {
+    final loggedDetails = _getSadhanaLoggedDetails(activity);
+    final isLogged = loggedDetails != null;
+
+    IconData icon;
+    const Color themeColor = Color(0xFF3F1200);
+    const Color boxBgColor = Color(0xFFFAF5F0);
+    const Color borderColor = Color(0xFFE8DCD5);
+
+    switch (activity) {
+      case 'Morning':
+        icon = Icons.wb_sunny_rounded;
+        break;
+      case 'Mangla Arti':
+        icon = Icons.wb_twilight_rounded;
+        break;
+      case 'Chanting':
+        icon = Icons.trip_origin_rounded;
+        break;
+      case 'Online Session':
+        icon = Icons.devices_rounded;
+        break;
+      case 'Book Reading':
+        icon = Icons.menu_book_rounded;
+        break;
+      case 'Service':
+        icon = Icons.volunteer_activism_rounded;
+        break;
+      case 'Temple Visit':
+        icon = Icons.temple_hindu_rounded;
+        break;
+      case 'Srimad Bhagavatam Class':
+        icon = Icons.library_books_rounded;
+        break;
+      case 'Bhagavad Gita Class':
+        icon = Icons.auto_stories_rounded;
+        break;
+      case 'Ekadashi Fasting':
+      case 'Ekadashi':
+        icon = Icons.spa_rounded;
+        break;
+      case 'Sleep':
+        icon = Icons.bedtime_rounded;
+        break;
+      default:
+        icon = Icons.check_circle_outline_rounded;
+    }
+
+    final isLocked = _isDayLockedByPreacher;
+    final String titleText = activity == 'Morning'
+        ? 'Morning Wake-Up'
+        : (activity == 'Sleep' ? 'Sleep Time' : activity);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: isLocked
+            ? () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Today tracking is locked by your preacher!')),
+                );
+              }
+            : () async {
+                if (activity == 'Morning') {
+                  final time = await showTimePicker(
+                    context: context,
+                    initialTime: _wakeUpTime,
+                    initialEntryMode: TimePickerEntryMode.dialOnly,
+                    builder: (context, child) {
+                      return MediaQuery(
+                        data: MediaQuery.of(context).copyWith(
+                          textScaler: const TextScaler.linear(1.0),
+                        ),
+                        child: child!,
+                      );
+                    },
+                  );
+                  if (time != null) {
+                    setState(() {
+                      _wakeUpTime = time;
+                    });
+                    await _handleInlineSave('Morning');
+                  }
+                } else if (activity == 'Mangla Arti') {
+                  final time = await showTimePicker(
+                    context: context,
+                    initialTime: _manglaStartTime,
+                    initialEntryMode: TimePickerEntryMode.dialOnly,
+                    builder: (context, child) {
+                      return MediaQuery(
+                        data: MediaQuery.of(context).copyWith(
+                          textScaler: const TextScaler.linear(1.0),
+                        ),
+                        child: child!,
+                      );
+                    },
+                  );
+                  if (time != null) {
+                    setState(() {
+                      _manglaStartTime = time;
+                    });
+                    await _handleInlineSave('Mangla Arti');
+                  }
+                } else if (activity == 'Sleep') {
+                  final time = await showTimePicker(
+                    context: context,
+                    initialTime: _sleepTime,
+                    initialEntryMode: TimePickerEntryMode.dialOnly,
+                    builder: (context, child) {
+                      return MediaQuery(
+                        data: MediaQuery.of(context).copyWith(
+                          textScaler: const TextScaler.linear(1.0),
+                        ),
+                        child: child!,
+                      );
+                    },
+                  );
+                  if (time != null) {
+                    setState(() {
+                      _sleepTime = time;
+                    });
+                    await _handleInlineSave('Sleep');
+                  }
+                } else {
+                  _openSadhanaModal(activity);
+                }
+              },
+        borderRadius: BorderRadius.circular(10),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          decoration: BoxDecoration(
+            color: isLogged ? themeColor.withValues(alpha: 0.12) : boxBgColor,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isLogged ? themeColor.withValues(alpha: 0.5) : borderColor,
+              width: isLogged ? 1.2 : 0.9,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: isLogged ? themeColor.withValues(alpha: 0.2) : themeColor.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: activity == 'Chanting'
+                    ? Padding(
+                        padding: const EdgeInsets.all(3.0),
+                        child: Image.asset(
+                          'assets/mala.png',
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const Icon(
+                              Icons.trip_origin_rounded,
+                              size: 13,
+                              color: themeColor,
+                            );
+                          },
+                        ),
+                      )
+                    : Icon(
+                        icon,
+                        size: 13,
+                        color: themeColor,
+                      ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      titleText,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                        color: Color(0xFF0F172A),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (isLogged && loggedDetails.isNotEmpty) ...[
+                      const SizedBox(height: 1),
+                      Text(
+                        loggedDetails,
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.bold,
+                          color: themeColor,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 2),
+              Icon(
+                isLogged ? Icons.check_circle_rounded : Icons.add_circle_outline_rounded,
+                size: 14,
+                color: isLogged ? themeColor : themeColor.withValues(alpha: 0.4),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _optimizeCloudinaryUrl(String url) {
+    if (url.contains('res.cloudinary.com') && url.contains('/upload/') && !url.contains('f_auto')) {
+      return url.replaceFirst('/upload/', '/upload/f_auto,q_auto,w_600,c_limit/');
+    }
+    return url;
+  }
+
+  Widget _buildDailyDarshanCard() {
+    if (_todayDarshan == null) return const SizedBox.shrink();
+
+    final title = _todayDarshan!['title'] as String? ?? '';
+    final List<dynamic> rawUrls = _todayDarshan!['imageUrls'] is List ? _todayDarshan!['imageUrls'] : [];
+    final List<String> imageUrls = rawUrls.map((u) => _optimizeCloudinaryUrl(u.toString())).toList();
+    if (imageUrls.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Daily Darshan',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0F172A),
+              ),
+            ),
+            if (title.isNotEmpty)
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF64748B),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        _DailyDarshanCarouselWidget(
+          imageUrls: imageUrls,
+          onTapImage: (idx) => _openFullDarshanDialog(imageUrls, idx),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDailyQuoteCard() {
+    if (_todayQuote == null) return const SizedBox.shrink();
+
+    final List<dynamic> rawUrls = _todayQuote!['imageUrls'] is List ? _todayQuote!['imageUrls'] : [];
+    final String singleUrl = _todayQuote!['imageUrl'] as String? ?? '';
+
+    List<String> imageUrls = rawUrls.map((u) => _optimizeCloudinaryUrl(u.toString())).toList();
+    if (imageUrls.isEmpty && singleUrl.isNotEmpty) {
+      imageUrls = [_optimizeCloudinaryUrl(singleUrl)];
+    }
+
+    if (imageUrls.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: const [
+            Text(
+              'Daily Quotes',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0F172A),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        _DailyDarshanCarouselWidget(
+          imageUrls: imageUrls,
+          onTapImage: (idx) => _openFullDarshanDialog(imageUrls, idx),
+        ),
+      ],
+    );
+  }
+
+  void _openFullDarshanDialog(List<String> urls, int initialIndex) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final PageController pageController = PageController(initialPage: initialIndex);
+        return Dialog(
+          backgroundColor: Colors.black,
+          insetPadding: EdgeInsets.zero,
+          child: Stack(
+            children: [
+              PageView.builder(
+                controller: pageController,
+                itemCount: urls.length,
+                itemBuilder: (context, idx) {
+                  return InteractiveViewer(
+                    minScale: 0.8,
+                    maxScale: 4.0,
+                    child: Center(
+                      child: _buildSmartImage(
+                        _optimizeCloudinaryUrl(urls[idx]),
+                        fit: BoxFit.contain,
+                        placeholderBgColor: Colors.black,
+                        loadingColor: Colors.white,
+                      ),
+                    ),
+                  );
+                },
+              ),
+              Positioned(
+                top: 40,
+                right: 20,
+                child: IconButton(
+                  icon: const Icon(Icons.close_rounded, color: Colors.white, size: 30),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  static Widget _buildSmartImage(
+    String url, {
+    BoxFit fit = BoxFit.cover,
+    double? width,
+    double? height,
+    Color? placeholderBgColor,
+    Color? loadingColor,
+  }) {
+    if (url.startsWith('data:image/') || url.startsWith('data:')) {
+      try {
+        final base64String = url.split(',').last;
+        final Uint8List bytes = base64Decode(base64String);
+        return Image.memory(
+          bytes,
+          width: width,
+          height: height,
+          fit: fit,
+          errorBuilder: (context, err, stack) => Container(
+            color: placeholderBgColor ?? const Color(0xFFF1F5F9),
+            child: const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+          ),
+        );
+      } catch (e) {
+        return Container(
+          color: placeholderBgColor ?? const Color(0xFFF1F5F9),
+          child: const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+        );
+      }
+    } else {
+      return Image.network(
+        url,
+        width: width,
+        height: height,
+        fit: fit,
+        gaplessPlayback: true,
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return Container(
+            color: placeholderBgColor ?? const Color(0xFFF1F5F9),
+            child: Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(loadingColor ?? const Color(0xFF0F172A)),
+                ),
+              ),
+            ),
+          );
+        },
+        errorBuilder: (context, err, stack) => Container(
+          color: placeholderBgColor ?? const Color(0xFFF1F5F9),
+          child: const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+        ),
+      );
+    }
+  }
+
+  String? _getSadhanaLoggedDetails(String activity) {
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final String targetDate = today;
+
+    try {
+      final match = _updates.firstWhere((u) {
+        final uDate = u['date'];
+        if (uDate != targetDate) return false;
+        final category = u['category'] ?? '';
+        if (category != 'folk_sadhna') return false;
+        final workStarted = u['work_started'].toString();
+        if (activity == 'Chanting') {
+          return workStarted.startsWith('Chanting');
+        }
+        if (activity == 'Mangla Arti') {
+          return workStarted.contains('Mangla Arti');
+        }
+        if (activity == 'Online Session') {
+          return workStarted.startsWith('Online Session');
+        }
+        if (activity == 'Book Reading') {
+          return workStarted.startsWith('Book Reading');
+        }
+        if (activity == 'Service') {
+          return workStarted.startsWith('Service');
+        }
+        if (activity == 'Temple Visit') {
+          return workStarted.startsWith('Temple Visit');
+        }
+        if (activity == 'Srimad Bhagavatam Class') {
+          return workStarted.startsWith('Srimad Bhagavatam Class');
+        }
+        if (activity == 'Bhagavad Gita Class') {
+          return workStarted.startsWith('Bhagavad Gita Class');
+        }
+        if (activity == 'Morning') {
+          return workStarted.startsWith('Morning');
+        }
+        if (activity == 'Sleep') {
+          return workStarted.startsWith('Sleep');
+        }
+        if (activity == 'Ekadashi Fasting' || activity == 'Ekadashi') {
+          return workStarted.contains('Ekadashi');
+        }
+        return false;
+      });
+
+      final String ws = match['work_started'].toString();
+      if (activity == 'Chanting') {
+        if (ws.contains('-')) {
+          return ws.split('-').skip(1).join('-').trim();
+        }
+      } else if (activity == 'Book Reading') {
+        if (ws.contains('-')) {
+          return ws.split('-').skip(1).join('-').trim();
+        }
+      } else if (activity == 'Service') {
+        if (ws.contains('-')) {
+          return ws.split('-').skip(1).join('-').trim();
+        }
+      } else if (activity == 'Mangla Arti') {
+        if (ws.contains('(')) {
+          return ws.substring(ws.indexOf('(') + 1, ws.indexOf(')')).trim();
+        }
+      } else if (activity == 'Online Session' ||
+                 activity == 'Srimad Bhagavatam Class' ||
+                 activity == 'Bhagavad Gita Class') {
+        if (ws.contains('(')) {
+          return ws.substring(ws.indexOf('(') + 1, ws.indexOf(')')).trim();
+        }
+      } else if (activity == 'Morning') {
+        if (ws.contains('Wake-up:')) {
+          return ws.split('Wake-up:')[1].replaceAll(')', '').trim();
+        }
+      } else if (activity == 'Sleep') {
+        if (ws.contains('Time:')) {
+          return ws.split('Time:')[1].replaceAll(')', '').trim();
+        }
+      } else if (activity == 'Ekadashi Fasting' || activity == 'Ekadashi') {
+        if (ws.contains(':')) {
+          return ws.split(':')[1].trim();
+        }
+        return 'Logged';
+      } else if (activity == 'Temple Visit') {
+        return 'Logged';
+      }
+      return ws;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _showSuccessDialog(String message) {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        Future.delayed(const Duration(milliseconds: 1800), () {
+          if (dialogContext.mounted && Navigator.canPop(dialogContext)) {
+            Navigator.pop(dialogContext);
+          }
+        });
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          backgroundColor: Colors.white,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFDCFCE7),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.check_circle_rounded,
+                    color: Color(0xFF16A34A),
+                    size: 36,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _handleInlineSave(String activity) async {
+    if (_profile == null) return;
+    if (_isDayLockedByPreacher) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Today tracking is locked by your preacher!')),
+      );
+      return;
+    }
+
+    setState(() => _savingStatus[activity] = true);
+
+    String label = activity;
+    int points = 0;
+
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    String targetDate = today;
+
+    if (activity == 'Temple Visit') {
+      targetDate = DateFormat('yyyy-MM-dd').format(_templeVisitDate);
+    }
+
+    if (activity == 'Chanting') {
+      final val = int.tryParse(_roundsController.text);
+      if (val == null || val <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please enter a valid number of rounds')),
+        );
+        setState(() => _savingStatus[activity] = false);
+        return;
+      }
+      label = 'Chanting - $val Rounds';
+      points = val >= 16 ? 10 : 5;
+    } else if (activity == 'Book Reading') {
+      if (_bookController.text.isEmpty || _readingValueController.text.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please enter book name and reading pages/minutes')),
+        );
+        setState(() => _savingStatus[activity] = false);
+        return;
+      }
+      label = 'Book Reading - ${_bookController.text} (${_readingValueController.text} $_readingUnit)';
+      points = 5;
+    } else if (activity == 'Service') {
+      if (_serviceNameController.text.isEmpty || _serviceMinutesController.text.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please enter service name and minutes')),
+        );
+        setState(() => _savingStatus[activity] = false);
+        return;
+      }
+      label = 'Service - ${_serviceNameController.text} (${_serviceMinutesController.text} Mins)';
+      points = 5;
+    } else if (activity == 'Mangla Arti') {
+      final timeStr = '${_manglaStartTime.hour.toString().padLeft(2, '0')}:${_manglaStartTime.minute.toString().padLeft(2, '0')}';
+      label = 'Mangla Arti ($timeStr)';
+      points = 10;
+    } else if (activity == 'Online Session') {
+      final startStr = '${_onlineStartTime.hour.toString().padLeft(2, '0')}:${_onlineStartTime.minute.toString().padLeft(2, '0')}';
+      final endStr = '${_onlineEndTime.hour.toString().padLeft(2, '0')}:${_onlineEndTime.minute.toString().padLeft(2, '0')}';
+      label = 'Online Session ($startStr to $endStr)';
+      points = 5;
+    } else if (activity == 'Srimad Bhagavatam Class') {
+      final startStr = '${_sbStartTime.hour.toString().padLeft(2, '0')}:${_sbStartTime.minute.toString().padLeft(2, '0')}';
+      final endStr = '${_sbEndTime.hour.toString().padLeft(2, '0')}:${_sbEndTime.minute.toString().padLeft(2, '0')}';
+      label = 'Srimad Bhagavatam Class ($startStr to $endStr)';
+      points = 5;
+    } else if (activity == 'Bhagavad Gita Class') {
+      final startStr = '${_bgStartTime.hour.toString().padLeft(2, '0')}:${_bgStartTime.minute.toString().padLeft(2, '0')}';
+      final endStr = '${_bgEndTime.hour.toString().padLeft(2, '0')}:${_bgEndTime.minute.toString().padLeft(2, '0')}';
+      label = 'Bhagavad Gita Class ($startStr to $endStr)';
+      points = 5;
+    } else if (activity == 'Morning') {
+      final timeStr = _wakeUpTime.format(context);
+      label = 'Morning (Wake-up: $timeStr)';
+      points = 5;
+    } else if (activity == 'Sleep') {
+      final timeStr = _sleepTime.format(context);
+      label = 'Sleep (Time: $timeStr)';
+      points = 5;
+    } else {
+      points = 5;
+    }
+
+    final isDuplicate = _updates.any((u) {
+      final uDate = u['date'];
+      if (uDate != targetDate || u['is_completed'] == false) return false;
+      final workStarted = u['work_started'].toString();
+
+      if (activity == 'Service' || activity == 'Book Reading') {
+        return workStarted.toLowerCase() == label.toLowerCase();
+      }
+      return workStarted.toLowerCase().startsWith(activity.toLowerCase());
+    });
+
+    if (isDuplicate) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('You have already logged $activity for $targetDate!')),
+      );
+      setState(() => _savingStatus[activity] = false);
+      return;
+    }
+
+    try {
+      final isMangla = activity == 'Mangla Arti';
+      final updateData = {
+        'worker_id': _profile!['id'] ?? _profile!['_id'],
+        'worker_name': _profile!['name'],
+        'preacher_name': _preacher?['name'] ?? 'Preacher',
+        'category': 'folk_sadhna',
+        'work_started': label,
+        'description': 'Log date: $targetDate\nCategory: $activity',
+        'work_completed': isMangla ? null : DateFormat('hh:mm a').format(DateTime.now()),
+        'is_completed': isMangla ? false : true,
+        'date': targetDate,
+        'points': points,
+      };
+
+      // 1. Instantly update local list and UI - 0 MILLISECONDS DELAY!
+      final tempId = 'temp_${DateTime.now().millisecondsSinceEpoch}';
+      final localItem = {
+        '_id': tempId,
+        'id': tempId,
+        ...updateData,
+        'created_at': DateTime.now().toIso8601String(),
+      };
+
+      setState(() {
+        _updates.insert(0, localItem);
+        _savingStatus[activity] = false;
+        if (activity == 'Book Reading') {
+          _bookController.clear();
+          _readingValueController.clear();
+        } else if (activity == 'Service') {
+          _serviceNameController.clear();
+          _serviceMinutesController.clear();
+        }
+      });
+
+      if (mounted) {
+        _showSuccessDialog('$label logged successfully!');
+      }
+
+      // 2. Perform network sync asynchronously in the background
+      Future(() async {
+        try {
+          await ApiService.post('/sadhana', updateData);
+          await _fetchUpdates();
+        } catch (err) {
+          debugPrint('🚨 [SADHANA SYNC ERROR LOG]: $err');
+          try {
+            await ApiService.post('/sadhana', {
+              'dateString': targetDate,
+              'timezoneOffsetMinutes': DateTime.now().timeZoneOffset.inMinutes,
+              'activities': {
+                if (activity == 'Morning' || activity == 'Morning Wake-Up') 'wakeUpTime': DateFormat('hh:mm a').format(DateTime.now()),
+                if (activity == 'Sleep' || activity == 'Sleep Time') 'sleepTime': DateFormat('hh:mm a').format(DateTime.now()),
+                if (activity == 'Mangla Arti') 'manglaArti': {'attended': true},
+                if (activity == 'Chanting') 'chanting': {'rounds': 16},
+                if (activity == 'Online Session') 'onlineSession': {'attended': true},
+                if (activity == 'Book Reading') 'bookReading': {'bookName': _bookController.text.trim().isEmpty ? 'Book' : _bookController.text.trim()},
+                if (activity == 'Service') 'service': {'serviceName': _serviceNameController.text.trim().isEmpty ? 'Service' : _serviceNameController.text.trim()},
+                if (activity == 'Temple Visit') 'templeVisit': {'visited': true},
+                if (activity == 'Srimad Bhagavatam Class') 'srimadBhagavatamClass': {'attended': true},
+                if (activity == 'Bhagavad Gita Class') 'bhagavadGitaClass': {'attended': true},
+                if (activity == 'Ekadashi Fasting') 'ekadashiFasting': {'fastingType': 'Fasting'},
+              },
+            });
+            await _fetchUpdates();
+          } catch (fallbackErr) {
+            debugPrint('🚨 [SADHANA FALLBACK SYNC ERROR LOG]: $fallbackErr');
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('⚠️ Sadhana Sync Error: ${fallbackErr.toString()}'),
+                  backgroundColor: Colors.redAccent,
+                ),
+              );
+            }
+          }
+        }
+        NotificationHelper.sendUpdateNotification(updateData).catchError((_) {});
+      });
+    } catch (e) {
+      debugPrint('🚨 [SADHANA LOG ERROR]: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save log: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _savingStatus[activity] = false);
+    }
+  }
+
+  Widget _buildServiceListItem({
+    required String title,
+    required IconData icon,
+    required VoidCallback onTap,
+    int badgeCount = 0,
+  }) {
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 12),
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.grey[200]!),
+      ),
+      child: ListTile(
+        onTap: onTap,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        leading: CircleAvatar(
+          backgroundColor: const Color(0xFF3F1200).withValues(alpha: 0.08),
+          child: Icon(icon, color: const Color(0xFF3F1200), size: 22),
+        ),
+        title: Text(
+          title,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1E293B)),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (badgeCount > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                margin: const EdgeInsets.only(right: 8),
+                decoration: BoxDecoration(
+                  color: Colors.redAccent.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '$badgeCount',
+                  style: const TextStyle(
+                    color: Colors.redAccent,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey),
           ],
         ),
       ),
@@ -1660,11 +4092,10 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   void _handleResidencyAdmission() {
     if (_profile == null) return;
 
-    // Check if there is already a pending or completed residency admission request
     final hasPendingOrApproved = _updates.any((u) => u['category'] == 'residency_admission');
     if (hasPendingOrApproved) {
       final existing = _updates.where((u) => u['category'] == 'residency_admission').toList();
-      if (existing.isEmpty) return; // safety check
+      if (existing.isEmpty) return;
       final firstExisting = existing.first;
       final isApproved = firstExisting['is_completed'] == true;
       showDialog(
@@ -1711,105 +4142,6 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     );
   }
 
-  void _handleQuiz() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: const Row(
-          children: [
-            Icon(Icons.quiz_outlined, color: Color(0xFFEA580C)),
-            SizedBox(width: 10),
-            Text('Quiz', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-          ],
-        ),
-        content: const Text(
-          'Quiz feature coming soon! Stay tuned.',
-          style: TextStyle(fontSize: 14, color: Color(0xFF475569)),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK', style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCategoryButton({
-    required String title,
-    required IconData icon,
-    required Color color,
-    required Color iconColor,
-    required VoidCallback onTap,
-    int badgeCount = 0,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(24),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: Colors.white,
-                  child: Icon(icon, color: iconColor, size: 28),
-                ),
-                if (badgeCount > 0)
-                  Positioned(
-                    right: -4,
-                    top: -4,
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: const BoxDecoration(
-                        color: Colors.red,
-                        shape: BoxShape.circle,
-                      ),
-                      constraints: const BoxConstraints(
-                        minWidth: 20,
-                        minHeight: 20,
-                      ),
-                      child: Center(
-                        child: Text(
-                          '$badgeCount',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-                color: Color(0xFF1E293B),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Future<void> _handleDeleteUpdate(dynamic id, String label) async {
     if (_isDayLockedByPreacher) {
       if (mounted) {
@@ -1841,7 +4173,10 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     if (confirm != true) return;
 
     try {
-      await supabase.from('updates').delete().eq('id', id);
+      setState(() {
+        _updates.removeWhere((u) => u['id'] == id || u['_id'] == id || (label.isNotEmpty && u['work_started'] == label));
+      });
+      await ApiService.delete('/sadhana/updates/$id');
       _fetchUpdates();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1850,6 +4185,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       }
     } catch (e) {
       debugPrint('Error deleting record: $e');
+      _fetchUpdates();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to delete: ${e.toString()}')),
@@ -1882,7 +4218,6 @@ class _PendingManglaArtiWidget extends StatefulWidget {
 }
 
 class _PendingManglaArtiWidgetState extends State<_PendingManglaArtiWidget> {
-  final supabase = Supabase.instance.client;
   String _endTime = '';
   bool _isSaving = false;
 
@@ -1952,12 +4287,12 @@ class _PendingManglaArtiWidgetState extends State<_PendingManglaArtiWidget> {
                           final currentLabel = widget.pendingUpdate['work_started'] ?? '';
                           final updatedLabel = '$currentLabel to $_endTime)';
 
-                          await supabase.from('updates').update({
+                          await ApiService.patch('/sadhana/updates/${widget.pendingUpdate['id'] ?? widget.pendingUpdate['_id']}', {
                             'is_completed': true,
                             'work_completed': _endTime,
                             'work_started': updatedLabel,
                             'description': updatedLabel,
-                          }).eq('id', widget.pendingUpdate['id']);
+                          });
 
                           widget.onComplete();
                         } catch (e) {
@@ -1984,7 +4319,8 @@ class _SadhanaLogSheet extends StatefulWidget {
   final String profileName;
   final String preacherName;
   final List<dynamic> updates;
-  final VoidCallback onSaveSuccess;
+  final Function(String msg) onSaveSuccess;
+  final String? initialOption;
 
   const _SadhanaLogSheet({
     required this.logDate,
@@ -1993,6 +4329,7 @@ class _SadhanaLogSheet extends StatefulWidget {
     required this.preacherName,
     required this.updates,
     required this.onSaveSuccess,
+    this.initialOption,
   });
 
   @override
@@ -2000,12 +4337,9 @@ class _SadhanaLogSheet extends StatefulWidget {
 }
 
 class _SadhanaLogSheetState extends State<_SadhanaLogSheet> {
-  final supabase = Supabase.instance.client;
-  
   String? _selectedSubOption;
   bool _isLoading = false;
 
-  // Logging values
   int _rounds = 16;
   final _roundsController = TextEditingController(text: '16');
   final _bookController = TextEditingController();
@@ -2014,7 +4348,6 @@ class _SadhanaLogSheetState extends State<_SadhanaLogSheet> {
   final _serviceNameController = TextEditingController();
   final _serviceMinutesController = TextEditingController();
   
-  // Ekadashi Logging values
   String _ekadashiFastingType = 'Ekadashi Prasadam (No Grains)';
   final _ekadashiNotesController = TextEditingController();
   
@@ -2028,6 +4361,7 @@ class _SadhanaLogSheetState extends State<_SadhanaLogSheet> {
   @override
   void initState() {
     super.initState();
+    _selectedSubOption = widget.initialOption;
     if (widget.logDate == 'Yesterday') {
       _templeVisitDate = DateTime.now().subtract(const Duration(days: 1));
     } else {
@@ -2042,7 +4376,7 @@ class _SadhanaLogSheetState extends State<_SadhanaLogSheet> {
       'Temple Visit',
       'Srimad Bhagavatam Class',
       'Bhagavad Gita Class',
-      if (widget.logDate == 'Ekadashi') 'Ekadashi Fasting',
+      'Ekadashi Fasting',
     ];
   }
 
@@ -2125,14 +4459,12 @@ class _SadhanaLogSheetState extends State<_SadhanaLogSheet> {
       points = 5;
     }
 
-    // Duplicate check
     final isDuplicate = widget.updates.any((u) {
       final uDate = u['date'];
       if (uDate != targetDate || u['is_completed'] == false) return false;
       final workStarted = u['work_started'].toString();
       
       if (_selectedSubOption == 'Service' || _selectedSubOption == 'Book Reading') {
-        // For Service and Book Reading, only duplicate if the exact label matches
         return workStarted.toLowerCase() == label.toLowerCase();
       }
       return workStarted.toLowerCase().startsWith(_selectedSubOption!.toLowerCase());
@@ -2161,13 +4493,22 @@ class _SadhanaLogSheetState extends State<_SadhanaLogSheet> {
         'points': points,
         'photo_url': photoUrl,
       };
-      await supabase.from('updates').insert(updateData);
+      await ApiService.post('/sadhana', updateData);
       NotificationHelper.sendUpdateNotification(updateData).catchError((_) {});
 
-      widget.onSaveSuccess();
+      widget.onSaveSuccess('$label logged successfully!');
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      debugPrint('Error inserting update: $e');
+      debugPrint('🚨 [SADHANA SHEET ERROR LOG]: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Failed to log sadhana: ${e.toString()}'),
+            backgroundColor: Colors.redAccent,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -2178,7 +4519,7 @@ class _SadhanaLogSheetState extends State<_SadhanaLogSheet> {
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
+        borderRadius: BorderRadius.all(Radius.circular(20)),
       ),
       padding: EdgeInsets.only(
         left: 20,
@@ -2191,28 +4532,33 @@ class _SadhanaLogSheetState extends State<_SadhanaLogSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _selectedSubOption ?? 'Sadhana',
+                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B), size: 20),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            Text(
-              'Log Sadhana (${widget.logDate})',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
-            ),
+            const SizedBox(height: 12),
+            const Divider(height: 1, thickness: 1, color: Color(0xFFF1F5F9)),
             const SizedBox(height: 16),
             if (_selectedSubOption == null) ...[
-              const Text('Select Activity', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+              const Text('Select Activity', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey, fontSize: 12)),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: _sadhanaOptions.map((opt) {
                   return ChoiceChip(
-                    label: Text(opt),
+                    label: Text(opt, style: TextStyle(fontSize: 12, color: _selectedSubOption == opt ? Colors.white : Colors.black87)),
                     selected: _selectedSubOption == opt,
                     onSelected: (selected) {
                       setState(() {
@@ -2220,24 +4566,12 @@ class _SadhanaLogSheetState extends State<_SadhanaLogSheet> {
                       });
                     },
                     selectedColor: const Color(0xFF6366F1),
-                    labelStyle: TextStyle(color: _selectedSubOption == opt ? Colors.white : Colors.black),
+                    backgroundColor: const Color(0xFFF8FAFC),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   );
                 }).toList(),
               )
             ] else ...[
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Selected: $_selectedSubOption', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF6366F1))),
-                  TextButton(
-                    onPressed: () => setState(() => _selectedSubOption = null),
-                    child: const Text('Change'),
-                  )
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              // Inputs based on selection
               if (_selectedSubOption == 'Chanting') ...[
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -2461,23 +4795,26 @@ class _SadhanaLogSheetState extends State<_SadhanaLogSheet> {
               ] else ...[
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 12.0),
-                  child: Text('Click Save below to log this activity!', style: TextStyle(fontStyle: FontStyle.italic)),
+                  child: Text('Click Save below!', style: TextStyle(fontStyle: FontStyle.italic)),
                 )
               ],
               const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6366F1),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              Center(
+                child: SizedBox(
+                  height: 44,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F172A),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(horizontal: 36),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: _isLoading ? null : _handleSave,
+                    child: _isLoading
+                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Text('Save', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                   ),
-                  onPressed: _isLoading ? null : _handleSave,
-                  child: _isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text('Save Sadhana Record', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 ),
               )
             ]
@@ -2504,7 +4841,6 @@ class _FolkAccommodationSheet extends StatefulWidget {
 }
 
 class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> {
-  final supabase = Supabase.instance.client;
   final _formKey = GlobalKey<FormState>();
   
   late TextEditingController _nameController;
@@ -2534,16 +4870,15 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> {
   Future<void> _fetchBookings() async {
     try {
       setState(() => _isLoadingBookings = true);
-      // Fetch Folk Boy / Resident updates (includes signals)
-      final res = await supabase
-          .from('updates')
-          .select('*')
-          .eq('worker_id', widget.profile['id'])
-          .order('created_at', ascending: false)
-          .limit(70);
+      dynamic res;
+      try {
+        res = await ApiService.get('/sadhana/updates');
+      } catch (_) {
+        res = await ApiService.get('/sadhana/history');
+      }
+      final List<dynamic> updatesList = res is List ? res : [];
 
-      // Extract only bookings
-      final bookings = res.where((u) => u['category'] == 'accommodation').toList();
+      final bookings = updatesList.where((u) => u['category'] == 'accommodation').toList();
 
       if (mounted) {
         setState(() {
@@ -2551,58 +4886,9 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> {
           _isLoadingBookings = false;
         });
       }
-
-      // Process signals in background if any exist
-      _processBackgroundSignals(res);
     } catch (e) {
       debugPrint('Error loading bookings: $e');
       if (mounted) setState(() => _isLoadingBookings = false);
-    }
-  }
-
-  Future<void> _processBackgroundSignals(List<dynamic> raw) async {
-    bool didChange = false;
-    for (var u in raw) {
-      final category = u['category'];
-      final signalId = u['id'];
-      
-      if (category == 'accommodation_approval_signal') {
-        final String signal = u['work_started'] ?? '';
-        if (signal.startsWith('SIGNAL: ')) {
-          final targetIdStr = signal.replaceAll('SIGNAL: ', '');
-          final targetId = targetIdStr;
-          final room = u['work_completed'] ?? '';
-          
-          if (targetId.isNotEmpty) {
-            try {
-              await supabase.from('updates').update({
-                'is_completed': true,
-                'work_completed': room,
-              }).eq('id', targetId);
-              await supabase.from('updates').delete().eq('id', signalId);
-              didChange = true;
-            } catch (_) {}
-          }
-        }
-      } else if (category == 'accommodation_delete_signal') {
-        final String signal = u['work_started'] ?? '';
-        if (signal.startsWith('SIGNAL: ')) {
-          final targetIdStr = signal.replaceAll('SIGNAL: ', '');
-          final targetId = targetIdStr;
-          
-          if (targetId.isNotEmpty) {
-            try {
-              await supabase.from('updates').delete().eq('id', targetId);
-              await supabase.from('updates').delete().eq('id', signalId);
-              didChange = true;
-            } catch (_) {}
-          }
-        }
-      }
-    }
-    if (didChange && mounted) {
-      _fetchBookings();
-      widget.onBookingSuccess();
     }
   }
 
@@ -2660,7 +4946,7 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> {
       final departureStr = DateFormat('yyyy-MM-dd').format(_departureDate!);
 
       final updateData = {
-        'worker_id': widget.profile['id'],
+        'worker_id': widget.profile['id'] ?? widget.profile['_id'],
         'worker_name': widget.profile['name'],
         'preacher_name': widget.preacher?['name'] ?? 'Preacher',
         'category': 'accommodation',
@@ -2671,7 +4957,7 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> {
         'date': DateFormat('yyyy-MM-dd').format(DateTime.now()),
         'points': 0,
       };
-      await supabase.from('updates').insert(updateData);
+      await ApiService.post('/sadhana', updateData);
       NotificationHelper.sendUpdateNotification(updateData).catchError((_) {});
 
       if (mounted) {
@@ -2703,10 +4989,10 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> {
     return Container(
       height: MediaQuery.of(context).size.height * 0.85,
       decoration: const BoxDecoration(
-        color: Color(0xFFF8FAFC),
+        color: Colors.white,
         borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(30),
-          topRight: Radius.circular(30),
+          topLeft: Radius.circular(24),
+          topRight: Radius.circular(24),
         ),
       ),
       child: DefaultTabController(
@@ -2715,8 +5001,8 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> {
           children: [
             const SizedBox(height: 12),
             Container(
-              width: 50,
-              height: 5,
+              width: 40,
+              height: 4,
               decoration: BoxDecoration(
                 color: Colors.grey[300],
                 borderRadius: BorderRadius.circular(10),
@@ -2724,31 +5010,31 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> {
             ),
             const SizedBox(height: 16),
             const Text(
-              'Residency Accommodation',
+              'Accommodation Booking',
               style: TextStyle(
-                fontSize: 20,
+                fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF1E293B),
+                color: Color(0xFF0F172A),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 20),
               decoration: BoxDecoration(
-                color: const Color(0xFFEEF2F6),
-                borderRadius: BorderRadius.circular(16),
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: TabBar(
                 indicator: BoxDecoration(
-                  color: const Color(0xFF9333EA),
-                  borderRadius: BorderRadius.circular(12),
+                  color: const Color(0xFF0F172A),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 labelColor: Colors.white,
                 unselectedLabelColor: const Color(0xFF64748B),
                 labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                 tabs: const [
-                  Tab(text: 'MY BOOKINGS'),
-                  Tab(text: 'BOOK NEW'),
+                  Tab(text: 'My Bookings'),
+                  Tab(text: 'New Booking'),
                 ],
               ),
             ),
@@ -2776,11 +5062,11 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.hotel_outlined, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
+            Icon(Icons.hotel_outlined, size: 56, color: Colors.grey[400]),
+            const SizedBox(height: 12),
             Text(
               'No accommodation bookings yet',
-              style: TextStyle(color: Colors.grey[600], fontSize: 15, fontWeight: FontWeight.w500),
+              style: TextStyle(color: Colors.grey[600], fontSize: 14, fontWeight: FontWeight.w500),
             ),
           ],
         ),
@@ -2826,10 +5112,10 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> {
           elevation: 0,
           color: Colors.white,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-            side: BorderSide(color: Colors.grey[100]!),
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: Color(0xFFE2E8F0)),
           ),
-          margin: const EdgeInsets.only(bottom: 14),
+          margin: const EdgeInsets.only(bottom: 12),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -2839,36 +5125,37 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
                         color: isCompleted ? const Color(0xFFE6F4EA) : const Color(0xFFFFF4E5),
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        isCompleted ? 'APPROVED' : 'PENDING APPROVAL',
+                        isCompleted ? 'APPROVED' : 'PENDING',
                         style: TextStyle(
                           color: isCompleted ? const Color(0xFF137333) : const Color(0xFFB06000),
-                          fontSize: 10,
+                          fontSize: 11,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
-                    if (isCompleted)
-                      Icon(Icons.check_circle, color: Colors.green[600], size: 24)
-                    else
-                      Icon(Icons.pending_actions, color: Colors.orange[600], size: 24),
+                    Icon(
+                      isCompleted ? Icons.check_circle_rounded : Icons.pending_rounded,
+                      color: isCompleted ? Colors.green[600] : Colors.orange[600],
+                      size: 20,
+                    ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 Row(
                   children: [
-                    const Icon(Icons.person_outline, size: 18, color: Colors.grey),
+                    const Icon(Icons.person_outline_rounded, size: 18, color: Color(0xFF64748B)),
                     const SizedBox(width: 8),
                     Text(
                       guestName,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF1E293B)),
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF0F172A)),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
@@ -2882,71 +5169,49 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 Row(
                   children: [
                     Expanded(
-                      child: Row(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.login, size: 16, color: Colors.grey),
-                          const SizedBox(width: 6),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('ARRIVAL', style: TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.bold)),
-                              Text(arrivalText, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF475569))),
-                            ],
-                          ),
+                          const Text('ARRIVAL', style: TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 2),
+                          Text(arrivalText, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF475569))),
                         ],
                       ),
                     ),
                     Expanded(
-                      child: Row(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.logout, size: 16, color: Colors.grey),
-                          const SizedBox(width: 6),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('DEPARTURE', style: TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.bold)),
-                              Text(departureText, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF475569))),
-                            ],
-                          ),
+                          const Text('DEPARTURE', style: TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 2),
+                          Text(departureText, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF475569))),
                         ],
                       ),
                     ),
                   ],
                 ),
                 if (isCompleted && roomAllocated.isNotEmpty) ...[
-                  const Divider(height: 24),
+                  const Divider(height: 20),
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF3E8FF),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFE9D5FF)),
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(10),
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.meeting_room, color: Color(0xFF9333EA)),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'ROOM ASSIGNED',
-                                style: TextStyle(fontSize: 9, color: Color(0xFF7E22CE), fontWeight: FontWeight.bold),
-                              ),
-                              Text(
-                                roomAllocated.toString().replaceAll('ROOM: ', ''),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                  color: Color(0xFF5B21B6),
-                                ),
-                              ),
-                            ],
+                        const Icon(Icons.meeting_room_rounded, color: Color(0xFF0F172A), size: 18),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Room: ${roomAllocated.toString().replaceAll('ROOM: ', '')}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: Color(0xFF0F172A),
                           ),
                         ),
                       ],
@@ -2972,37 +5237,39 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> {
             TextFormField(
               controller: _nameController,
               decoration: InputDecoration(
-                labelText: 'Guest Full Name',
-                prefixIcon: const Icon(Icons.person),
+                labelText: 'Full Name',
+                prefixIcon: const Icon(Icons.person_outline_rounded, size: 20),
                 filled: true,
                 fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide(color: Colors.grey[200]!),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
                 ),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide(color: Colors.grey[200]!),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
                 ),
               ),
               validator: (val) => val == null || val.trim().isEmpty ? 'Please enter guest name' : null,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             TextFormField(
               controller: _ageController,
               keyboardType: TextInputType.number,
               decoration: InputDecoration(
-                labelText: 'Guest Age',
-                prefixIcon: const Icon(Icons.cake),
+                labelText: 'Age',
+                prefixIcon: const Icon(Icons.cake_outlined, size: 20),
                 filled: true,
                 fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide(color: Colors.grey[200]!),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
                 ),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide(color: Colors.grey[200]!),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
                 ),
               ),
               validator: (val) {
@@ -3011,24 +5278,24 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> {
                 return null;
               },
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             Row(
               children: [
                 Expanded(
                   child: InkWell(
                     onTap: _selectArrivalDate,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.grey[200]!),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFCBD5E1)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text('ARRIVAL DATE', style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 6),
+                          const SizedBox(height: 4),
                           Text(
                             _arrivalDate == null
                                 ? 'Select Date'
@@ -3036,7 +5303,7 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> {
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 13,
-                              color: _arrivalDate == null ? Colors.grey : const Color(0xFF1E293B),
+                              color: _arrivalDate == null ? Colors.grey : const Color(0xFF0F172A),
                             ),
                           ),
                         ],
@@ -3049,17 +5316,17 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> {
                   child: InkWell(
                     onTap: _selectDepartureDate,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.grey[200]!),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFCBD5E1)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text('DEPARTURE DATE', style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 6),
+                          const SizedBox(height: 4),
                           Text(
                             _departureDate == null
                                 ? 'Select Date'
@@ -3067,7 +5334,7 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> {
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 13,
-                              color: _departureDate == null ? Colors.grey : const Color(0xFF1E293B),
+                              color: _departureDate == null ? Colors.grey : const Color(0xFF0F172A),
                             ),
                           ),
                         ],
@@ -3077,24 +5344,23 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> {
                 ),
               ],
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
-              height: 52,
+              height: 46,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF9333EA),
+                  backgroundColor: const Color(0xFF0F172A),
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  elevation: 2,
-                  shadowColor: const Color(0xFF9333EA).withValues(alpha: 0.3),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 0,
                 ),
                 onPressed: _isLoading ? null : _submitBooking,
                 child: _isLoading
-                    ? const CircularProgressIndicator(color: Colors.white)
+                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : const Text(
-                        'SUBMIT BOOKING REQUEST',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, letterSpacing: 0.5),
+                        'Submit Request',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                       ),
               ),
             ),
@@ -3121,7 +5387,6 @@ class _PreacherAppointmentSheet extends StatefulWidget {
 }
 
 class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
-  final supabase = Supabase.instance.client;
   final _formKey = GlobalKey<FormState>();
   
   final _purposeController = TextEditingController();
@@ -3132,11 +5397,28 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
   
   List<dynamic> _appointments = [];
   bool _isLoadingAppointments = true;
+  List<dynamic> _availablePreachers = [];
+  Map<String, dynamic>? _selectedPreacherFromList;
+
+  Map<String, dynamic>? get _effectivePreacher {
+    if (widget.preacher != null) return widget.preacher;
+    if (_selectedPreacherFromList != null) return _selectedPreacherFromList;
+    final preacherId = (widget.profile['preacher_id'] ?? widget.profile['preacherId'] ?? widget.profile['preacher'])?.toString();
+    final preacherName = (widget.profile['preacher_name'] ?? widget.profile['preacherName'])?.toString();
+    if (preacherName != null && preacherName.isNotEmpty) {
+      return {'id': preacherId ?? 'preacher_1', 'name': preacherName};
+    }
+    if (preacherId != null && preacherId.isNotEmpty) {
+      return {'id': preacherId, 'name': 'Assigned Preacher'};
+    }
+    return null;
+  }
 
   @override
   void initState() {
     super.initState();
     _fetchAppointments();
+    _fetchPreachersList();
   }
 
   @override
@@ -3145,15 +5427,32 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
     super.dispose();
   }
 
+  Future<void> _fetchPreachersList() async {
+    try {
+      final data = await ApiService.get('/users/preachers');
+      if (data is List && mounted) {
+        setState(() {
+          _availablePreachers = data;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching preachers list: $e');
+    }
+  }
+
   Future<void> _fetchAppointments() async {
     try {
       setState(() => _isLoadingAppointments = true);
-      final res = await supabase
-          .from('updates')
-          .select('*')
-          .eq('worker_id', widget.profile['id'])
-          .eq('category', 'preacher_appointment')
-          .order('created_at', ascending: false);
+      List<dynamic> res = [];
+      dynamic data;
+      try {
+        data = await ApiService.get('/sadhana/updates');
+      } catch (_) {
+        data = await ApiService.get('/sadhana/history');
+      }
+      if (data is List) {
+        res = data.where((u) => u['category'] == 'preacher_appointment').toList();
+      }
 
       if (mounted) {
         setState(() {
@@ -3185,6 +5484,15 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
     final picked = await showTimePicker(
       context: context,
       initialTime: const TimeOfDay(hour: 10, minute: 0),
+      initialEntryMode: TimePickerEntryMode.dialOnly,
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: const TextScaler.linear(1.0),
+          ),
+          child: child!,
+        );
+      },
     );
     if (picked != null) {
       setState(() {
@@ -3194,9 +5502,10 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
   }
 
   Future<void> _submitBooking() async {
-    if (widget.preacher == null) {
+    final activePreacher = _effectivePreacher;
+    if (activePreacher == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cannot book. No preacher is assigned to your profile!')),
+        const SnackBar(content: Text('Please select a preacher to book an appointment.')),
       );
       return;
     }
@@ -3215,38 +5524,20 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
       final bookingStr = 'Appointment: $dateStr @ $timeStr';
       final purpose = _purposeController.text.trim();
 
-      // Check for duplicate booking
-      final existing = await supabase
-          .from('updates')
-          .select('id')
-          .eq('worker_id', widget.profile['id'])
-          .eq('category', 'preacher_appointment')
-          .eq('work_started', bookingStr)
-          .maybeSingle();
-
-      if (existing != null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('You have already requested/booked an appointment for this time: $dateStr @ $timeStr')),
-          );
-        }
-        setState(() => _isLoading = false);
-        return;
-      }
-
       final updateData = {
-        'worker_id': widget.profile['id'],
+        'worker_id': widget.profile['id'] ?? widget.profile['_id'],
         'worker_name': widget.profile['name'],
-        'preacher_name': widget.preacher!['name'],
+        'preacher_name': activePreacher['name'] ?? 'Preacher',
         'category': 'preacher_appointment',
         'work_started': bookingStr,
-        'description': 'Preacher: ${widget.preacher!['name']}\nDate: $dateStr\nTime: $timeStr\nPurpose: $purpose',
+        'description': 'Preacher: ${activePreacher['name']}\nDate: $dateStr\nTime: $timeStr\nPurpose: $purpose',
         'work_completed': '',
         'is_completed': false,
         'date': DateFormat('yyyy-MM-dd').format(DateTime.now()),
         'points': 0,
       };
-      await supabase.from('updates').insert(updateData);
+
+      await ApiService.post('/sadhana', updateData);
       NotificationHelper.sendUpdateNotification(updateData).catchError((_) {});
 
       if (mounted) {
@@ -3314,13 +5605,15 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
                 borderRadius: BorderRadius.circular(16),
               ),
               child: TabBar(
+                padding: const EdgeInsets.all(4),
+                indicatorSize: TabBarIndicatorSize.tab,
                 indicator: BoxDecoration(
                   color: const Color(0xFF1D4ED8),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 labelColor: Colors.white,
                 unselectedLabelColor: const Color(0xFF64748B),
-                labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                 tabs: const [
                   Tab(text: 'MY APPOINTMENTS'),
                   Tab(text: 'BOOK NEW'),
@@ -3504,74 +5797,83 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
   }
 
   Widget _buildRequestTab() {
-    if (widget.preacher == null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 64, color: Colors.redAccent),
-              const SizedBox(height: 16),
-              const Text(
-                'No Assigned Preacher',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'You cannot book appointments because you do not have an assigned preacher. Please contact administrator.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey[600], fontSize: 13),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
+    final activePreacher = _effectivePreacher;
 
     return Form(
       key: _formKey,
       child: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFFEFF6FF),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFDBEAFE)),
-            ),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundImage: widget.preacher!['photo_url'] != null
-                      ? NetworkImage(widget.preacher!['photo_url'])
-                      : null,
-                  child: widget.preacher!['photo_url'] == null
-                      ? Text(widget.preacher!['name'][0].toUpperCase(), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold))
-                      : null,
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'BOOKING WITH ASSIGNED PREACHER',
-                        style: TextStyle(fontSize: 9, color: Color(0xFF1D4ED8), fontWeight: FontWeight.bold, letterSpacing: 0.5),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        widget.preacher!['name'],
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E3A8A)),
-                      ),
-                    ],
+          if (activePreacher != null) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFDBEAFE)),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundImage: activePreacher['photo_url'] != null
+                        ? NetworkImage(activePreacher['photo_url'])
+                        : null,
+                    child: activePreacher['photo_url'] == null
+                        ? Text((activePreacher['name'] ?? 'P')[0].toUpperCase(), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold))
+                        : null,
                   ),
-                ),
-              ],
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'BOOKING WITH PREACHER',
+                          style: TextStyle(fontSize: 9, color: Color(0xFF1D4ED8), fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          activePreacher['name'] ?? 'Preacher',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E3A8A)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
+          ] else ...[
+            const Text('SELECT YOUR PREACHER', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey[300]!),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<Map<String, dynamic>>(
+                  isExpanded: true,
+                  hint: const Text('Choose your preacher...', style: TextStyle(fontSize: 14)),
+                  value: _selectedPreacherFromList,
+                  items: _availablePreachers.map((p) {
+                    final itemMap = Map<String, dynamic>.from(p as Map);
+                    return DropdownMenuItem<Map<String, dynamic>>(
+                      value: itemMap,
+                      child: Text(itemMap['name'] ?? 'Preacher', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                    setState(() {
+                      _selectedPreacherFromList = val;
+                    });
+                  },
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 20),
           const Text('Appointment Details', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey, fontSize: 12)),
           const SizedBox(height: 12),
@@ -3687,7 +5989,7 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
 
 class _JoinBookingDialog extends StatefulWidget {
   final String title;
-  final String category; // 'trip', 'event', or 'session'
+  final String category;
   final String initialName;
   final String initialMobile;
   final Function(String name, String mobile) onConfirm;
@@ -3809,3 +6111,320 @@ class _JoinBookingDialogState extends State<_JoinBookingDialog> {
   }
 }
 
+class _SwipeToLogoutButton extends StatefulWidget {
+  final VoidCallback onSwipeCompleted;
+
+  const _SwipeToLogoutButton({required this.onSwipeCompleted});
+
+  @override
+  State<_SwipeToLogoutButton> createState() => _SwipeToLogoutButtonState();
+}
+
+class _SwipeToLogoutButtonState extends State<_SwipeToLogoutButton> {
+  double _dragPosition = 0.0;
+  bool _isFinished = false;
+  bool _isDragging = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double trackWidth = constraints.maxWidth;
+        final double buttonSize = 40.0;
+        final double maxDrag = trackWidth - buttonSize - 4;
+
+        return Container(
+          width: trackWidth,
+          height: 44,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFEF2F2),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: const Color(0xFFFEE2E2), width: 1.5),
+          ),
+          child: Stack(
+            alignment: Alignment.centerLeft,
+            children: [
+              Center(
+                child: Opacity(
+                  opacity: (1.0 - (_dragPosition / maxDrag)).clamp(0.2, 1.0),
+                  child: Text(
+                    _isFinished ? 'LOGGING OUT...' : 'SWIPE TO LOGOUT',
+                    style: const TextStyle(
+                      color: Color(0xFFEF4444),
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.1,
+                    ),
+                  ),
+                ),
+              ),
+              AnimatedPositioned(
+                duration: _isDragging ? Duration.zero : const Duration(milliseconds: 250),
+                curve: Curves.easeOutBack,
+                left: _dragPosition + 2,
+                top: 1,
+                child: GestureDetector(
+                  onHorizontalDragStart: (_) {
+                    if (_isFinished) return;
+                    setState(() {
+                      _isDragging = true;
+                    });
+                  },
+                  onHorizontalDragUpdate: (details) {
+                    if (_isFinished) return;
+                    setState(() {
+                      _dragPosition += details.delta.dx;
+                      if (_dragPosition < 0) _dragPosition = 0;
+                      if (_dragPosition > maxDrag) _dragPosition = maxDrag;
+                    });
+                  },
+                  onHorizontalDragEnd: (details) {
+                    if (_isFinished) return;
+                    setState(() {
+                      _isDragging = false;
+                    });
+                    if (_dragPosition >= maxDrag * 0.85) {
+                      setState(() {
+                        _dragPosition = maxDrag;
+                        _isFinished = true;
+                      });
+                      widget.onSwipeCompleted();
+                    } else {
+                      setState(() {
+                        _dragPosition = 0.0;
+                      });
+                    }
+                  },
+                  child: Container(
+                    width: buttonSize,
+                    height: 40,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFEF4444),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Color(0x33EF4444),
+                          blurRadius: 4,
+                          offset: Offset(0, 2),
+                        )
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.arrow_forward_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _LiveDateTimeWidget extends StatefulWidget {
+  final Color? color;
+  const _LiveDateTimeWidget({this.color});
+
+  @override
+  State<_LiveDateTimeWidget> createState() => _LiveDateTimeWidgetState();
+}
+
+class _LiveDateTimeWidgetState extends State<_LiveDateTimeWidget> {
+  late Timer _timer;
+  late String _dateTimeStr;
+
+  @override
+  void initState() {
+    super.initState();
+    _updateTime();
+    _timer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      _updateTime();
+    });
+  }
+
+  void _updateTime() {
+    if (mounted) {
+      setState(() {
+        _dateTimeStr = DateFormat('EEEE, d MMM   hh:mm a').format(DateTime.now());
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      _dateTimeStr,
+      style: TextStyle(
+        fontSize: 12,
+        color: widget.color ?? const Color(0xFF64748B),
+        fontWeight: FontWeight.w500,
+      ),
+    );
+  }
+}
+
+class _DailyDarshanCarouselWidget extends StatefulWidget {
+  final List<String> imageUrls;
+  final Function(int index) onTapImage;
+
+  const _DailyDarshanCarouselWidget({
+    required this.imageUrls,
+    required this.onTapImage,
+  });
+
+  @override
+  State<_DailyDarshanCarouselWidget> createState() => _DailyDarshanCarouselWidgetState();
+}
+
+class _DailyDarshanCarouselWidgetState extends State<_DailyDarshanCarouselWidget> {
+  late final PageController _pageController;
+  int _currentIndex = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+    _startTimer();
+    _precacheImages();
+  }
+
+  @override
+  void didUpdateWidget(_DailyDarshanCarouselWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.imageUrls != widget.imageUrls) {
+      _startTimer();
+      _precacheImages();
+    }
+  }
+
+  void _precacheImages() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      for (final url in widget.imageUrls) {
+        if (url.startsWith('data:')) {
+          try {
+            final base64String = url.split(',').last;
+            final bytes = base64Decode(base64String);
+            precacheImage(MemoryImage(bytes), context).catchError((_) {});
+          } catch (_) {}
+        } else {
+          precacheImage(NetworkImage(url), context).catchError((_) {});
+        }
+      }
+    });
+  }
+
+  void _startTimer() {
+    _timer?.cancel();
+    if (widget.imageUrls.length > 1) {
+      _timer = Timer.periodic(const Duration(seconds: 4), (timer) {
+        if (_pageController.hasClients) {
+          final nextPage = (_currentIndex + 1) % widget.imageUrls.length;
+          _pageController.animateToPage(
+            nextPage,
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.fastOutSlowIn,
+          );
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cardWidth = constraints.maxWidth;
+        final cardHeight = cardWidth * (5.0 / 4.0);
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 20),
+          width: cardWidth,
+          height: cardHeight,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(10),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                PageView.builder(
+                  controller: _pageController,
+                  onPageChanged: (index) {
+                    if (_currentIndex != index) {
+                      setState(() {
+                        _currentIndex = index;
+                      });
+                    }
+                  },
+                  itemCount: widget.imageUrls.length,
+                  itemBuilder: (context, idx) {
+                    final url = widget.imageUrls[idx];
+                    return GestureDetector(
+                      onTap: () => widget.onTapImage(idx),
+                      child: _FolkBoyDashboardState._buildSmartImage(
+                        url,
+                        width: double.infinity,
+                        height: double.infinity,
+                        fit: BoxFit.cover,
+                      ),
+                    );
+                  },
+                ),
+                if (widget.imageUrls.length > 1)
+                  Positioned(
+                    bottom: 12,
+                    left: 0,
+                    right: 0,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(widget.imageUrls.length, (index) {
+                        return AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          width: index == _currentIndex ? 16 : 6,
+                          height: 6,
+                          margin: const EdgeInsets.symmetric(horizontal: 3),
+                          decoration: BoxDecoration(
+                            color: index == _currentIndex ? Colors.white : Colors.white54,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}

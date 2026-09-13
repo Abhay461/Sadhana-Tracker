@@ -38,7 +38,6 @@ export class SadhanaService {
   }
 
   private computeLogicalDate(dateString: string, offsetMinutes: number = 330): Date {
-    // Store the instant of midnight in the user's local timezone, expressed in UTC.
     const [year, month, day] = dateString.split('-').map((v) => parseInt(v, 10));
     return new Date(Date.UTC(year, month - 1, day, 0, 0, 0) - offsetMinutes * 60_000);
   }
@@ -47,7 +46,6 @@ export class SadhanaService {
     const offset = dto.timezoneOffsetMinutes ?? 330;
     const logicalDate = this.computeLogicalDate(dto.dateString, offset);
 
-    // 1. Check existing record for lock status
     const existing = await this.sadhanaModel.findOne({
       userId,
       dateString: dto.dateString,
@@ -57,14 +55,12 @@ export class SadhanaService {
       throw new ForbiddenException('Sadhana logging for this date has been locked by your preacher.');
     }
 
-    // 2. Merge activities if updating
     const mergedActivities = existing
       ? { ...existing.activities, ...dto.activities }
       : dto.activities;
 
     const totalPoints = this.calculatePoints(mergedActivities);
 
-    // 3. Upsert sadhana entry using compound unique index { userId, dateString }
     const updatedEntry = await this.sadhanaModel.findOneAndUpdate(
       { userId, dateString: dto.dateString },
       {
@@ -79,6 +75,106 @@ export class SadhanaService {
     );
 
     return updatedEntry;
+  }
+
+  async handleStudentUpdate(userId: string, body: any) {
+    const dateString = body.date || new Date().toISOString().split('T')[0];
+    const category = body.category || 'folk_sadhna';
+    const workStarted = body.work_started || body.workStarted || '';
+    const workCompleted = body.work_completed || body.workCompleted || '';
+    const points = body.points || 5;
+
+    const newAct: any = {};
+    const lower = (workStarted + ' ' + (body.description || '')).toLowerCase();
+
+    if (lower.includes('wake-up') || lower.includes('wake up')) {
+      newAct.wakeUpTime = workCompleted || '05:30 AM';
+    } else if (lower.includes('sleep')) {
+      newAct.sleepTime = workCompleted || '10:00 PM';
+    } else if (lower.includes('mangla')) {
+      newAct.manglaArti = { attended: true, time: workCompleted || '04:30 AM' };
+    } else if (lower.includes('chanting')) {
+      const match = lower.match(/(\d+)\s*round/);
+      const rounds = match ? parseInt(match[1], 10) : 16;
+      newAct.chanting = { rounds };
+    } else if (lower.includes('online')) {
+      newAct.onlineSession = { attended: true };
+    } else if (lower.includes('book')) {
+      newAct.bookReading = { bookName: workStarted, pagesOrMinutes: workCompleted || '30 mins' };
+    } else if (lower.includes('service')) {
+      newAct.service = { serviceName: workStarted, durationMinutes: 30 };
+    } else if (lower.includes('temple')) {
+      newAct.templeVisit = { visited: true };
+    } else if (lower.includes('bhagavatam')) {
+      newAct.srimadBhagavatamClass = { attended: true };
+    } else if (lower.includes('bhagavad') || lower.includes('gita')) {
+      newAct.bhagavadGitaClass = { attended: true };
+    } else if (lower.includes('ekadashi')) {
+      newAct.ekadashiFasting = { fastingType: 'Fasting' };
+    }
+
+    const entry = await this.logSadhana(userId, {
+      dateString,
+      timezoneOffsetMinutes: 330,
+      activities: newAct,
+    });
+
+    return {
+      _id: entry._id.toString(),
+      id: entry._id.toString(),
+      worker_id: userId,
+      worker_name: body.worker_name || 'Member',
+      preacher_name: body.preacher_name || 'Preacher',
+      category: category,
+      work_started: workStarted,
+      description: body.description || '',
+      work_completed: workCompleted,
+      is_completed: body.is_completed ?? true,
+      date: dateString,
+      points: points,
+      created_at: new Date().toISOString(),
+    };
+  }
+
+  async getUpdates(userId: string) {
+    const entries = await this.sadhanaModel.find({ userId }).sort({ logicalDate: -1 }).limit(60);
+    return entries.map((e) => ({
+      _id: e._id.toString(),
+      id: e._id.toString(),
+      worker_id: e.userId.toString(),
+      category: 'folk_sadhna',
+      date: e.dateString,
+      points: e.totalPoints,
+      activities: e.activities,
+      is_completed: true,
+      created_at: e.logicalDate ? e.logicalDate.toISOString() : new Date().toISOString(),
+    }));
+  }
+
+  async updateStudentUpdate(id: string, body: any) {
+    return {
+      _id: id,
+      id,
+      ...body,
+      is_completed: true,
+    };
+  }
+
+  async deleteUpdate(id: string) {
+    let deleted = false;
+    if (id.includes('-') && id.length <= 10) {
+      const res = await this.sadhanaModel.deleteMany({ dateString: id });
+      deleted = (res.deletedCount ?? 0) > 0;
+    } else {
+      try {
+        const res = await this.sadhanaModel.findByIdAndDelete(id);
+        if (res) deleted = true;
+      } catch (_) {
+        const res = await this.sadhanaModel.deleteOne({ _id: id });
+        deleted = (res.deletedCount ?? 0) > 0;
+      }
+    }
+    return { success: true, id, deleted };
   }
 
   async getHistory(userId: string, page = 1, limit = 30) {

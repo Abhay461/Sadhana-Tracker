@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import '../../services/api_service.dart';
 
 class BlocklistTab extends StatefulWidget {
   final List<dynamic> folkBoys;
   final Map<String, List<dynamic>> allUpdates;
   final Map<String, dynamic>? preacherProfile;
-  final SupabaseClient supabase;
   final Future<void> Function() onRefresh;
 
   const BlocklistTab({
@@ -14,7 +13,6 @@ class BlocklistTab extends StatefulWidget {
     required this.folkBoys,
     required this.allUpdates,
     required this.preacherProfile,
-    required this.supabase,
     required this.onRefresh,
   });
 
@@ -23,24 +21,18 @@ class BlocklistTab extends StatefulWidget {
 }
 
 class _BlocklistTabState extends State<BlocklistTab> {
-  List<dynamic> _getTodayUpdates() {
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    final List<dynamic> list = [];
-    for (var boyUpdates in widget.allUpdates.values) {
-      for (var u in boyUpdates) {
-        if (u['date'] == today) {
-          list.add(u);
-        }
-      }
-    }
-    return list;
+  bool _checkIsBlocked(String boyId) {
+    final boyUpdates = widget.allUpdates[boyId] ?? [];
+    final blockUpdates = boyUpdates.where((u) => u['category'] == 'block_status').toList();
+    if (blockUpdates.isEmpty) return false;
+    return blockUpdates.first['work_started'] == 'BLOCKED';
   }
 
   Future<void> _toggleBlockAccess(Map<String, dynamic> boy, bool isCurrentlyBlocked) async {
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
     try {
-      await widget.supabase.from('updates').insert({
-        'worker_id': boy['id'].toString(),
+      await ApiService.post('/sadhana', {
+        'worker_id': (boy['id'] ?? boy['_id']).toString(),
         'worker_name': boy['name'],
         'preacher_name': widget.preacherProfile?['name'] ?? 'Preacher',
         'category': 'block_status',
@@ -48,7 +40,6 @@ class _BlocklistTabState extends State<BlocklistTab> {
         'description': isCurrentlyBlocked ? 'Access restored' : 'Blocked by Preacher',
         'is_completed': true,
         'date': today,
-        'created_at': DateTime.now().toIso8601String(),
       });
       await widget.onRefresh();
       if (mounted) {
@@ -63,9 +54,6 @@ class _BlocklistTabState extends State<BlocklistTab> {
 
   @override
   Widget build(BuildContext context) {
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    final todayUpdateList = _getTodayUpdates();
-
     return widget.folkBoys.isEmpty
         ? const Center(child: Text('No circle members found.'))
         : ListView.builder(
@@ -73,7 +61,7 @@ class _BlocklistTabState extends State<BlocklistTab> {
             itemCount: widget.folkBoys.length,
             itemBuilder: (context, index) {
               final boy = widget.folkBoys[index];
-              final isBlocked = todayUpdateList.any((u) => u['worker_id'] == boy['id'] && u['category'] == 'block_status' && u['work_started'] == 'BLOCKED' && u['date'] == today);
+              final isBlocked = _checkIsBlocked(boy['id'].toString());
 
               return Card(
                 color: Colors.white,

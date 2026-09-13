@@ -1,8 +1,8 @@
 // ignore_for_file: deprecated_member_use
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import '../services/api_service.dart';
 import '../utils/notification_helper.dart';
 
 class ResidentEnrollmentFormScreen extends StatefulWidget {
@@ -22,7 +22,6 @@ class ResidentEnrollmentFormScreen extends StatefulWidget {
 }
 
 class _ResidentEnrollmentFormScreenState extends State<ResidentEnrollmentFormScreen> {
-  final supabase = Supabase.instance.client;
   int _currentStep = 0;
   bool _isLoading = false;
   final _formKey = GlobalKey<FormState>();
@@ -111,7 +110,6 @@ class _ResidentEnrollmentFormScreenState extends State<ResidentEnrollmentFormScr
 
   final Map<String, bool> _attendedPrograms = {
     'Art of Mind Control': false,
-    'Jijnasa': false,
     'Yoga For Happiness': false,
     'Others': false,
   };
@@ -355,8 +353,68 @@ class _ResidentEnrollmentFormScreenState extends State<ResidentEnrollmentFormScr
     );
   }
 
+  bool _validateFullForm() {
+    if (_residencyNameController.text.trim().isEmpty) {
+      _showValidationError('FOLK Residency Name is required.');
+      return false;
+    }
+    if (_dateOfJoining == null) {
+      _showValidationError('Date of Joining is required.');
+      return false;
+    }
+    if (_fullNameController.text.trim().isEmpty) {
+      _showValidationError('Full Name is required.');
+      return false;
+    }
+    if (_mobileController.text.trim().isEmpty) {
+      _showValidationError('Mobile Number is required.');
+      return false;
+    }
+    if (_emailController.text.trim().isEmpty) {
+      _showValidationError('E-mail ID is required.');
+      return false;
+    }
+    if (_educationController.text.trim().isEmpty) {
+      _showValidationError('Educational Qualification is required.');
+      return false;
+    }
+    if (_presentAddressController.text.trim().isEmpty) {
+      _showValidationError('Present Address is required.');
+      return false;
+    }
+    if (_presentPinController.text.trim().isEmpty) {
+      _showValidationError('Present Pin Code is required.');
+      return false;
+    }
+    if (_permanentAddressController.text.trim().isEmpty) {
+      _showValidationError('Permanent Address is required.');
+      return false;
+    }
+    if (_permanentPinController.text.trim().isEmpty) {
+      _showValidationError('Permanent Pin Code is required.');
+      return false;
+    }
+    if (_emergencyNameController.text.trim().isEmpty) {
+      _showValidationError('Emergency Contact Name is required.');
+      return false;
+    }
+    if (_emergencyPhoneController.text.trim().isEmpty) {
+      _showValidationError('Emergency Contact Phone is required.');
+      return false;
+    }
+    if (_emergencyRelationController.text.trim().isEmpty) {
+      _showValidationError('Emergency Relationship is required.');
+      return false;
+    }
+    if (!_acceptedRulesAndTerms) {
+      _showValidationError('You must accept the Rules and Terms & Conditions at the end of the form!');
+      return false;
+    }
+    return true;
+  }
+
   Future<void> _submitForm() async {
-    if (!_formKey.currentState!.validate() || !_validateCurrentStep()) {
+    if (!_formKey.currentState!.validate() || !_validateFullForm()) {
       return;
     }
 
@@ -497,9 +555,10 @@ class _ResidentEnrollmentFormScreenState extends State<ResidentEnrollmentFormScr
         'date': DateFormat('yyyy-MM-dd').format(DateTime.now()),
         'points': 0,
       };
-      await supabase.from('updates').insert({
+
+      await ApiService.post('/residency/admission', {
         ...updateData,
-        'description': jsonString, // store full JSON in database
+        'description': jsonString,
       });
       NotificationHelper.sendUpdateNotification(updateData).catchError((_) {});
 
@@ -1288,6 +1347,38 @@ class _ResidentEnrollmentFormScreenState extends State<ResidentEnrollmentFormScr
     }
   }
 
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 20, bottom: 12),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE0F2FE),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFFBAE6FD)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.description_outlined, color: Color(0xFF0284C7), size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                title.toUpperCase(),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                  color: Color(0xFF0369A1),
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1308,58 +1399,29 @@ class _ResidentEnrollmentFormScreenState extends State<ResidentEnrollmentFormScr
             key: _formKey,
             child: Column(
               children: [
-                // Custom Top Progress Tracker
-                Container(
-                  color: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            _getStepTitle(_currentStep).toUpperCase(),
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF0284C7),
-                              letterSpacing: 1.0,
-                            ),
-                          ),
-                          Text(
-                            'Step ${_currentStep + 1} of 6',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.grey[500],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: LinearProgressIndicator(
-                          value: (_currentStep + 1) / 6,
-                          backgroundColor: Colors.grey[200],
-                          valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF0284C7)),
-                          minHeight: 6,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                
-                // Content Pane
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.all(20),
-                    child: _getStepContent(_currentStep),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildSectionHeader('1. Personal Information'),
+                        _buildPersonalStep(),
+                        _buildSectionHeader('2. Address & Emergency Contacts'),
+                        _buildAddressStep(),
+                        _buildSectionHeader('3. Academic & Employment History'),
+                        _buildAcademicStep(),
+                        _buildSectionHeader('4. Spiritual Assessment'),
+                        _buildSpiritualStep(),
+                        _buildSectionHeader('5. Lifestyle Assessment'),
+                        _buildLifestyleStep(),
+                        _buildSectionHeader('6. Rules, Declaration & Confirmation'),
+                        _buildConfirmStep(),
+                        const SizedBox(height: 20),
+                      ],
+                    ),
                   ),
                 ),
-                
-                // Bottom control actions
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -1372,51 +1434,22 @@ class _ResidentEnrollmentFormScreenState extends State<ResidentEnrollmentFormScr
                       ),
                     ],
                   ),
-                  child: Row(
-                    children: [
-                      if (_currentStep > 0) ...[
-                        Expanded(
-                          child: OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                            onPressed: () {
-                              setState(() => _currentStep--);
-                            },
-                            child: const Text(
-                              'BACK',
-                              style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                      ],
-                      Expanded(
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF0284C7),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            elevation: 0,
-                          ),
-                          onPressed: () {
-                            if (_currentStep < 5) {
-                              if (_validateCurrentStep()) {
-                                setState(() => _currentStep++);
-                              }
-                            } else {
-                              _submitForm();
-                            }
-                          },
-                          child: Text(
-                            _currentStep == 5 ? 'SUBMIT ENROLMENT' : 'CONTINUE',
-                            style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5),
-                          ),
-                        ),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0284C7),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        elevation: 0,
                       ),
-                    ],
+                      onPressed: _isLoading ? null : _submitForm,
+                      child: const Text(
+                        'SUBMIT ENROLMENT',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, letterSpacing: 0.5),
+                      ),
+                    ),
                   ),
                 ),
               ],

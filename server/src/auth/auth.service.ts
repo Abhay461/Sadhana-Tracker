@@ -83,6 +83,20 @@ export class AuthService {
         }
         if (dto.name && !user.name) user.name = dto.name;
         if (dto.photoUrl) user.photoUrl = dto.photoUrl;
+
+        // Save/update preacherId if passed during sync
+        if (dto.preacherId) {
+          user.preacherId = dto.preacherId as any;
+        } else if (dto.preacherCode) {
+          const preacher = await this.userModel.findOne({
+            preacherCode: dto.preacherCode.toUpperCase().trim(),
+            role: 'preacher',
+          });
+          if (preacher) {
+            user.preacherId = preacher._id as any;
+          }
+        }
+
         await user.save();
         this.logger.log(`Linked firebaseUid ${firebaseUid} to existing profile ${user._id}`);
       } else {
@@ -130,6 +144,10 @@ export class AuthService {
         errorCode: 'ACCOUNT_BLOCKED',
         message: 'Your account has been blocked by an administrator.',
       });
+    }
+
+    if (user.preacherId) {
+      await user.populate('preacherId', 'name email photoUrl phoneNumber whatsapp_number');
     }
 
     return user;

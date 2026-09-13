@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'dart:convert';
+import '../../services/api_service.dart';
 
 class ResidencyTab extends StatefulWidget {
   final List<dynamic> folkBoys;
   final Map<String, List<dynamic>> allUpdates;
   final Map<String, dynamic>? preacherProfile;
-  final SupabaseClient supabase;
   final Future<void> Function() onRefresh;
 
   const ResidencyTab({
@@ -15,7 +14,6 @@ class ResidencyTab extends StatefulWidget {
     required this.folkBoys,
     required this.allUpdates,
     required this.preacherProfile,
-    required this.supabase,
     required this.onRefresh,
   });
 
@@ -52,29 +50,26 @@ class _ResidencyTabState extends State<ResidencyTab> {
         req['is_completed'] = true;
       });
 
-      // 1. Insert the signal row for the client to complete it
-      await widget.supabase.from('updates').insert({
+      await ApiService.post('/sadhana', {
         'worker_id': req['worker_id'].toString(),
         'worker_name': req['worker_name'],
         'preacher_name': widget.preacherProfile?['name'] ?? 'Preacher',
         'category': 'residency_admission_approval_signal',
-        'work_started': 'SIGNAL: ${req['id']}',
+        'work_started': 'SIGNAL: ${req['id'] ?? req['_id']}',
         'work_completed': '',
         'is_completed': true,
         'date': DateFormat('yyyy-MM-dd').format(DateTime.now()),
         'points': 0,
-        'created_at': DateTime.now().toIso8601String(),
       });
 
-      // 2. Try updating the disciple's role directly (optional fallback)
       final workerId = req['worker_id'];
       if (workerId != null) {
         try {
-          await widget.supabase.from('profiles').update({
+          await ApiService.patch('/users/$workerId', {
             'role': 'residency',
-          }).eq('id', workerId);
+          });
         } catch (pe) {
-          debugPrint('Profile role update failed (falling back to client side auto-promotion): $pe');
+          debugPrint('Profile role update failed: $pe');
         }
       }
 
@@ -126,17 +121,17 @@ class _ResidencyTabState extends State<ResidencyTab> {
     try {
       setState(() {
         for (var list in widget.allUpdates.values) {
-          list.removeWhere((item) => item['id'] == req['id']);
+          list.removeWhere((item) => (item['id'] ?? item['_id']) == (req['id'] ?? req['_id']));
         }
       });
 
       // Insert delete signal
-      await widget.supabase.from('updates').insert({
+      await ApiService.post('/sadhana', {
         'worker_id': req['worker_id'].toString(),
         'worker_name': req['worker_name'],
         'preacher_name': widget.preacherProfile?['name'] ?? 'Preacher',
         'category': 'residency_admission_delete_signal',
-        'work_started': 'SIGNAL: ${req['id']}',
+        'work_started': 'SIGNAL: ${req['id'] ?? req['_id']}',
         'work_completed': '',
         'is_completed': true,
         'date': DateFormat('yyyy-MM-dd').format(DateTime.now()),

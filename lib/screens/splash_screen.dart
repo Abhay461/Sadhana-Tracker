@@ -1,5 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../services/api_service.dart';
+import '../services/fcm_service.dart';
+import '../utils/notification_helper.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -9,45 +13,117 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
+  bool _isTakingLong = false;
+  Timer? _longTimer;
+
   @override
   void initState() {
     super.initState();
-    _checkAuth();
-  }
-
-  Future<void> _checkAuth() async {
-    final session = Supabase.instance.client.auth.currentSession;
-    if (!mounted) return;
-    
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (session != null) {
-        Navigator.pushReplacementNamed(context, '/home');
-      } else {
-        Navigator.pushReplacementNamed(context, '/login');
+    // Only show server warning if request takes more than 8 seconds
+    _longTimer = Timer(const Duration(seconds: 8), () {
+      if (mounted) {
+        setState(() {
+          _isTakingLong = true;
+        });
       }
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAuthAndRedirect();
     });
   }
 
   @override
+  void dispose() {
+    _longTimer?.cancel();
+    super.dispose();
+  }
+
+  void _navigateToRole(String role, Map<String, dynamic>? profileData) {
+    if (!mounted) return;
+    if (role == 'preacher') {
+      Navigator.pushReplacementNamed(context, '/preacher', arguments: profileData);
+    } else if (role == 'admin') {
+      Navigator.pushReplacementNamed(context, '/admin-control-panel', arguments: profileData);
+    } else {
+      Navigator.pushReplacementNamed(context, '/folk-boy', arguments: profileData);
+    }
+  }
+
+  Future<void> _checkAuthAndRedirect() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      if (mounted) Navigator.pushReplacementNamed(context, '/login');
+      return;
+    }
+
+    // Register user with notification helper
+    NotificationHelper.loginUser(user.uid).catchError((_) {});
+    FcmService.initialize().catchError((_) {});
+
+    try {
+      final response = await ApiService.get('/users/me').timeout(const Duration(seconds: 12));
+      final profileData = response is Map ? Map<String, dynamic>.from(response) : null;
+      final rawRole = profileData?['role'] ?? 'folk_boy';
+      final role = rawRole.toString().replaceAll('pending_', '');
+
+      _navigateToRole(role, profileData);
+    } catch (e) {
+      debugPrint('SPLASH API Error: $e');
+      _navigateToRole('folk_boy', null);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: Color(0xFFF1F5F9),
+    return Scaffold(
+      backgroundColor: Colors.white,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
-            ),
-            SizedBox(height: 16),
-            Text(
-              'Sadhana Track',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1E293B),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Image.asset(
+                'assets/logo.jpg',
+                width: 100,
+                height: 100,
+                fit: BoxFit.cover,
+                errorBuilder: (ctx, err, stack) => Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E3A8A),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Icon(Icons.temple_hindu, color: Colors.amber, size: 50),
+                ),
               ),
             ),
+            const SizedBox(height: 32),
+            const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF1E3A8A)),
+              ),
+            ),
+            if (_isTakingLong) ...[
+              const SizedBox(height: 20),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 32.0),
+                child: Text(
+                  'Server start ho raha hai, kripya thoda wait karein...\n(Free Render server sleep se wake ho raha hai)',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Color(0xFF64748B),
+                    fontSize: 13,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

@@ -1,52 +1,25 @@
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 import 'package:onesignal_flutter/onesignal_flutter.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/api_service.dart';
 import 'constants.dart';
 
 class NotificationHelper {
   static String? _cachedAppId;
-  static String? _cachedRestApiKey;
 
-  /// Fetches OneSignal keys either from Supabase `app_config` table or local Constants.
+  /// Fetches OneSignal keys from Constants.
   static Future<Map<String, String>> _getKeys() async {
-    if (_cachedAppId != null && _cachedRestApiKey != null) {
+    if (_cachedAppId != null) {
       return {
         'appId': _cachedAppId!,
-        'restApiKey': _cachedRestApiKey!,
       };
     }
 
     String appId = Constants.oneSignalAppId;
-    String restApiKey = Constants.oneSignalRestApiKey;
-
-    try {
-      final client = Supabase.instance.client;
-      // Try to select keys from `app_config` table
-      final List<dynamic> response = await client
-          .from('app_config')
-          .select('key, value');
-      
-      for (var row in response) {
-        final key = row['key']?.toString();
-        final value = row['value']?.toString();
-        if (key == 'onesignal_app_id' && value != null && value.isNotEmpty) {
-          appId = value;
-        } else if (key == 'onesignal_rest_api_key' && value != null && value.isNotEmpty) {
-          restApiKey = value;
-        }
-      }
-    } catch (e) {
-      debugPrint('NotificationHelper: app_config not found or inaccessible, using default Constants. Error: $e');
-    }
 
     _cachedAppId = appId;
-    _cachedRestApiKey = restApiKey;
 
     return {
       'appId': appId,
-      'restApiKey': restApiKey,
     };
   }
 
@@ -66,14 +39,20 @@ class NotificationHelper {
       OneSignal.initialize(appId);
       
       // Request permission
-      await OneSignal.Notifications.requestPermission(true);
+      await OneSignal.Notifications.requestPermission(true).timeout(
+        const Duration(seconds: 2),
+        onTimeout: () {
+          debugPrint('NotificationHelper: OneSignal permission request timed out (normal on emulators).');
+          return false;
+        },
+      );
       debugPrint('NotificationHelper: OneSignal initialized successfully.');
     } catch (e) {
       debugPrint('NotificationHelper: Failed to initialize OneSignal: $e');
     }
   }
 
-  /// Log in current user to OneSignal using their Supabase User ID.
+  /// Log in current user to OneSignal using their User ID.
   static Future<void> loginUser(String userId) async {
     try {
       final keys = await _getKeys();
@@ -106,49 +85,29 @@ class NotificationHelper {
     required List<String> targetUserIds,
     required String title,
     required String body,
+    String? sendAfter,
   }) async {
     if (targetUserIds.isEmpty) return;
 
     try {
       final keys = await _getKeys();
       final appId = keys['appId']!;
-      final restApiKey = keys['restApiKey']!;
-
-      if (appId.isEmpty || appId == 'YOUR_ONESIGNAL_APP_ID' ||
-          restApiKey.isEmpty || restApiKey == 'YOUR_ONESIGNAL_REST_API_KEY') {
-        debugPrint('NotificationHelper: OneSignal is not fully configured for sending push notifications.');
+      if (appId.isEmpty || appId == 'YOUR_ONESIGNAL_APP_ID') {
+        debugPrint('NotificationHelper: OneSignal is not configured.');
         return;
       }
 
-      final url = Uri.parse('https://onesignal.com/api/v1/notifications');
-      final headers = {
-        'Content-Type': 'application/json; charset=utf-8',
-        'Authorization': 'Basic $restApiKey',
-      };
-
-      final payload = {
-        'app_id': appId,
-        'headings': {'en': title},
-        'contents': {'en': body},
-        // Target via external user ID using both legacy and modern formats for maximum compatibility
-        'include_external_user_ids': targetUserIds,
-        'include_aliases': {
-          'external_id': targetUserIds,
-        },
-        'target_channel': 'push',
-      };
-
-      final response = await http.post(
-        url,
-        headers: headers,
-        body: jsonEncode(payload),
-      );
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        debugPrint('NotificationHelper: Push notification sent successfully to ${targetUserIds.length} users.');
-      } else {
-        debugPrint('NotificationHelper: Failed to send push notification. Code: ${response.statusCode}, Body: ${response.body}');
+      if (sendAfter != null) {
+        debugPrint('NotificationHelper: scheduled notifications must be created by a server-side scheduler.');
+        return;
       }
+
+      await ApiService.post('/notifications/send', {
+        'targetUserIds': targetUserIds,
+        'title': title,
+        'body': body,
+      });
+      debugPrint('NotificationHelper: push notification requested for ${targetUserIds.length} users.');
     } catch (e) {
       debugPrint('NotificationHelper: Error sending push notification: $e');
     }
@@ -156,22 +115,11 @@ class NotificationHelper {
 
   /// Automatically notifies a student's preacher when they log any activity.
   static Future<void> sendUpdateNotification(Map<String, dynamic> update) async {
-    final String studentId = update['worker_id'] ?? '';
     final String studentName = update['worker_name'] ?? 'A student';
     final String category = update['category'] ?? '';
     final String description = update['description'] ?? update['work_started'] ?? '';
     
-    String? preacherId;
-    try {
-      final client = Supabase.instance.client;
-      final profile = await client.from('profiles').select('preacher_id').eq('id', studentId).maybeSingle();
-      if (profile != null) {
-        preacherId = profile['preacher_id']?.toString();
-      }
-    } catch (e) {
-      debugPrint('NotificationHelper error finding preacher: $e');
-    }
-
+    String? preacherId = (update['preacher_id'] ?? update['preacherId'])?.toString();
     if (preacherId == null || preacherId.isEmpty) return;
 
     String title = 'New Student Activity';
@@ -277,6 +225,44 @@ class NotificationHelper {
       targetUserIds: [studentId],
       title: 'Account Approved!',
       body: 'Your account has been approved as a $roleName by $preacherName. You can now login.',
+    );
+  }
+
+  /// Sends a notification to all active disciples when a new online session is created.
+  static Future<void> sendNewSessionNotification({
+    required List<String> targetUserIds,
+    required String preacherName,
+    required String sessionTitle,
+    required String date,
+    required String time,
+  }) async {
+    await sendNotification(
+      targetUserIds: targetUserIds,
+      title: 'New Session Scheduled',
+      body: 'Preacher $preacherName has scheduled a new session: "$sessionTitle" on $date at $time.',
+    );
+  }
+
+  /// Schedules a reminder notification to be sent 2 minutes before the session starts.
+  static Future<void> sendScheduledSessionReminder({
+    required List<String> targetUserIds,
+    required String sessionTitle,
+    required DateTime sessionDateTime,
+  }) async {
+    final reminderTime = sessionDateTime.subtract(const Duration(minutes: 2));
+    if (reminderTime.isBefore(DateTime.now())) {
+      // If the session starts in less than 2 minutes, don't schedule a reminder
+      return;
+    }
+
+    // Convert to UTC ISO-8601 string as expected by OneSignal
+    final sendAfterStr = reminderTime.toUtc().toIso8601String();
+
+    await sendNotification(
+      targetUserIds: targetUserIds,
+      title: 'Session Starting Soon',
+      body: 'The session "$sessionTitle" is starting in 2 minutes. Get ready to join!',
+      sendAfter: sendAfterStr,
     );
   }
 }

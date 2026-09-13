@@ -1,5 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'utils/constants.dart';
 import 'screens/splash_screen.dart';
 import 'screens/login_screen.dart';
@@ -7,7 +8,6 @@ import 'screens/signup_screen.dart';
 import 'screens/home_wrapper.dart';
 import 'screens/folk_boy_dashboard.dart';
 import 'screens/preacher_dashboard.dart';
-import 'screens/residency_dashboard.dart';
 import 'screens/admin_dashboard.dart';
 import 'screens/reset_password_screen.dart';
 
@@ -15,24 +15,20 @@ import 'utils/notification_helper.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  await Supabase.initialize(
-    url: Constants.supabaseUrl,
-    anonKey: Constants.supabaseAnonKey,
-  );
 
-  // Initialize OneSignal
-  await NotificationHelper.initialize();
+  // Initialize Firebase App
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    debugPrint('Firebase initialization error: $e');
+  }
 
-  // Listen to auth changes globally to sync OneSignal user state
-  Supabase.instance.client.auth.onAuthStateChange.listen((data) {
-    final session = data.session;
-    final event = data.event;
-    if (session != null && (event == AuthChangeEvent.signedIn || event == AuthChangeEvent.tokenRefreshed)) {
-      NotificationHelper.loginUser(session.user.id).catchError((_) {});
-    } else if (event == AuthChangeEvent.signedOut) {
-      NotificationHelper.logoutUser().catchError((_) {});
-    }
+  // Validate app constants
+  Constants.validate();
+
+  // Initialize notifications in the background
+  NotificationHelper.initialize().catchError((e) {
+    debugPrint('Notification initialization error: $e');
   });
 
   runApp(const MyApp());
@@ -57,7 +53,7 @@ class MyApp extends StatelessWidget {
         '/signup': (context) => const SignupScreen(),
         '/reset-password': (context) => const ResetPasswordScreen(),
         '/folk-boy': (context) => const FolkBoyDashboard(),
-        '/residency': (context) => const ResidencyDashboard(),
+        '/residency': (context) => const FolkBoyDashboard(),
         '/preacher': (context) => const PreacherDashboard(),
         '/admin-control-panel': (context) => const AdminDashboard(),
       },

@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import '../../services/api_service.dart';
 
 class AttendanceTab extends StatefulWidget {
   final List<dynamic> folkBoys;
   final Map<String, List<dynamic>> allUpdates;
   final Map<String, dynamic>? preacherProfile;
-  final SupabaseClient supabase;
   final Future<void> Function() onRefresh;
 
   const AttendanceTab({
@@ -14,7 +13,6 @@ class AttendanceTab extends StatefulWidget {
     required this.folkBoys,
     required this.allUpdates,
     required this.preacherProfile,
-    required this.supabase,
     required this.onRefresh,
   });
 
@@ -39,8 +37,8 @@ class _AttendanceTabState extends State<AttendanceTab> {
   Future<void> _markAttendance(Map<String, dynamic> boy) async {
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
     try {
-      await widget.supabase.from('updates').insert({
-        'worker_id': boy['id'].toString(),
+      await ApiService.post('/sadhana', {
+        'worker_id': (boy['id'] ?? boy['_id']).toString(),
         'worker_name': boy['name'],
         'preacher_name': widget.preacherProfile?['name'] ?? 'Preacher',
         'category': 'attendance',
@@ -48,7 +46,6 @@ class _AttendanceTabState extends State<AttendanceTab> {
         'description': 'Marked Present by Preacher',
         'is_completed': true,
         'date': today,
-        'created_at': DateTime.now().toIso8601String(),
       });
       await widget.onRefresh();
     } catch (e) {

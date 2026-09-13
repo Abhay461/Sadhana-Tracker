@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:mobile_app/screens/splash_screen.dart';
 
 void main() {
@@ -15,12 +14,6 @@ void main() {
         }
         return null;
       },
-    );
-
-    // Initialize Supabase with placeholders
-    await Supabase.initialize(
-      url: 'https://placeholder.supabase.co',
-      anonKey: 'placeholder-anon-key',
     );
   });
 

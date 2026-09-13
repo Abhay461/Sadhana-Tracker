@@ -1,15 +1,14 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../services/api_service.dart';
 import '../../services/cloudinary_service.dart';
 
 class OnlineSessionTab extends StatefulWidget {
   final List<dynamic> folkBoys;
   final Map<String, List<dynamic>> allUpdates;
   final Map<String, dynamic>? preacherProfile;
-  final SupabaseClient supabase;
   final Future<void> Function() onRefresh;
 
   const OnlineSessionTab({
@@ -17,7 +16,6 @@ class OnlineSessionTab extends StatefulWidget {
     required this.folkBoys,
     required this.allUpdates,
     required this.preacherProfile,
-    required this.supabase,
     required this.onRefresh,
   });
 
@@ -60,31 +58,32 @@ class _OnlineSessionTabState extends State<OnlineSessionTab> {
 
   Future<void> _fetchOnlineSession() async {
     try {
-      final sessionData = await widget.supabase
-          .from('online_announcements')
-          .select('*')
-          .eq('id', '00000000-0000-0000-0000-000000000001')
-          .maybeSingle();
-
-      if (sessionData != null && mounted) {
-        setState(() {
-          _sessionTitleController.text = sessionData['title'] ?? '';
-          _sessionLinkController.text = sessionData['link'] ?? '';
-          _sessionPosterUrl = sessionData['banner_url'];
-          
-          final timeStr = sessionData['session_time'] as String?;
-          if (timeStr != null && timeStr.contains(' @ ')) {
-            final parts = timeStr.split(' @ ');
-            try {
-              _sessionDate = DateTime.parse(parts[0]);
-              final timeParts = parts[1].split(':');
-              _sessionTime = TimeOfDay(
-                hour: int.parse(timeParts[0]),
-                minute: int.parse(timeParts[1]),
-              );
-            } catch (_) {}
-          }
-        });
+      final list = await ApiService.get('/announcements');
+      if (list is List && list.isNotEmpty) {
+        final sessionData = list.firstWhere(
+          (a) => a['category'] == 'online_session' || a['type'] == 'online',
+          orElse: () => null,
+        );
+        if (sessionData != null && mounted) {
+          setState(() {
+            _sessionTitleController.text = sessionData['title'] ?? '';
+            _sessionLinkController.text = sessionData['link'] ?? '';
+            _sessionPosterUrl = sessionData['banner_url'] ?? sessionData['photo_url'];
+            
+            final timeStr = (sessionData['session_time'] ?? sessionData['time']) as String?;
+            if (timeStr != null && timeStr.contains(' @ ')) {
+              final parts = timeStr.split(' @ ');
+              try {
+                _sessionDate = DateTime.parse(parts[0]);
+                final timeParts = parts[1].split(':');
+                _sessionTime = TimeOfDay(
+                  hour: int.parse(timeParts[0]),
+                  minute: int.parse(timeParts[1]),
+                );
+              } catch (_) {}
+            }
+          });
+        }
       }
     } catch (e) {
       debugPrint('Error fetching session in tab: $e');
@@ -115,13 +114,12 @@ class _OnlineSessionTabState extends State<OnlineSessionTab> {
       final formattedDate = DateFormat('yyyy-MM-dd').format(_sessionDate);
       final finalTimeStr = '$formattedDate @ $time24';
 
-      await widget.supabase.from('online_announcements').upsert({
-        'id': '00000000-0000-0000-0000-000000000001',
+      await ApiService.post('/announcements', {
         'title': _sessionTitleController.text.trim(),
         'link': _sessionLinkController.text.trim(),
         'banner_url': _sessionPosterUrl,
         'session_time': finalTimeStr,
-        'updated_at': DateTime.now().toIso8601String(),
+        'category': 'online_session',
       });
 
       if (mounted) {
@@ -132,6 +130,58 @@ class _OnlineSessionTabState extends State<OnlineSessionTab> {
       await widget.onRefresh();
     } catch (e) {
       debugPrint('Error saving session: $e');
+    } finally {
+      setState(() => _isSessionLoading = false);
+    }
+  }
+
+  Future<void> _deleteOnlineSession() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('Delete Online Session', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: const Text('Are you sure you want to delete the active online session details? This will hide the session from all student dashboards.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('CANCEL', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('DELETE', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFEF4444))),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _isSessionLoading = true);
+    try {
+      await ApiService.delete('/announcements/online_session');
+
+      setState(() {
+        _sessionTitleController.clear();
+        _sessionLinkController.clear();
+        _sessionPosterUrl = null;
+        _sessionDate = DateTime.now();
+        _sessionTime = const TimeOfDay(hour: 18, minute: 0);
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Online Session deleted successfully!')),
+        );
+      }
+      await widget.onRefresh();
+    } catch (e) {
+      debugPrint('Error deleting session: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete session: $e')),
+        );
+      }
     } finally {
       setState(() => _isSessionLoading = false);
     }
@@ -274,20 +324,43 @@ class _OnlineSessionTabState extends State<OnlineSessionTab> {
                   ),
                   const SizedBox(height: 24),
 
-                  SizedBox(
-                    width: double.infinity,
-                    height: 54,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0F9D58),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                   Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: SizedBox(
+                          height: 54,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0F9D58),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            ),
+                            onPressed: _isSessionLoading ? null : _saveOnlineSession,
+                            child: _isSessionLoading
+                                ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                                : const Text('SAVE DETAILS', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.0)),
+                          ),
+                        ),
                       ),
-                      onPressed: _isSessionLoading ? null : _saveOnlineSession,
-                      child: _isSessionLoading
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text('SAVE SESSION DETAILS', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                    ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: SizedBox(
+                          height: 54,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFEF4444),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            ),
+                            onPressed: _isSessionLoading ? null : _deleteOnlineSession,
+                            icon: const Icon(Icons.delete_outline, size: 18),
+                            label: const Text('DELETE', style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      ),
+                    ],
                   )
                 ],
               ),

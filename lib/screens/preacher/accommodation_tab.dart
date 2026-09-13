@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import '../../services/api_service.dart';
 
 class AccommodationTab extends StatefulWidget {
   final List<dynamic> folkBoys;
   final Map<String, List<dynamic>> allUpdates;
   final Map<String, dynamic>? preacherProfile;
-  final SupabaseClient supabase;
   final Future<void> Function() onRefresh;
 
   const AccommodationTab({
@@ -14,7 +13,6 @@ class AccommodationTab extends StatefulWidget {
     required this.folkBoys,
     required this.allUpdates,
     required this.preacherProfile,
-    required this.supabase,
     required this.onRefresh,
   });
 
@@ -51,17 +49,16 @@ class _AccommodationTabState extends State<AccommodationTab> {
         req['work_completed'] = 'ROOM: $roomNumber';
       });
 
-      await widget.supabase.from('updates').insert({
+      await ApiService.post('/sadhana', {
         'worker_id': req['worker_id'].toString(),
         'worker_name': req['worker_name'],
         'preacher_name': widget.preacherProfile?['name'] ?? 'Preacher',
         'category': 'accommodation_approval_signal',
-        'work_started': 'SIGNAL: ${req['id']}',
+        'work_started': 'SIGNAL: ${req['id'] ?? req['_id']}',
         'work_completed': 'ROOM: $roomNumber',
         'is_completed': true,
         'date': DateFormat('yyyy-MM-dd').format(DateTime.now()),
         'points': 0,
-        'created_at': DateTime.now().toIso8601String(),
       });
       
       await widget.onRefresh();
@@ -100,21 +97,20 @@ class _AccommodationTabState extends State<AccommodationTab> {
     try {
       setState(() {
         for (var list in widget.allUpdates.values) {
-          list.removeWhere((item) => item['id'] == req['id']);
+          list.removeWhere((item) => (item['id'] ?? item['_id']) == (req['id'] ?? req['_id']));
         }
       });
 
-      await widget.supabase.from('updates').insert({
+      await ApiService.post('/sadhana', {
         'worker_id': req['worker_id'].toString(),
         'worker_name': req['worker_name'],
         'preacher_name': widget.preacherProfile?['name'] ?? 'Preacher',
         'category': 'accommodation_delete_signal',
-        'work_started': 'SIGNAL: ${req['id']}',
+        'work_started': 'SIGNAL: ${req['id'] ?? req['_id']}',
         'work_completed': '',
         'is_completed': true,
         'date': DateFormat('yyyy-MM-dd').format(DateTime.now()),
         'points': 0,
-        'created_at': DateTime.now().toIso8601String(),
       });
 
       await widget.onRefresh();
@@ -346,8 +342,8 @@ class _AccommodationTabState extends State<AccommodationTab> {
                     title: 'CONFIRMED',
                     count: confirmedCount,
                     icon: Icons.check_circle_outline_rounded,
-                    color: const Color(0xFF9333EA),
-                    bgColor: const Color(0xFFF3E8FF),
+                    color: const Color(0xFF16A34A),
+                    bgColor: const Color(0xFFF0FDF4),
                   ),
                 ),
               ],

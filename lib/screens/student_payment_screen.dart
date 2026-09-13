@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import '../services/api_service.dart';
 import '../utils/notification_helper.dart';
 
 class StudentPaymentScreen extends StatefulWidget {
@@ -11,7 +12,6 @@ class StudentPaymentScreen extends StatefulWidget {
 }
 
 class _StudentPaymentScreenState extends State<StudentPaymentScreen> {
-  final supabase = Supabase.instance.client;
   bool _isLoading = true;
   List<dynamic> _payments = [];
 
@@ -22,20 +22,15 @@ class _StudentPaymentScreenState extends State<StudentPaymentScreen> {
   }
 
   Future<void> _fetchPayments() async {
-    final user = supabase.auth.currentUser;
+    final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
     setState(() => _isLoading = true);
     try {
-      final data = await supabase
-          .from('updates')
-          .select('*')
-          .eq('worker_id', user.id)
-          .eq('category', 'payment')
-          .order('created_at', ascending: false);
+      final data = await ApiService.get('/payments/me');
 
       setState(() {
-        _payments = data;
+        _payments = data is List ? data : [];
         _isLoading = false;
       });
     } catch (e) {
@@ -47,14 +42,14 @@ class _StudentPaymentScreenState extends State<StudentPaymentScreen> {
   Future<void> _markAsPaid(dynamic payment) async {
     setState(() => _isLoading = true);
     try {
-      await supabase.from('updates').update({
-        'is_completed': false,
-        'work_completed': 'SUBMITTED',
-      }).eq('id', payment['id']);
+      await ApiService.patch('/payments/${payment['id'] ?? payment['_id']}', {
+        'status': 'SUBMITTED',
+        'isCompleted': false,
+      });
 
-      final user = supabase.auth.currentUser;
+      final user = FirebaseAuth.instance.currentUser;
       final updateData = {
-        'worker_id': user?.id,
+        'worker_id': user?.uid,
         'worker_name': payment['worker_name'] ?? 'Student',
         'category': 'payment',
         'work_started': payment['work_started'] ?? '₹0',
