@@ -374,16 +374,18 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
 
         if (activities.containsKey('chanting') && activities['chanting'] is Map) {
           final c = activities['chanting'] as Map;
-          final rounds = c['rounds'] ?? 16;
-          result.add({
-            'id': u['_id'] ?? u['id'],
-            'date': date,
-            'category': 'folk_sadhna',
-            'work_started': 'Chanting - $rounds rounds',
-            'work_completed': '$rounds rounds',
-            'is_completed': true,
-            'points': 10,
-          });
+          final rounds = c['rounds'];
+          if (rounds != null && rounds != 0) {
+            result.add({
+              'id': u['_id'] ?? u['id'],
+              'date': date,
+              'category': 'folk_sadhna',
+              'work_started': 'Chanting - $rounds rounds',
+              'work_completed': '$rounds rounds',
+              'is_completed': true,
+              'points': 10,
+            });
+          }
         }
 
         if (activities.containsKey('onlineSession') && activities['onlineSession'] is Map) {
@@ -404,31 +406,35 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
 
         if (activities.containsKey('bookReading') && activities['bookReading'] is Map) {
           final b = activities['bookReading'] as Map;
-          final book = b['bookName'] ?? 'Bhagavad Gita';
-          final pages = b['pagesOrMinutes'] ?? '30 mins';
-          result.add({
-            'id': u['_id'] ?? u['id'],
-            'date': date,
-            'category': 'folk_sadhna',
-            'work_started': 'Book Reading - $book',
-            'work_completed': pages,
-            'is_completed': true,
-            'points': 5,
-          });
+          final book = b['bookName'];
+          if (book != null && book.toString().isNotEmpty) {
+            final pages = b['pagesOrMinutes'] ?? '30 mins';
+            result.add({
+              'id': u['_id'] ?? u['id'],
+              'date': date,
+              'category': 'folk_sadhna',
+              'work_started': 'Book Reading - $book',
+              'work_completed': pages,
+              'is_completed': true,
+              'points': 5,
+            });
+          }
         }
 
         if (activities.containsKey('service') && activities['service'] is Map) {
           final s = activities['service'] as Map;
-          final name = s['serviceName'] ?? 'Service';
-          result.add({
-            'id': u['_id'] ?? u['id'],
-            'date': date,
-            'category': 'folk_sadhna',
-            'work_started': 'Service - $name',
-            'work_completed': '${s['durationMinutes'] ?? 30} mins',
-            'is_completed': true,
-            'points': 5,
-          });
+          final name = s['serviceName'];
+          if (name != null && name.toString().isNotEmpty) {
+            result.add({
+              'id': u['_id'] ?? u['id'],
+              'date': date,
+              'category': 'folk_sadhna',
+              'work_started': 'Service - $name',
+              'work_completed': '${s['durationMinutes'] ?? 30} mins',
+              'is_completed': true,
+              'points': 5,
+            });
+          }
         }
 
         if (activities.containsKey('templeVisit') && activities['templeVisit'] is Map) {
@@ -478,8 +484,8 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
 
         if (activities.containsKey('ekadashiFasting') && activities['ekadashiFasting'] is Map) {
           final e = activities['ekadashiFasting'] as Map;
-          final type = e['fastingType'] ?? 'Fasting';
-          if (type != 'No Fasting') {
+          final type = e['fastingType'];
+          if (type != null && type.toString().isNotEmpty && type != 'No Fasting') {
             result.add({
               'id': u['_id'] ?? u['id'],
               'date': date,
@@ -497,8 +503,11 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     return result;
   }
 
+  int _fetchUpdatesRequestId = 0;
+
   Future<void> _fetchUpdates() async {
     if (_profile == null) return;
+    final requestId = ++_fetchUpdatesRequestId;
     try {
       List<dynamic> data = [];
       dynamic res;
@@ -526,6 +535,11 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         } catch (_) {}
       }
 
+      if (requestId != _fetchUpdatesRequestId) {
+        debugPrint('📋 [DEBUG] Skipping outdated _fetchUpdates response (req #$requestId != current #$_fetchUpdatesRequestId)');
+        return;
+      }
+
       final normalizedData = _normalizeSadhanaItems(data);
       debugPrint('📋 [DEBUG] Normalized items count: ${normalizedData.length}');
       for (int i = 0; i < normalizedData.length && i < 5; i++) {
@@ -537,6 +551,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       ).toList();
       debugPrint('📋 [DEBUG] Clean updates count: ${cleanUpdates.length}');
 
+      if (!mounted) return;
       setState(() {
         _updates = cleanUpdates;
       });
