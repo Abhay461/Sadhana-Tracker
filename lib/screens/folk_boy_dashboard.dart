@@ -3842,7 +3842,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                             color: Colors.white,
                             fontSize: 15,
                             fontWeight: FontWeight.bold,
-                            shadows: [Shadow(color: Colors.black50, blurRadius: 4)],
+                            shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
                           ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
