@@ -447,7 +447,7 @@
   <!-- Sidebar Navigation -->
   <aside>
     <div class="brand">
-      <img src="folk_logo.png" alt="FOLK Vrindavan Logo" class="brand-logo-img" onerror="this.onerror=null; this.src='https://raw.githubusercontent.com/Abhay461/Sadhana-Tracker/main/mobile_app/assets/folk_logo.png';">
+      <img src="https://raw.githubusercontent.com/Abhay461/Sadhana-Tracker/main/mobile_app/assets/folk_logo.png" alt="FOLK Vrindavan Logo" class="brand-logo-img">
       <div class="brand-text">
         <h2>FOLK Vrindavan</h2>
         <p>ADMIN CONTROL WEB</p>
@@ -595,28 +595,39 @@
         </div>
       </div>
 
-      <!-- Tab 3: Announcements -->
+      <!-- Tab 3: Announcements & Video Banners -->
       <div id="announcementsTab" class="tab-content">
         <div class="modal-box" style="width: 100%; max-width: 600px;">
-          <h2 style="margin-bottom: 16px;">Publish Announcement / Youth Workshop</h2>
+          <h2 style="margin-bottom: 16px;">Publish Announcement / YouTube Video Banner</h2>
           <form id="announcementForm" onsubmit="submitAnnouncement(event)">
             <div class="form-group">
               <label>Title</label>
-              <input type="text" id="annTitle" class="form-control" placeholder="e.g. Special Youth Vrindavan Yatra 2026" required>
+              <input type="text" id="annTitle" class="form-control" placeholder="e.g. Sunday Satsang / Special Yatra" required>
             </div>
             <div class="form-group">
               <label>Category</label>
-              <select id="annCategory" class="form-control">
+              <select id="annCategory" class="form-control" onchange="toggleAnnCategory()">
+                <option value="[YOUTUBE]">YouTube Video Banner (Home Page)</option>
                 <option value="[EVENT]">Event</option>
                 <option value="[TRIP]">Trip / Yatra</option>
                 <option value="[SESSION]">Online Session</option>
               </select>
             </div>
-            <div class="form-group">
-              <label>Description / Details</label>
-              <textarea id="annContent" class="form-control" rows="4" required></textarea>
+            <div id="annYoutubeFields" style="display: block;">
+              <div class="form-group">
+                <label>YouTube Video Link</label>
+                <input type="url" id="annYoutubeUrl" class="form-control" placeholder="e.g. https://youtu.be/..." required>
+              </div>
+              <div class="form-group">
+                <label>Banner Image URL (Optional - Auto thumbnail generated if empty)</label>
+                <input type="url" id="annBannerUrl" class="form-control" placeholder="e.g. https://images.unsplash.com/...">
+              </div>
             </div>
-            <button type="submit" class="btn btn-primary" style="width: 100%;">Publish Announcement</button>
+            <div class="form-group" id="annDescField" style="display: none;">
+              <label>Description / Details</label>
+              <textarea id="annContent" class="form-control" rows="4"></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%;">Publish Announcement / Banner</button>
           </form>
         </div>
       </div>
@@ -1118,12 +1129,48 @@
       }
     }
 
+    function toggleAnnCategory() {
+      const cat = document.getElementById('annCategory').value;
+      const ytFields = document.getElementById('annYoutubeFields');
+      const descField = document.getElementById('annDescField');
+      if (cat === '[YOUTUBE]') {
+        ytFields.style.display = 'block';
+        descField.style.display = 'none';
+        document.getElementById('annContent').removeAttribute('required');
+        document.getElementById('annYoutubeUrl').setAttribute('required', 'true');
+      } else {
+        ytFields.style.display = 'none';
+        descField.style.display = 'block';
+        document.getElementById('annContent').setAttribute('required', 'true');
+        document.getElementById('annYoutubeUrl').removeAttribute('required');
+      }
+    }
+
     async function submitAnnouncement(e) {
       e.preventDefault();
+      const cat = document.getElementById('annCategory').value;
+      const title = document.getElementById('annTitle').value.trim();
+      let contentPayload = '';
+
+      if (cat === '[YOUTUBE]') {
+        const youtubeUrl = document.getElementById('annYoutubeUrl').value.trim();
+        let bannerUrl = document.getElementById('annBannerUrl').value.trim();
+        if (!bannerUrl) {
+          const regExp = /^.*(?:youtu.be\/|v\/|e\/|u\/\w+\/|embed\/|v=)([^#\&\?]*).*/i;
+          const match = youtubeUrl.match(regExp);
+          if (match && match[1].length === 11) {
+            bannerUrl = `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg`;
+          }
+        }
+        contentPayload = `[YOUTUBE] ${title} | ${bannerUrl} | ${youtubeUrl}`;
+      } else {
+        contentPayload = `${cat} ${title}\n${document.getElementById('annContent').value}`;
+      }
+
       const payload = {
-        title: document.getElementById('annTitle').value,
-        category: document.getElementById('annCategory').value,
-        content: `${document.getElementById('annCategory').value} ${document.getElementById('annTitle').value}\n${document.getElementById('annContent').value}`,
+        title: title,
+        category: cat,
+        content: contentPayload,
       };
 
       try {
@@ -1133,10 +1180,15 @@
           body: JSON.stringify(payload),
         });
 
-        showToast('Announcement published successfully!');
-        document.getElementById('announcementForm').reset();
+        if (res.ok) {
+          showToast('Published successfully!');
+          document.getElementById('announcementForm').reset();
+          toggleAnnCategory();
+        } else {
+          showToast('Failed to publish', true);
+        }
       } catch (err) {
-        showToast('Announcement published!');
+        showToast('Error publishing: ' + err.message, true);
       }
     }
 
