@@ -605,6 +605,23 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
               'banner': parts.length > 3 ? parts[3] : '',
               'link': parts.length > 4 ? parts[4] : '',
             });
+          } else if (content.startsWith('[YOUTUBE]')) {
+            final parts = content.replaceFirst('[YOUTUBE] ', '').split(' | ');
+            final youtubeUrl = parts.length > 2 ? parts[2] : (parts.length > 1 ? parts[1] : '');
+            String bannerUrl = parts.length > 1 ? parts[1] : '';
+            if (bannerUrl.isEmpty || !bannerUrl.startsWith('http')) {
+              final videoId = _extractYouTubeId(youtubeUrl);
+              if (videoId != null) {
+                bannerUrl = 'https://img.youtube.com/vi/$videoId/hqdefault.jpg';
+              }
+            }
+            loadedAnnouncements.add({
+              'type': 'youtube',
+              'id': ann['id'] ?? ann['_id'],
+              'title': parts.isNotEmpty ? parts[0] : 'YouTube Video',
+              'banner': bannerUrl,
+              'link': youtubeUrl,
+            });
           } else {
             loadedAnnouncements.add({
               'type': ann['category'] == 'online_session' ? 'session' : 'announcement',
@@ -1613,6 +1630,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
             _buildInlineSadhanaCard(),
             const SizedBox(height: 20),
             _buildDailyDarshanCard(),
+            _buildYouTubeVideoBanners(),
             _buildDailyQuoteCard(),
             if (_announcements.isNotEmpty) ...[
               SizedBox(
@@ -1776,22 +1794,91 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     );
   }
 
-  Widget _buildHistoryTab() {
-    final filteredUpdates = _updates.where((u) {
-      if (_selectedHistoryDate == null) return true;
-      final selectedDateStr = DateFormat('yyyy-MM-dd').format(_selectedHistoryDate!);
-      final itemDate = u['date'] as String? ?? '';
-      return itemDate == selectedDateStr;
-    }).toList();
+  Map<String, dynamic>? _getSadhanaRecordForActivityAndDate(String activity, String targetDate) {
+    try {
+      return _updates.firstWhere((u) {
+        final uDate = u['date'] as String? ?? '';
+        if (uDate != targetDate) return false;
+        final category = u['category'] as String? ?? '';
+        if (category != 'folk_sadhna') return false;
+        final workStarted = (u['work_started'] ?? '').toString();
 
-    final Map<String, List<dynamic>> groupedUpdates = {};
-    for (var u in filteredUpdates) {
-      final date = u['date'] as String? ?? 'No Date';
-      groupedUpdates.putIfAbsent(date, () => []).add(u);
+        if (activity == 'Chanting') return workStarted.startsWith('Chanting');
+        if (activity == 'Mangla Arti') return workStarted.contains('Mangla Arti');
+        if (activity == 'Online Session') return workStarted.startsWith('Online Session');
+        if (activity == 'Book Reading') return workStarted.startsWith('Book Reading');
+        if (activity == 'Service') return workStarted.startsWith('Service');
+        if (activity == 'Temple Visit') return workStarted.startsWith('Temple Visit');
+        if (activity == 'Srimad Bhagavatam Class') return workStarted.startsWith('Srimad Bhagavatam Class');
+        if (activity == 'Bhagavad Gita Class') return workStarted.startsWith('Bhagavad Gita Class');
+        if (activity == 'Morning') return workStarted.startsWith('Morning');
+        if (activity == 'Sleep') return workStarted.startsWith('Sleep');
+        if (activity == 'Ekadashi Fasting' || activity == 'Ekadashi') return workStarted.contains('Ekadashi');
+        return false;
+      });
+    } catch (_) {
+      return null;
     }
+  }
 
-    final sortedDates = groupedUpdates.keys.toList()
-      ..sort((a, b) => b.compareTo(a));
+  String _getSadhanaValueText(String activity, String workStarted) {
+    final String ws = workStarted;
+    if (activity == 'Chanting') {
+      if (ws.contains('-')) return ws.split('-').skip(1).join('-').trim();
+      return 'Completed';
+    } else if (activity == 'Book Reading' || activity == 'Service') {
+      if (ws.contains('-')) return ws.split('-').skip(1).join('-').trim();
+      return 'Completed';
+    } else if (activity == 'Mangla Arti') {
+      if (ws.contains('(')) return ws.substring(ws.indexOf('(') + 1, ws.indexOf(')')).trim();
+      return 'Attended';
+    } else if (activity == 'Online Session' || activity == 'Srimad Bhagavatam Class' || activity == 'Bhagavad Gita Class') {
+      if (ws.contains('(')) return ws.substring(ws.indexOf('(') + 1, ws.indexOf(')')).trim();
+      return 'Attended';
+    } else if (activity == 'Morning') {
+      if (ws.contains('Wake-up:')) return ws.split('Wake-up:')[1].replaceAll(')', '').trim();
+      return 'Completed';
+    } else if (activity == 'Sleep') {
+      if (ws.contains('Time:')) return ws.split('Time:')[1].replaceAll(')', '').trim();
+      return 'Completed';
+    } else if (activity == 'Ekadashi Fasting' || activity == 'Ekadashi') {
+      if (ws.contains(':')) return ws.split(':')[1].trim();
+      return 'Fasting';
+    } else if (activity == 'Temple Visit') {
+      return 'Visited';
+    }
+    return ws == activity ? 'Completed' : ws;
+  }
+
+  Widget _buildHistoryTab() {
+    final List<Map<String, String>> standardActivities = [
+      {'key': 'Morning', 'label': 'Morning Wake-Up'},
+      {'key': 'Mangla Arti', 'label': 'Mangla Arti'},
+      {'key': 'Chanting', 'label': 'Chanting'},
+      {'key': 'Online Session', 'label': 'Online Session'},
+      {'key': 'Book Reading', 'label': 'Book Reading'},
+      {'key': 'Service', 'label': 'Service'},
+      {'key': 'Temple Visit', 'label': 'Temple Visit'},
+      {'key': 'Srimad Bhagavatam Class', 'label': 'Srimad Bhagavatam Class'},
+      {'key': 'Bhagavad Gita Class', 'label': 'Bhagavad Gita Class'},
+      {'key': 'Ekadashi Fasting', 'label': 'Ekadashi Fasting'},
+      {'key': 'Sleep', 'label': 'Sleep Time'},
+    ];
+
+    List<String> targetDates = [];
+    if (_selectedHistoryDate != null) {
+      targetDates = [DateFormat('yyyy-MM-dd').format(_selectedHistoryDate!)];
+    } else {
+      final Map<String, List<dynamic>> grouped = {};
+      for (var u in _updates) {
+        final date = u['date'] as String? ?? '';
+        if (date.isNotEmpty) grouped.putIfAbsent(date, () => []);
+      }
+      targetDates = grouped.keys.toList()..sort((a, b) => b.compareTo(a));
+      if (targetDates.isEmpty) {
+        targetDates = [DateFormat('yyyy-MM-dd').format(DateTime.now())];
+      }
+    }
 
     return Column(
       children: [
@@ -1804,7 +1891,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                 onPressed: () => setState(() => _servicesSubTab = 0),
               ),
               const Text(
-                'Sadhana History',
+                'Sadhana History Sheet',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
               ),
             ],
@@ -1869,92 +1956,177 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
           ),
         ),
         Expanded(
-          child: filteredUpdates.isEmpty
-              ? const Center(child: Text('No records found for this date', style: TextStyle(color: Colors.grey)))
-              : RefreshIndicator(
-                  onRefresh: () async {
-                    await _loadProfileAndData();
-                  },
-                  child: ListView.builder(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    itemCount: sortedDates.length,
-                    itemBuilder: (context, index) {
-                      final dateStr = sortedDates[index];
-                      final items = groupedUpdates[dateStr]!;
+          child: RefreshIndicator(
+            onRefresh: () async {
+              await _loadProfileAndData();
+            },
+            child: ListView.builder(
+              padding: const EdgeInsets.only(bottom: 24),
+              physics: const AlwaysScrollableScrollPhysics(),
+              itemCount: targetDates.length,
+              itemBuilder: (context, index) {
+                final dateStr = targetDates[index];
 
-                      String displayDate = '';
-                      try {
-                        final parsedDate = DateTime.parse(dateStr);
-                        displayDate = DateFormat('EEEE, dd MMMM yyyy').format(parsedDate);
-                      } catch (_) {
-                        displayDate = dateStr;
-                      }
+                String displayDate = '';
+                try {
+                  final parsedDate = DateTime.parse(dateStr);
+                  displayDate = DateFormat('EEEE, dd MMMM yyyy').format(parsedDate);
+                } catch (_) {
+                  displayDate = dateStr;
+                }
 
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(left: 20, right: 20, top: 16, bottom: 8),
+                      child: Text(
+                        displayDate,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF3F1200),
+                        ),
+                      ),
+                    ),
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.0),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Colors.black12,
+                            blurRadius: 2,
+                            offset: Offset(0, 1),
+                          )
+                        ],
+                      ),
+                      child: Column(
                         children: [
-                          Padding(
-                            padding: const EdgeInsets.only(left: 20, right: 20, top: 16, bottom: 8),
-                            child: Text(
-                              displayDate,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF3F1200),
-                              ),
+                          // Table Header Row
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+                              border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1)),
                             ),
-                          ),
-                          ...items.map((u) {
-                            final isScreenTime = u['category'] == 'screen_time';
-                            final isCompleted = u['is_completed'] ?? false;
-                            final id = u['id'] ?? u['_id'];
-                            return Card(
-                              elevation: 0,
-                              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                              color: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                side: BorderSide(color: Colors.grey[200]!),
-                              ),
-                              child: ListTile(
-                                leading: CircleAvatar(
-                                  backgroundColor: isScreenTime
-                                      ? const Color(0xFFFCE7F3)
-                                      : (isCompleted ? const Color(0xFFD1FAE5) : const Color(0xFFFEF3C7)),
-                                  child: Icon(
-                                    isScreenTime
-                                        ? Icons.smartphone_outlined
-                                        : (isCompleted ? Icons.check_circle : Icons.timer),
-                                    color: isScreenTime
-                                        ? const Color(0xFFDB2777)
-                                        : (isCompleted ? const Color(0xFF059669) : const Color(0xFFD97706)),
+                            child: const Row(
+                              children: [
+                                SizedBox(
+                                  width: 32,
+                                  child: Center(
+                                    child: Text('Status', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
                                   ),
                                 ),
-                                title: Text(
-                                  u['work_started'] ?? '',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1E293B)),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  flex: 4,
+                                  child: Text('Sadhana Activity', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
                                 ),
-                                subtitle: Text(
-                                  isScreenTime
-                                      ? 'Screen Time Track Log'
-                                      : (isCompleted ? 'Completed' : 'Pending for Preacher Approval'),
-                                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                Expanded(
+                                  flex: 4,
+                                  child: Text('Time / Detail', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
                                 ),
-                                trailing: IconButton(
-                                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                                  onPressed: () {
-                                    _handleDeleteUpdate(id, u['work_started'] ?? '');
-                                  },
+                                SizedBox(
+                                  width: 32,
+                                  child: Center(
+                                    child: Text('Action', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
+                                  ),
                                 ),
+                              ],
+                            ),
+                          ),
+                          // Table Data Rows
+                          ...standardActivities.asMap().entries.map((entry) {
+                            final idx = entry.key;
+                            final act = entry.value;
+                            final key = act['key']!;
+                            final label = act['label']!;
+                            final record = _getSadhanaRecordForActivityAndDate(key, dateStr);
+                            final isLogged = record != null;
+                            final String workStarted = record != null ? (record['work_started'] ?? '') : '';
+                            final String valText = isLogged ? _getSadhanaValueText(key, workStarted) : 'Not Logged';
+                            final id = record != null ? (record['id'] ?? record['_id']) : null;
+                            final isLast = idx == standardActivities.length - 1;
+
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                              decoration: BoxDecoration(
+                                color: isLogged
+                                    ? const Color(0xFFF0FDF4)
+                                    : (idx % 2 == 0 ? Colors.white : const Color(0xFFFAFAFA)),
+                                borderRadius: isLast ? const BorderRadius.vertical(bottom: Radius.circular(12)) : null,
+                                border: isLast ? null : const Border(bottom: BorderSide(color: Color(0xFFF1F5F9), width: 0.8)),
+                              ),
+                              child: Row(
+                                children: [
+                                  SizedBox(
+                                    width: 32,
+                                    child: Center(
+                                      child: Icon(
+                                        isLogged ? Icons.check_circle_rounded : Icons.remove_circle_outline_rounded,
+                                        size: 16,
+                                        color: isLogged ? const Color(0xFF16A34A) : const Color(0xFFCBD5E1),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    flex: 4,
+                                    child: Text(
+                                      label,
+                                      style: TextStyle(
+                                        fontWeight: isLogged ? FontWeight.bold : FontWeight.w500,
+                                        fontSize: 12,
+                                        color: isLogged ? const Color(0xFF065F46) : const Color(0xFF334155),
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 4,
+                                    child: Text(
+                                      valText,
+                                      style: TextStyle(
+                                        fontSize: 11.5,
+                                        fontWeight: isLogged ? FontWeight.bold : FontWeight.normal,
+                                        color: isLogged ? const Color(0xFF047857) : const Color(0xFF94A3B8),
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: 32,
+                                    child: Center(
+                                      child: isLogged && id != null
+                                          ? InkWell(
+                                              onTap: () {
+                                                _handleDeleteUpdate(id, workStarted);
+                                              },
+                                              borderRadius: BorderRadius.circular(4),
+                                              child: const Padding(
+                                                padding: EdgeInsets.all(2.0),
+                                                child: Icon(Icons.delete_outline_rounded, color: Color(0xFFEF4444), size: 18),
+                                              ),
+                                            )
+                                          : const SizedBox.shrink(),
+                                    ),
+                                  ),
+                                ],
                               ),
                             );
                           }),
                         ],
-                      );
-                    },
-                  ),
-                ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
         ),
       ],
     );
@@ -3560,6 +3732,133 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     );
   }
 
+  String? _extractYouTubeId(String url) {
+    final regExp = RegExp(
+      r'^.*(?:youtu.be\/|v\/|e\/|u\/\w+\/|embed\/|v=)([^#\&\?]*).*',
+      caseSensitive: false,
+    );
+    final match = regExp.firstMatch(url.trim());
+    return (match != null && match.group(1)!.length == 11) ? match.group(1) : null;
+  }
+
+  Widget _buildYouTubeVideoBanners() {
+    final youtubeItems = _announcements.where((a) => a['type'] == 'youtube').toList();
+    if (youtubeItems.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 16),
+        Row(
+          children: const [
+            Icon(Icons.play_circle_fill_rounded, color: Colors.red, size: 20),
+            SizedBox(width: 6),
+            Text(
+              'Featured Videos',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0F172A),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        ...youtubeItems.map((item) {
+          final title = item['title'] as String? ?? 'YouTube Video';
+          final banner = item['banner'] as String? ?? '';
+          final link = item['link'] as String? ?? '';
+
+          return GestureDetector(
+            onTap: () {
+              if (link.isNotEmpty) {
+                launchUrl(Uri.parse(link), mode: LaunchMode.externalApplication);
+              }
+            },
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (banner.isNotEmpty)
+                        Image.network(
+                          banner,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(color: const Color(0xFF1E293B)),
+                        )
+                      else
+                        Container(color: const Color(0xFF1E293B)),
+                      Container(
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [Colors.black12, Colors.black87],
+                          ),
+                        ),
+                      ),
+                      Center(
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.red.withValues(alpha: 0.5),
+                                blurRadius: 12,
+                                spreadRadius: 2,
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.play_arrow_rounded,
+                            color: Colors.white,
+                            size: 32,
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: 14,
+                        right: 14,
+                        bottom: 14,
+                        child: Text(
+                          title,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            shadows: [Shadow(color: Colors.black50, blurRadius: 4)],
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
   Widget _buildDailyQuoteCard() {
     if (_todayQuote == null) return const SizedBox.shrink();
 
@@ -4201,14 +4500,32 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Confirm Delete'),
-          content: Text('Do you want to delete "$label" record?'),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          backgroundColor: Colors.white,
+          title: const Text(
+            'Delete Record',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+          ),
+          content: Text(
+            'Are you sure you want to delete "$label"?',
+            style: const TextStyle(fontSize: 13, color: Color(0xFF475569)),
+          ),
+          actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
             TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w600)),
+            ),
+            ElevatedButton(
               onPressed: () => Navigator.pop(context, true),
-              style: TextButton.styleFrom(foregroundColor: Colors.red),
-              child: const Text('Delete'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFEF4444),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              ),
+              child: const Text('Delete', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ],
         );

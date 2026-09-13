@@ -60,7 +60,7 @@ class _AnnouncementsTabState extends State<AnnouncementsTab> {
   Widget build(BuildContext context) {
     final pureAnnouncements = widget.announcements.where((a) {
       final text = (a['content'] ?? '').toString();
-      return !text.startsWith('[TRIP]') && !text.startsWith('[EVENT]') && !text.startsWith('[NOTIF]');
+      return !text.startsWith('[TRIP]') && !text.startsWith('[EVENT]') && !text.startsWith('[NOTIF]') && !text.startsWith('[YOUTUBE]');
     }).toList();
 
     return Column(
@@ -97,6 +97,7 @@ class _AnnouncementsTabState extends State<AnnouncementsTab> {
             ],
           ),
         ),
+
         const Divider(height: 1),
         Expanded(
           child: pureAnnouncements.isEmpty
@@ -106,20 +107,31 @@ class _AnnouncementsTabState extends State<AnnouncementsTab> {
                   itemCount: pureAnnouncements.length,
                   itemBuilder: (context, index) {
                     final a = pureAnnouncements[index];
+                    final content = (a['content'] ?? '').toString();
+
                     return Card(
                       color: Colors.white,
                       margin: const EdgeInsets.only(bottom: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: BorderSide(color: Colors.grey[100]!)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                        side: BorderSide(color: Colors.grey[100]!),
+                      ),
                       elevation: 0,
                       child: ListTile(
                         leading: const CircleAvatar(
                           backgroundColor: Color(0xFFFEF3C7),
-                          child: Icon(Icons.campaign, color: Color(0xFFD97706)),
+                          child: Icon(
+                            Icons.campaign,
+                            color: Color(0xFFD97706),
+                          ),
                         ),
-                        title: Text(a['content'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        title: Text(
+                          content,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
                         trailing: IconButton(
                           icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                          onPressed: () => _deleteAnnouncement(a['id']),
+                          onPressed: () => _deleteAnnouncement(a['id'] ?? a['_id']),
                         ),
                       ),
                     );

@@ -614,6 +614,37 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           showCheckmark: false,
                         ),
+                        const SizedBox(width: 8),
+                        ChoiceChip(
+                          label: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.video_library, size: 14, color: _selectedTab == 4 ? Colors.white : Colors.red),
+                              const SizedBox(width: 4),
+                              Text(
+                                'YouTube Banner',
+                                style: TextStyle(
+                                  color: _selectedTab == 4 ? Colors.white : const Color(0xFF0F172A),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                          selected: _selectedTab == 4,
+                          onSelected: (selected) {
+                            if (selected) {
+                              setState(() => _selectedTab = 4);
+                            }
+                          },
+                          selectedColor: const Color(0xFFDC2626),
+                          backgroundColor: Colors.white,
+                          side: BorderSide(
+                            color: _selectedTab == 4 ? Colors.transparent : const Color(0xFFE2E8F0),
+                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          showCheckmark: false,
+                        ),
                       ],
                     ),
                   ),
@@ -623,7 +654,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   padding: const EdgeInsets.all(24.0),
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 200),
-                    child: _selectedTab == 3
+                    child: _selectedTab == 4
+                        ? _buildYouTubeBannerPublishView()
+                        : _selectedTab == 3
                         ? _buildDailyQuotePublishView()
                         : _selectedTab == 2
                             ? _buildDailyDarshanPublishView()
@@ -1050,6 +1083,144 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     child: isUploading
                         ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                         : const Text('Publish Daily Quote', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildYouTubeBannerPublishView() {
+    final titleController = TextEditingController();
+    final urlController = TextEditingController();
+    final bannerController = TextEditingController();
+    bool isPosting = false;
+
+    return StatefulBuilder(
+      builder: (context, setPublishState) {
+        return Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: Color(0xFFE2E8F0)),
+          ),
+          color: Colors.white,
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.video_library_rounded, color: Colors.red, size: 24),
+                    SizedBox(width: 10),
+                    Text(
+                      'Publish YouTube Video Banner',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'This video banner will appear right below Daily Darshan on Folk Boy Home Page.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: titleController,
+                  decoration: InputDecoration(
+                    labelText: 'Video Title (e.g. Sunday Youth Festival)',
+                    prefixIcon: const Icon(Icons.title_rounded, color: Colors.red),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: urlController,
+                  decoration: InputDecoration(
+                    labelText: 'YouTube Video Link (e.g. https://youtu.be/...)',
+                    prefixIcon: const Icon(Icons.link_rounded, color: Colors.red),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: bannerController,
+                  decoration: InputDecoration(
+                    labelText: 'Banner Image URL (Optional - Auto thumbnail if empty)',
+                    prefixIcon: const Icon(Icons.image_outlined, color: Colors.red),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFDC2626),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: isPosting
+                        ? null
+                        : () async {
+                            final title = titleController.text.trim();
+                            final youtubeUrl = urlController.text.trim();
+                            String bannerUrl = bannerController.text.trim();
+
+                            if (title.isEmpty || youtubeUrl.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Please enter Video Title and YouTube Link')),
+                              );
+                              return;
+                            }
+
+                            if (bannerUrl.isEmpty) {
+                              final regExp = RegExp(
+                                r'^.*(?:youtu.be\/|v\/|e\/|u\/\w+\/|embed\/|v=)([^#\&\?]*).*',
+                                caseSensitive: false,
+                              );
+                              final match = regExp.firstMatch(youtubeUrl);
+                              if (match != null && match.group(1)!.length == 11) {
+                                bannerUrl = 'https://img.youtube.com/vi/${match.group(1)}/hqdefault.jpg';
+                              }
+                            }
+
+                            setPublishState(() => isPosting = true);
+
+                            try {
+                              final contentPayload = '[YOUTUBE] $title | $bannerUrl | $youtubeUrl';
+                              final adminUser = FirebaseAuth.instance.currentUser;
+                              await ApiService.post('/announcements', {
+                                'content': contentPayload,
+                                'preacher_id': adminUser?.uid ?? 'admin',
+                              });
+
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('YouTube Video Banner published successfully!')),
+                                );
+                                titleController.clear();
+                                urlController.clear();
+                                bannerController.clear();
+                                setPublishState(() => isPosting = false);
+                              }
+                            } catch (e) {
+                              setPublishState(() => isPosting = false);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Failed to publish Video Banner: $e')),
+                                );
+                              }
+                            }
+                          },
+                    child: isPosting
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Text('Publish YouTube Video Banner', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                   ),
                 ),
               ],
