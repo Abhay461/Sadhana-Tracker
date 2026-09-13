@@ -687,7 +687,15 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
             profileName: _profile!['name'],
             preacherName: _preacher?['name'] ?? 'Preacher',
             updates: _updates,
-            onSaveSuccess: (msg) {
+            onSaveSuccess: (msg, [Map<String, dynamic>? localData]) {
+              if (localData != null) {
+                final targetDate = localData['date'];
+                final label = localData['work_started'];
+                setState(() {
+                  _updates.removeWhere((u) => u['date'] == targetDate && u['work_started'] == label);
+                  _updates.insert(0, localData);
+                });
+              }
               _fetchUpdates();
               _showSuccessDialog(msg);
             },
@@ -3421,10 +3429,10 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         child: Ink(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
           decoration: BoxDecoration(
-            color: isLogged ? themeColor.withValues(alpha: 0.12) : boxBgColor,
+            color: isLogged ? const Color(0xFFECFDF5) : boxBgColor,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: isLogged ? themeColor.withValues(alpha: 0.5) : borderColor,
+              color: isLogged ? const Color(0xFFA7F3D0) : borderColor,
               width: isLogged ? 1.2 : 0.9,
             ),
           ),
@@ -3434,7 +3442,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                 width: 24,
                 height: 24,
                 decoration: BoxDecoration(
-                  color: isLogged ? themeColor.withValues(alpha: 0.2) : themeColor.withValues(alpha: 0.12),
+                  color: isLogged ? const Color(0xFFA7F3D0) : themeColor.withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                 ),
                 child: activity == 'Chanting'
@@ -3444,10 +3452,10 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                           'assets/mala.png',
                           fit: BoxFit.contain,
                           errorBuilder: (context, error, stackTrace) {
-                            return const Icon(
+                            return Icon(
                               Icons.trip_origin_rounded,
                               size: 13,
-                              color: themeColor,
+                              color: isLogged ? const Color(0xFF047857) : themeColor,
                             );
                           },
                         ),
@@ -3455,7 +3463,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                     : Icon(
                         icon,
                         size: 13,
-                        color: themeColor,
+                        color: isLogged ? const Color(0xFF047857) : themeColor,
                       ),
               ),
               const SizedBox(width: 6),
@@ -3466,10 +3474,10 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                   children: [
                     Text(
                       titleText,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 11,
-                        color: Color(0xFF0F172A),
+                        color: isLogged ? const Color(0xFF065F46) : const Color(0xFF0F172A),
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -3478,10 +3486,10 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                       const SizedBox(height: 1),
                       Text(
                         loggedDetails,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 9.5,
                           fontWeight: FontWeight.bold,
-                          color: themeColor,
+                          color: Color(0xFF047857),
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -3493,8 +3501,8 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
               const SizedBox(width: 2),
               Icon(
                 isLogged ? Icons.check_circle_rounded : Icons.add_circle_outline_rounded,
-                size: 14,
-                color: isLogged ? themeColor : themeColor.withValues(alpha: 0.4),
+                size: 16,
+                color: isLogged ? const Color(0xFF059669) : themeColor.withValues(alpha: 0.4),
               ),
             ],
           ),
@@ -3745,41 +3753,48 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         if (ws.contains('-')) {
           return ws.split('-').skip(1).join('-').trim();
         }
+        return 'Done';
       } else if (activity == 'Book Reading') {
         if (ws.contains('-')) {
           return ws.split('-').skip(1).join('-').trim();
         }
+        return 'Done';
       } else if (activity == 'Service') {
         if (ws.contains('-')) {
           return ws.split('-').skip(1).join('-').trim();
         }
+        return 'Done';
       } else if (activity == 'Mangla Arti') {
         if (ws.contains('(')) {
           return ws.substring(ws.indexOf('(') + 1, ws.indexOf(')')).trim();
         }
+        return 'Attended';
       } else if (activity == 'Online Session' ||
                  activity == 'Srimad Bhagavatam Class' ||
                  activity == 'Bhagavad Gita Class') {
         if (ws.contains('(')) {
           return ws.substring(ws.indexOf('(') + 1, ws.indexOf(')')).trim();
         }
+        return 'Attended';
       } else if (activity == 'Morning') {
         if (ws.contains('Wake-up:')) {
           return ws.split('Wake-up:')[1].replaceAll(')', '').trim();
         }
+        return 'Done';
       } else if (activity == 'Sleep') {
         if (ws.contains('Time:')) {
           return ws.split('Time:')[1].replaceAll(')', '').trim();
         }
+        return 'Done';
       } else if (activity == 'Ekadashi Fasting' || activity == 'Ekadashi') {
         if (ws.contains(':')) {
           return ws.split(':')[1].trim();
         }
-        return 'Logged';
+        return 'Done';
       } else if (activity == 'Temple Visit') {
-        return 'Logged';
+        return 'Visited';
       }
-      return ws;
+      return ws == activity ? 'Done' : ws;
     } catch (_) {
       return null;
     }
@@ -4204,9 +4219,14 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
 
     try {
       setState(() {
-        _updates.removeWhere((u) => u['id'] == id || u['_id'] == id || (label.isNotEmpty && u['work_started'] == label));
+        if (label.isNotEmpty) {
+          _updates.removeWhere((u) => u['work_started'] == label);
+        } else {
+          _updates.removeWhere((u) => u['id'] == id || u['_id'] == id);
+        }
       });
-      await ApiService.delete('/sadhana/updates/$id');
+      final uriLabel = label.isNotEmpty ? '?label=${Uri.encodeComponent(label)}' : '';
+      await ApiService.delete('/sadhana/updates/$id$uriLabel');
       _fetchUpdates();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -4349,17 +4369,18 @@ class _SadhanaLogSheet extends StatefulWidget {
   final String profileName;
   final String preacherName;
   final List<dynamic> updates;
-  final Function(String msg) onSaveSuccess;
+  final Function(String msg, [Map<String, dynamic>? localData]) onSaveSuccess;
   final String? initialOption;
 
   const _SadhanaLogSheet({
+    super.key,
     required this.logDate,
+    this.initialOption,
     required this.profileId,
     required this.profileName,
     required this.preacherName,
     required this.updates,
     required this.onSaveSuccess,
-    this.initialOption,
   });
 
   @override
@@ -4526,8 +4547,8 @@ class _SadhanaLogSheetState extends State<_SadhanaLogSheet> {
       await ApiService.post('/sadhana', updateData);
       NotificationHelper.sendUpdateNotification(updateData).catchError((_) {});
 
-      widget.onSaveSuccess('$label logged successfully!');
       if (mounted) Navigator.pop(context);
+      widget.onSaveSuccess('$label logged successfully!', updateData);
     } catch (e) {
       debugPrint('🚨 [SADHANA SHEET ERROR LOG]: $e');
       if (mounted) {

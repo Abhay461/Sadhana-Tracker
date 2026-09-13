@@ -60,14 +60,22 @@ export class SadhanaController {
 
   @Delete('updates/:id')
   @ApiOperation({ summary: 'Delete sadhana update log' })
-  async deleteUpdate(@Param('id') id: string) {
-    return this.sadhanaService.deleteUpdate(id);
+  async deleteUpdate(
+    @Param('id') id: string,
+    @Query('label') label?: string,
+    @Query('activityKey') activityKey?: string,
+  ) {
+    return this.sadhanaService.deleteUpdate(id, label, activityKey);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete sadhana entry' })
-  async deleteSadhanaById(@Param('id') id: string) {
-    return this.sadhanaService.deleteUpdate(id);
+  async deleteSadhanaById(
+    @Param('id') id: string,
+    @Query('label') label?: string,
+    @Query('activityKey') activityKey?: string,
+  ) {
+    return this.sadhanaService.deleteUpdate(id, label, activityKey);
   }
 
   @Get('history')

@@ -183,21 +183,86 @@ export class SadhanaService {
     };
   }
 
-  async deleteUpdate(id: string) {
+  async deleteUpdate(id: string, label?: string, activityKey?: string) {
     let deleted = false;
+    let entry: SadhanaEntryDocument | null = null;
+
     if (id.includes('-') && id.length <= 10) {
-      const res = await this.sadhanaModel.deleteMany({ dateString: id });
-      deleted = (res.deletedCount ?? 0) > 0;
+      entry = await this.sadhanaModel.findOne({ dateString: id });
     } else {
       try {
-        const res = await this.sadhanaModel.findByIdAndDelete(id);
-        if (res) deleted = true;
+        entry = await this.sadhanaModel.findById(id);
       } catch (_) {
-        const res = await this.sadhanaModel.deleteOne({ _id: id });
-        deleted = (res.deletedCount ?? 0) > 0;
+        entry = await this.sadhanaModel.findOne({ _id: id });
       }
     }
+
+    if (!entry) {
+      return { success: false, message: 'Record not found' };
+    }
+
+    const key = activityKey || this.determineActivityKeyFromLabel(label || '');
+
+    if (key && entry.activities && (entry.activities as any)[key] !== undefined) {
+      const act = JSON.parse(JSON.stringify(entry.activities));
+      delete act[key];
+      for (const k of Object.keys(act)) {
+        if (k.startsWith('_') || k.startsWith('$')) delete act[k];
+      }
+
+      const activeKeys = Object.keys(act).filter((k) => {
+        const val = act[k];
+        if (val === null || val === undefined) return false;
+        if (typeof val === 'object') {
+          if (k === 'chanting' && (!val.rounds || val.rounds === 0)) return false;
+          if (k === 'manglaArti' && val.attended !== true) return false;
+          if (k === 'onlineSession' && val.attended !== true) return false;
+          if (k === 'bookReading' && (!val.bookName || val.bookName.trim() === '')) return false;
+          if (k === 'service' && (!val.serviceName || val.serviceName.trim() === '')) return false;
+          if (k === 'templeVisit' && val.visited !== true) return false;
+          if (k === 'srimadBhagavatamClass' && val.attended !== true) return false;
+          if (k === 'bhagavadGitaClass' && val.attended !== true) return false;
+          if (k === 'ekadashiFasting' && (!val.fastingType || val.fastingType === 'No Fasting')) return false;
+        }
+        return true;
+      });
+
+      if (activeKeys.length === 0) {
+        await this.sadhanaModel.deleteOne({ _id: entry._id });
+        deleted = true;
+      } else {
+        const totalPoints = this.calculatePoints(act);
+        await this.sadhanaModel.updateOne(
+          { _id: entry._id },
+          {
+            $unset: { [`activities.${key}`]: 1 },
+            $set: { totalPoints },
+          },
+        );
+        deleted = true;
+      }
+    } else {
+      await this.sadhanaModel.deleteOne({ _id: entry._id });
+      deleted = true;
+    }
     return { success: true, id, deleted };
+  }
+
+  private determineActivityKeyFromLabel(label: string): string | null {
+    const lower = label.toLowerCase().trim();
+    if (!lower) return null;
+    if (lower.includes('wake-up') || lower.includes('wake up') || lower.startsWith('morning')) return 'wakeUpTime';
+    if (lower.startsWith('sleep')) return 'sleepTime';
+    if (lower.includes('mangla')) return 'manglaArti';
+    if (lower.startsWith('chanting')) return 'chanting';
+    if (lower.startsWith('online')) return 'onlineSession';
+    if (lower.startsWith('book reading') || lower.startsWith('book')) return 'bookReading';
+    if (lower.startsWith('service')) return 'service';
+    if (lower.startsWith('temple')) return 'templeVisit';
+    if (lower.includes('bhagavatam')) return 'srimadBhagavatamClass';
+    if (lower.includes('bhagavad') || lower.includes('gita')) return 'bhagavadGitaClass';
+    if (lower.includes('ekadashi')) return 'ekadashiFasting';
+    return null;
   }
 
   async getHistory(userId: string, page = 1, limit = 30) {
