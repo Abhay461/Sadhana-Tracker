@@ -49,15 +49,38 @@ export class SadhanaService {
     const existing = await this.sadhanaModel.findOne({
       userId,
       dateString: dto.dateString,
-    });
+    }).lean();
 
     if (existing && existing.isLocked) {
       throw new ForbiddenException('Sadhana logging for this date has been locked by your preacher.');
     }
 
-    const mergedActivities = existing
-      ? { ...existing.activities, ...dto.activities }
-      : dto.activities;
+    // Deep merge: existing plain activities + new dto activities
+    let mergedActivities: any = {};
+    if (existing && existing.activities) {
+      const existingAct = JSON.parse(JSON.stringify(existing.activities));
+      // Remove Mongoose internal fields
+      for (const key of Object.keys(existingAct)) {
+        if (key.startsWith('_') || key.startsWith('$')) {
+          delete existingAct[key];
+        }
+        if (existingAct[key] && typeof existingAct[key] === 'object' && existingAct[key]._id) {
+          delete existingAct[key]._id;
+        }
+      }
+      mergedActivities = { ...existingAct };
+    }
+    if (dto.activities) {
+      for (const [key, value] of Object.entries(dto.activities)) {
+        if (value !== null && value !== undefined) {
+          if (typeof value === 'object' && mergedActivities[key] && typeof mergedActivities[key] === 'object') {
+            mergedActivities[key] = { ...mergedActivities[key], ...value };
+          } else {
+            mergedActivities[key] = value;
+          }
+        }
+      }
+    }
 
     const totalPoints = this.calculatePoints(mergedActivities);
 
@@ -71,7 +94,7 @@ export class SadhanaService {
           totalPoints,
         },
       },
-      { new: true, upsert: true, runValidators: true },
+      { new: true, upsert: true, runValidators: false },
     );
 
     return updatedEntry;

@@ -504,12 +504,22 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       dynamic res;
       try {
         res = await ApiService.get('/sadhana/history');
+        debugPrint('📋 [DEBUG] Raw /sadhana/history response type: ${res.runtimeType}');
+        if (res is Map) debugPrint('📋 [DEBUG] Response keys: ${res.keys.toList()}');
         if (res is Map && res.containsKey('items')) {
           data = res['items'] as List;
         } else if (res is List) {
           data = res;
+        } else if (res is Map) {
+          // Maybe response is a single Map with activities
+          data = [res];
         }
-      } catch (_) {
+        debugPrint('📋 [DEBUG] Parsed data count: ${data.length}');
+        for (int i = 0; i < data.length && i < 3; i++) {
+          debugPrint('📋 [DEBUG] Item $i: ${data[i]}');
+        }
+      } catch (e) {
+        debugPrint('📋 [DEBUG] Error fetching history: $e');
         try {
           res = await ApiService.get('/sadhana/updates');
           if (res is List) data = res;
@@ -517,10 +527,15 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       }
 
       final normalizedData = _normalizeSadhanaItems(data);
+      debugPrint('📋 [DEBUG] Normalized items count: ${normalizedData.length}');
+      for (int i = 0; i < normalizedData.length && i < 5; i++) {
+        debugPrint('📋 [DEBUG] Normalized $i: date=${normalizedData[i]['date']} work=${normalizedData[i]['work_started']}');
+      }
       final cleanUpdates = normalizedData.where((u) => 
         u['category'] != 'accommodation_approval_signal' && 
         u['category'] != 'accommodation_delete_signal'
       ).toList();
+      debugPrint('📋 [DEBUG] Clean updates count: ${cleanUpdates.length}');
 
       setState(() {
         _updates = cleanUpdates;
