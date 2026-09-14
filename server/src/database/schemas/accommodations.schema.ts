@@ -8,8 +8,8 @@ export class Accommodation {
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true, index: true })
   userId: MongooseSchema.Types.ObjectId;
 
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true, index: true })
-  preacherId: MongooseSchema.Types.ObjectId;
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: false, index: true })
+  preacherId?: MongooseSchema.Types.ObjectId;
 
   @Prop({ type: String, required: true })
   requestDetails: string;

@@ -19,13 +19,9 @@ export class AccommodationsService {
   ) {}
 
   async createRequest(user: any, dto: CreateAccommodationDto) {
-    if (!user.preacherId) {
-      throw new BadRequestException('You do not have an assigned preacher yet to submit accommodation requests.');
-    }
-
     const accommodation = await this.accommodationModel.create({
       userId: user._id,
-      preacherId: user.preacherId,
+      preacherId: user.preacherId || null,
       requestDetails: dto.requestDetails,
       status: 'PENDING',
     });
@@ -39,7 +35,13 @@ export class AccommodationsService {
 
   async getPreacherQueue(preacherId: string) {
     return this.accommodationModel
-      .find({ preacherId })
+      .find({
+        $or: [
+          { preacherId },
+          { preacherId: null },
+          { preacherId: { $exists: false } },
+        ],
+      })
       .populate('userId', 'name email phoneNumber photoUrl')
       .sort({ createdAt: -1 });
   }
@@ -50,8 +52,8 @@ export class AccommodationsService {
       throw new NotFoundException('Accommodation request not found.');
     }
 
-    if (item.preacherId.toString() !== preacherId.toString()) {
-      throw new ForbiddenException('Access denied: Request is not assigned to your preacher queue.');
+    if (item.preacherId && item.preacherId.toString() !== preacherId.toString()) {
+      throw new ForbiddenException('Access denied: Request is assigned to another preacher queue.');
     }
 
     item.status = dto.status;

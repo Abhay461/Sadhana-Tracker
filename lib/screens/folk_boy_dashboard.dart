@@ -619,6 +619,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
               'type': 'youtube',
               'id': ann['id'] ?? ann['_id'],
               'title': parts.isNotEmpty ? parts[0] : 'YouTube Video',
+              'time': '',
               'banner': bannerUrl,
               'link': youtubeUrl,
             });
@@ -1645,16 +1646,21 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                   itemCount: _announcements.length,
                   itemBuilder: (context, index) {
                     final ann = _announcements[index];
+                    final String title = (ann['title'] ?? '').toString();
+                    final String time = (ann['time'] ?? '').toString();
+                    final String banner = (ann['banner'] ?? '').toString();
+                    final String link = (ann['link'] ?? '').toString();
+                    final String type = (ann['type'] ?? 'announcement').toString();
+
                     return GestureDetector(
                       onTap: () {
-                        final link = ann['link'] as String? ?? '';
                         if (link.isNotEmpty) {
-                          if (ann['type'] == 'session') {
-                            _showSessionJoinDialog(ann['title'], link);
-                          } else if (ann['type'] == 'trip') {
-                            _showTripJoinDialog(ann['title'], link);
-                          } else if (ann['type'] == 'event') {
-                            _showEventJoinDialog(ann['title'], link);
+                          if (type == 'session') {
+                            _showSessionJoinDialog(title, link);
+                          } else if (type == 'trip') {
+                            _showTripJoinDialog(title, link);
+                          } else if (type == 'event') {
+                            _showEventJoinDialog(title, link);
                           } else {
                             launchUrl(Uri.parse(link), mode: LaunchMode.externalApplication);
                           }
@@ -1665,9 +1671,9 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         child: Stack(
                           children: [
-                            if (ann['banner'] != '') ...[
+                            if (banner.isNotEmpty) ...[
                               Image.network(
-                                ann['banner'],
+                                banner,
                                 width: double.infinity,
                                 height: double.infinity,
                                 fit: BoxFit.cover,
@@ -1709,21 +1715,21 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: Text(
-                                      ann['type'].toString().toUpperCase(),
+                                      type.toUpperCase(),
                                       style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
                                     ),
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
-                                    ann['title'],
+                                    title,
                                     style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                   ),
-                                  if (ann['time'] != '') ...[
+                                  if (time.isNotEmpty) ...[
                                     const SizedBox(height: 4),
                                     Text(
-                                      ann['time'],
+                                      time,
                                       style: TextStyle(color: Colors.white.withAlpha(204), fontSize: 12),
                                     ),
                                   ]
@@ -5241,27 +5247,54 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> with S
   Future<void> _fetchBookings() async {
     try {
       setState(() => _isLoadingBookings = true);
-      dynamic res;
+      List<dynamic> bookingsList = [];
+
       try {
-        res = await ApiService.get('/sadhana/history');
-      } catch (_) {
+        final accRes = await ApiService.get('/accommodations/my');
+        if (accRes is List && accRes.isNotEmpty) {
+          bookingsList = accRes.map((item) {
+            final details = item['requestDetails']?.toString() ?? '';
+            final assignedRoom = item['assignedRoom']?.toString() ?? '';
+            final status = item['status']?.toString() ?? 'PENDING';
+            return {
+              '_id': item['_id'],
+              'category': 'accommodation',
+              'description': details,
+              'is_completed': status == 'APPROVED',
+              'work_completed': assignedRoom.isNotEmpty
+                  ? 'ROOM: $assignedRoom'
+                  : status,
+              'created_at': item['createdAt'] ?? DateTime.now().toIso8601String(),
+            };
+          }).toList();
+        }
+      } catch (e) {
+        debugPrint('Error fetching /accommodations/my: $e');
+      }
+
+      if (bookingsList.isEmpty) {
+        dynamic res;
         try {
-          res = await ApiService.get('/sadhana/updates');
-        } catch (_) {}
-      }
+          res = await ApiService.get('/sadhana/history');
+        } catch (_) {
+          try {
+            res = await ApiService.get('/sadhana/updates');
+          } catch (_) {}
+        }
 
-      List<dynamic> updatesList = [];
-      if (res is Map && res.containsKey('items')) {
-        updatesList = res['items'] is List ? res['items'] : [];
-      } else if (res is List) {
-        updatesList = res;
-      }
+        List<dynamic> updatesList = [];
+        if (res is Map && res.containsKey('items')) {
+          updatesList = res['items'] is List ? res['items'] : [];
+        } else if (res is List) {
+          updatesList = res;
+        }
 
-      final bookings = updatesList.where((u) => u is Map && u['category'] == 'accommodation').toList();
+        bookingsList = updatesList.where((u) => u is Map && u['category'] == 'accommodation').toList();
+      }
 
       if (mounted) {
         setState(() {
-          _bookings = bookings;
+          _bookings = bookingsList;
           _isLoadingBookings = false;
         });
       }
@@ -5324,13 +5357,15 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> with S
       final arrivalStr = DateFormat('yyyy-MM-dd').format(_arrivalDate!);
       final departureStr = DateFormat('yyyy-MM-dd').format(_departureDate!);
 
+      final requestDetails = 'Name: $name\nAge: $age\nArrival: $arrivalStr\nDeparture: $departureStr';
+
       final updateData = {
         'worker_id': widget.profile['id'] ?? widget.profile['_id'],
         'worker_name': widget.profile['name'],
         'preacher_name': widget.preacher?['name'] ?? 'Preacher',
         'category': 'accommodation',
         'work_started': 'Accommodation Booking',
-        'description': 'Name: $name\nAge: $age\nArrival: $arrivalStr\nDeparture: $departureStr',
+        'description': requestDetails,
         'work_completed': '',
         'is_completed': false,
         'date': DateFormat('yyyy-MM-dd').format(DateTime.now()),
@@ -5343,7 +5378,17 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> with S
         'created_at': DateTime.now().toIso8601String(),
       };
 
-      await ApiService.post('/sadhana', updateData);
+      // 1. Post to NestJS /accommodations endpoint (Populates MongoDB accommodations collection)
+      try {
+        await ApiService.post('/accommodations', {
+          'requestDetails': requestDetails,
+        });
+      } catch (accError) {
+        debugPrint('Error saving to /accommodations endpoint: $accError');
+      }
+
+      // 2. Post to /sadhana for real-time activity feed fallback
+      await ApiService.post('/sadhana', updateData).catchError((_) {});
       NotificationHelper.sendUpdateNotification(updateData).catchError((_) {});
 
       if (mounted) {
@@ -5354,7 +5399,7 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> with S
           _ageController.clear();
         });
 
-        _tabController.animateTo(0);
+        _tabController.animateTo(1);
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Accommodation booking requested successfully!')),
@@ -5422,8 +5467,8 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> with S
               unselectedLabelColor: const Color(0xFF64748B),
               labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
               tabs: const [
-                Tab(text: 'My Bookings'),
                 Tab(text: 'New Booking'),
+                Tab(text: 'My Bookings'),
               ],
             ),
           ),
@@ -5431,8 +5476,8 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> with S
             child: TabBarView(
               controller: _tabController,
               children: [
-                _buildBookingsTab(),
                 _buildRequestTab(),
+                _buildBookingsTab(),
               ],
             ),
           ),
