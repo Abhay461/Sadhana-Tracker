@@ -3,11 +3,13 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { DailyQuote, DailyQuoteDocument } from '../database/schemas/daily_quotes.schema';
 import { CreateDailyQuoteDto } from './dto/create-daily-quote.dto';
+import { MediaService } from '../media/media.service';
 
 @Injectable()
 export class DailyQuotesService {
   constructor(
     @InjectModel(DailyQuote.name) private readonly quoteModel: Model<DailyQuoteDocument>,
+    private readonly mediaService: MediaService,
   ) {}
 
   async createQuote(user: any, dto: CreateDailyQuoteDto | any) {
@@ -56,10 +58,19 @@ export class DailyQuotesService {
   }
 
   async getAllQuotes() {
-    return this.quoteModel.find({ isActive: true }).sort({ createdAt: -1 }).limit(50).exec();
+    return this.quoteModel.find().sort({ createdAt: -1 }).limit(100).exec();
   }
 
   async deleteQuote(id: string) {
-    return this.quoteModel.findByIdAndUpdate(id, { isActive: false }, { new: true });
+    const item = await this.quoteModel.findById(id);
+    if (item) {
+      if (item.imageUrls && Array.isArray(item.imageUrls)) {
+        for (const url of item.imageUrls) {
+          await this.mediaService.deleteCloudinaryImage(url);
+        }
+      }
+      await this.quoteModel.deleteOne({ _id: id });
+    }
+    return { success: true, message: 'Daily Quote deleted from database & Cloudinary' };
   }
 }

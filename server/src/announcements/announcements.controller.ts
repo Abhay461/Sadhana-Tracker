@@ -2,7 +2,9 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
   Body,
+  Param,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { AnnouncementsService } from './announcements.service';
@@ -24,5 +26,11 @@ export class AnnouncementsController {
   @ApiOperation({ summary: 'Create a new announcement (Admin Portal & Preacher)' })
   async createAnnouncement(@CurrentUser() user: any, @Body() dto: CreateAnnouncementDto) {
     return this.announcementsService.createAnnouncement(user, dto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete announcement or YouTube banner' })
+  async deleteAnnouncement(@Param('id') id: string) {
+    return this.announcementsService.deleteAnnouncement(id);
   }
 }

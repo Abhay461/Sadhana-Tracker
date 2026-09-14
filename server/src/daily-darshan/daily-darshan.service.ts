@@ -3,11 +3,13 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { DailyDarshan, DailyDarshanDocument } from '../database/schemas/daily_darshan.schema';
 import { CreateDailyDarshanDto } from './dto/create-daily-darshan.dto';
+import { MediaService } from '../media/media.service';
 
 @Injectable()
 export class DailyDarshanService {
   constructor(
     @InjectModel(DailyDarshan.name) private readonly darshanModel: Model<DailyDarshanDocument>,
+    private readonly mediaService: MediaService,
   ) {}
 
   async createDarshan(user: any, dto: CreateDailyDarshanDto | any) {
@@ -34,9 +36,6 @@ export class DailyDarshanService {
       isActive: true,
     };
 
-    // The web admin portal currently publishes without an auth token. Do not
-    // write null here: Mongoose treats `createdBy: null` as a missing required
-    // value. When authentication is added, preserve the creator automatically.
     if (user?._id) {
       darshanData.createdBy = user._id;
     }
@@ -47,13 +46,11 @@ export class DailyDarshanService {
   async getTodayDarshan() {
     const today = new Date().toISOString().split('T')[0];
     
-    // First try to find today's darshan
     let darshan = await this.darshanModel
       .findOne({ date: today, isActive: true })
       .sort({ createdAt: -1 })
       .exec();
 
-    // Fallback: Return the latest active darshan if today's is not yet uploaded
     if (!darshan) {
       darshan = await this.darshanModel
         .findOne({ isActive: true })
@@ -64,7 +61,20 @@ export class DailyDarshanService {
     return darshan;
   }
 
+  async getAllDarshans() {
+    return this.darshanModel.find().sort({ createdAt: -1 }).limit(100).exec();
+  }
+
   async deleteDarshan(id: string) {
-    return this.darshanModel.findByIdAndUpdate(id, { isActive: false }, { new: true });
+    const item = await this.darshanModel.findById(id);
+    if (item) {
+      if (item.imageUrls && Array.isArray(item.imageUrls)) {
+        for (const url of item.imageUrls) {
+          await this.mediaService.deleteCloudinaryImage(url);
+        }
+      }
+      await this.darshanModel.deleteOne({ _id: id });
+    }
+    return { success: true, message: 'Daily Darshan deleted from database & Cloudinary' };
   }
 }

@@ -22,6 +22,12 @@ export class DailyDarshanController {
     return this.darshanService.getTodayDarshan();
   }
 
+  @Get('all')
+  @ApiOperation({ summary: 'Get all Daily Darshans for management' })
+  async getAllDarshans() {
+    return this.darshanService.getAllDarshans();
+  }
+
   @Post()
   @ApiOperation({ summary: 'Publish new Daily Darshan (Admin Portal & App)' })
   async createDarshan(@CurrentUser() user: any, @Body() dto: CreateDailyDarshanDto) {

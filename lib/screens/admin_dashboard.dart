@@ -31,16 +31,26 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   // Tabs and Preachers list state
   final ImagePicker _picker = ImagePicker();
-  int _selectedTab = 0; // 0 = Create Preacher, 1 = Preachers Directory, 2 = Daily Darshan
+  int _selectedTab = 0; // 0 = Create Preacher, 1 = Preachers Directory, 2 = Daily Darshan, 3 = Daily Quote, 4 = YouTube Banner
   List<dynamic> _preachers = [];
   Map<String, List<dynamic>> _preacherStudents = {};
   bool _isLoadingPreachersList = false;
+
+  List<dynamic> _publishedDarshans = [];
+  List<dynamic> _publishedQuotes = [];
+  List<dynamic> _publishedAnnouncements = [];
+  bool _isLoadingDarshans = false;
+  bool _isLoadingQuotes = false;
+  bool _isLoadingAnnouncements = false;
 
   @override
   void initState() {
     super.initState();
     _checkAdminAccess();
     _fetchPreachersAndStats();
+    _fetchPublishedDarshans();
+    _fetchPublishedQuotes();
+    _fetchPublishedAnnouncements();
   }
 
   @override
@@ -79,11 +89,77 @@ class _AdminDashboardState extends State<AdminDashboard> {
         });
       }
     } catch (e) {
-      debugPrint('Admin access check failed: $e');
+      debugPrint('Admin check error: $e');
       if (mounted) {
         Navigator.pushReplacementNamed(context, '/home');
       }
     }
+  }
+
+  Future<void> _fetchPublishedDarshans() async {
+    setState(() => _isLoadingDarshans = true);
+    try {
+      final res = await ApiService.get('/daily-darshan/all');
+      if (res is List) {
+        setState(() => _publishedDarshans = res);
+      } else if (res is Map && res.containsKey('imageUrls')) {
+        setState(() => _publishedDarshans = [res]);
+      }
+    } catch (e) {
+      debugPrint('Error fetching darshans: $e');
+    } finally {
+      if (mounted) setState(() => _isLoadingDarshans = false);
+    }
+  }
+
+  Future<void> _fetchPublishedQuotes() async {
+    setState(() => _isLoadingQuotes = true);
+    try {
+      final res = await ApiService.get('/daily-quotes');
+      if (res is List) {
+        setState(() => _publishedQuotes = res);
+      }
+    } catch (e) {
+      debugPrint('Error fetching quotes: $e');
+    } finally {
+      if (mounted) setState(() => _isLoadingQuotes = false);
+    }
+  }
+
+  Future<void> _fetchPublishedAnnouncements() async {
+    setState(() => _isLoadingAnnouncements = true);
+    try {
+      final res = await ApiService.get('/announcements');
+      if (res is List) {
+        setState(() => _publishedAnnouncements = res);
+      }
+    } catch (e) {
+      debugPrint('Error fetching announcements: $e');
+    } finally {
+      if (mounted) setState(() => _isLoadingAnnouncements = false);
+    }
+  }
+
+  Future<bool> _showDeleteConfirmDialog(String itemType) async {
+    final res = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete $itemType'),
+        content: Text('Are you sure you want to delete this $itemType? This will permanently delete text from MongoDB and images from Cloudinary.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    return res ?? false;
   }
 
   Future<void> _fetchPreachersAndStats() async {
@@ -946,6 +1022,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                   descriptionController.clear();
                                   isUploading = false;
                                 });
+                                _fetchPublishedDarshans();
                               }
                             } catch (e) {
                               setPublishState(() {
@@ -963,6 +1040,61 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         : const Text('Publish Daily Darshan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                   ),
                 ),
+                const SizedBox(height: 28),
+                const Text(
+                  'Published Daily Darshans',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                ),
+                const SizedBox(height: 12),
+                if (_isLoadingDarshans)
+                  const Center(child: CircularProgressIndicator())
+                else if (_publishedDarshans.isEmpty)
+                  const Text('No Daily Darshans published yet.', style: TextStyle(color: Colors.grey))
+                else
+                  ..._publishedDarshans.map((d) {
+                    final id = (d['_id'] ?? d['id'])?.toString() ?? '';
+                    final title = d['title']?.toString() ?? 'Daily Darshan';
+                    final date = d['date']?.toString() ?? '';
+                    final images = (d['imageUrls'] is List) ? List<String>.from(d['imageUrls']) : [];
+
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: Color(0xFFE2E8F0))),
+                      child: ListTile(
+                        leading: images.isNotEmpty
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.network(images.first, width: 44, height: 44, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.image_not_supported)),
+                              )
+                            : const Icon(Icons.temple_hindu_rounded, color: Colors.orange),
+                        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        subtitle: Text('Date: $date • ${images.length} Photos', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                          onPressed: () async {
+                            final confirm = await _showDeleteConfirmDialog('Daily Darshan');
+                            if (!confirm) return;
+                            try {
+                              await ApiService.delete('/daily-darshan/$id');
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Daily Darshan deleted from MongoDB & Cloudinary!')),
+                                );
+                                _fetchPublishedDarshans();
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Delete failed: $e')),
+                                );
+                              }
+                            }
+                          },
+                        ),
+                      ),
+                    );
+                  }),
               ],
             ),
           ),
@@ -1070,6 +1202,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                   selectedFiles.clear();
                                   isUploading = false;
                                 });
+                                _fetchPublishedQuotes();
                               }
                             } catch (e) {
                               setPublishState(() => isUploading = false);
@@ -1085,6 +1218,60 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         : const Text('Publish Daily Quote', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                   ),
                 ),
+                const SizedBox(height: 28),
+                const Text(
+                  'Published Daily Quotes',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                ),
+                const SizedBox(height: 12),
+                if (_isLoadingQuotes)
+                  const Center(child: CircularProgressIndicator())
+                else if (_publishedQuotes.isEmpty)
+                  const Text('No Daily Quotes published yet.', style: TextStyle(color: Colors.grey))
+                else
+                  ..._publishedQuotes.map((q) {
+                    final id = (q['_id'] ?? q['id'])?.toString() ?? '';
+                    final date = q['date']?.toString() ?? '';
+                    final images = (q['imageUrls'] is List) ? List<String>.from(q['imageUrls']) : [];
+
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: Color(0xFFE2E8F0))),
+                      child: ListTile(
+                        leading: images.isNotEmpty
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.network(images.first, width: 44, height: 44, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.format_quote)),
+                              )
+                            : const Icon(Icons.format_quote_rounded, color: Colors.blue),
+                        title: Text('Quote ($date)', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        subtitle: Text(images.isNotEmpty ? 'Photo Quote' : 'Text Quote', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                          onPressed: () async {
+                            final confirm = await _showDeleteConfirmDialog('Daily Quote');
+                            if (!confirm) return;
+                            try {
+                              await ApiService.delete('/daily-quotes/$id');
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Daily Quote deleted from MongoDB & Cloudinary!')),
+                                );
+                                _fetchPublishedQuotes();
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Delete failed: $e')),
+                                );
+                              }
+                            }
+                          },
+                        ),
+                      ),
+                    );
+                  }),
               ],
             ),
           ),
@@ -1208,6 +1395,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                 urlController.clear();
                                 bannerController.clear();
                                 setPublishState(() => isPosting = false);
+                                _fetchPublishedAnnouncements();
                               }
                             } catch (e) {
                               setPublishState(() => isPosting = false);
@@ -1223,6 +1411,70 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         : const Text('Publish YouTube Video Banner', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                   ),
                 ),
+                const SizedBox(height: 28),
+                const Text(
+                  'Published YouTube Video Banners',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                ),
+                const SizedBox(height: 12),
+                if (_isLoadingAnnouncements)
+                  const Center(child: CircularProgressIndicator())
+                else ...[
+                  Builder(builder: (context) {
+                    final youtubeList = _publishedAnnouncements.where((a) => a['content']?.toString().startsWith('[YOUTUBE]') == true || a['category'] == 'youtube' || a['type'] == 'youtube').toList();
+                    if (youtubeList.isEmpty) {
+                      return const Text('No YouTube Video Banners published yet.', style: TextStyle(color: Colors.grey));
+                    }
+
+                    return Column(
+                      children: youtubeList.map((item) {
+                        final id = (item['_id'] ?? item['id'])?.toString() ?? '';
+                        final content = item['content']?.toString() ?? '';
+                        final parts = content.replaceFirst('[YOUTUBE] ', '').split(' | ');
+                        final title = parts.isNotEmpty ? parts[0] : (item['title'] ?? 'YouTube Video');
+                        final banner = parts.length > 1 ? parts[1] : (item['banner_url'] ?? '');
+
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: Color(0xFFE2E8F0))),
+                          child: ListTile(
+                            leading: banner.isNotEmpty
+                                ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Image.network(banner, width: 44, height: 44, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.play_circle_fill, color: Colors.red)),
+                                  )
+                                : const Icon(Icons.play_circle_fill_rounded, color: Colors.red, size: 32),
+                            title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                            subtitle: const Text('YouTube Banner', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                              onPressed: () async {
+                                final confirm = await _showDeleteConfirmDialog('YouTube Banner');
+                                if (!confirm) return;
+                                try {
+                                  await ApiService.delete('/announcements/$id');
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('YouTube Banner deleted from MongoDB & Cloudinary!')),
+                                    );
+                                    _fetchPublishedAnnouncements();
+                                  }
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Delete failed: $e')),
+                                    );
+                                  }
+                                }
+                              },
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    );
+                  }),
+                ],
               ],
             ),
           ),
