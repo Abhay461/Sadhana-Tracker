@@ -66,6 +66,10 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   int _currentAnnouncementIndex = 0;
   Timer? _carouselTimer;
 
+  final PageController _youtubePageController = PageController();
+  int _currentYouTubeIndex = 0;
+  Timer? _youtubeTimer;
+
   static const String _razorpayApiKey = 'rzp_test_Tb22VLcoOG6jA0';
   static const String _razorpaySecret = 'PX2qUQCiLui8JEdzuzwzTdbK';
   Razorpay? _razorpay;
@@ -217,7 +221,9 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       _razorpay?.clear();
     } catch (_) {}
     _carouselTimer?.cancel();
+    _youtubeTimer?.cancel();
     _pageController.dispose();
+    _youtubePageController.dispose();
     _roundsController.dispose();
     _bookController.dispose();
     _readingValueController.dispose();
@@ -641,6 +647,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         }
       }
       _startCarouselTimer();
+      _startYouTubeTimer();
     } catch (e) {
       debugPrint('Error fetching announcements: $e');
     }
@@ -653,6 +660,23 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         if (_pageController.hasClients) {
           final nextPage = (_currentAnnouncementIndex + 1) % _announcements.length;
           _pageController.animateToPage(
+            nextPage,
+            duration: const Duration(milliseconds: 800),
+            curve: Curves.easeInOut,
+          );
+        }
+      });
+    }
+  }
+
+  void _startYouTubeTimer() {
+    _youtubeTimer?.cancel();
+    final youtubeItems = _announcements.where((a) => a['type'] == 'youtube').toList();
+    if (youtubeItems.length > 1) {
+      _youtubeTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+        if (_youtubePageController.hasClients) {
+          final nextPage = (_currentYouTubeIndex + 1) % youtubeItems.length;
+          _youtubePageController.animateToPage(
             nextPage,
             duration: const Duration(milliseconds: 800),
             curve: Curves.easeInOut,
@@ -3755,112 +3779,162 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 16),
-        Row(
-          children: const [
-            Icon(Icons.play_circle_fill_rounded, color: Colors.red, size: 20),
-            SizedBox(width: 6),
-            Text(
-              'Featured Videos',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF0F172A),
-              ),
-            ),
-          ],
+        const Text(
+          'Video',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF0F172A),
+          ),
         ),
         const SizedBox(height: 10),
-        ...youtubeItems.map((item) {
-          final title = item['title'] as String? ?? 'YouTube Video';
-          final banner = item['banner'] as String? ?? '';
-          final link = item['link'] as String? ?? '';
-
-          return GestureDetector(
-            onTap: () {
-              if (link.isNotEmpty) {
-                launchUrl(Uri.parse(link), mode: LaunchMode.externalApplication);
-              }
+        SizedBox(
+          height: (MediaQuery.of(context).size.width - 32) * 9 / 16,
+          child: PageView.builder(
+            controller: _youtubePageController,
+            onPageChanged: (index) {
+              setState(() {
+                _currentYouTubeIndex = index;
+              });
             },
-            child: Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      if (banner.isNotEmpty)
-                        Image.network(
-                          banner,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(color: const Color(0xFF1E293B)),
-                        )
-                      else
-                        Container(color: const Color(0xFF1E293B)),
-                      Container(
-                        decoration: const BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [Colors.black12, Colors.black87],
-                          ),
-                        ),
-                      ),
-                      Center(
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.red.withValues(alpha: 0.5),
-                                blurRadius: 12,
-                                spreadRadius: 2,
-                              ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.play_arrow_rounded,
-                            color: Colors.white,
-                            size: 32,
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        left: 14,
-                        right: 14,
-                        bottom: 14,
-                        child: Text(
-                          title,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                            shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+            itemCount: youtubeItems.length,
+            itemBuilder: (context, index) {
+              final item = youtubeItems[index];
+              final title = item['title'] as String? ?? 'YouTube Video';
+              final banner = item['banner'] as String? ?? '';
+              final link = item['link'] as String? ?? '';
+
+              return GestureDetector(
+                onTap: () {
+                  if (link.isNotEmpty) {
+                    launchUrl(Uri.parse(link), mode: LaunchMode.externalApplication);
+                  }
+                },
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.08),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
                       ),
                     ],
                   ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        if (banner.isNotEmpty)
+                          Image.network(
+                            banner,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(color: const Color(0xFF1E293B)),
+                          )
+                        else
+                          Container(color: const Color(0xFF1E293B)),
+                        Container(
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [Colors.black12, Colors.black87],
+                            ),
+                          ),
+                        ),
+                        Center(
+                          child: Container(
+                            width: 54,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFF0000),
+                              borderRadius: BorderRadius.circular(10),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.red.withValues(alpha: 0.4),
+                                  blurRadius: 10,
+                                  spreadRadius: 1,
+                                ),
+                              ],
+                            ),
+                            child: const Center(
+                              child: Icon(
+                                Icons.play_arrow_rounded,
+                                color: Colors.white,
+                                size: 28,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          top: 12,
+                          left: 12,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.6),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Icon(Icons.play_arrow_rounded, color: Colors.red, size: 14),
+                                SizedBox(width: 4),
+                                Text(
+                                  'YouTube',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          left: 14,
+                          right: 14,
+                          bottom: 14,
+                          child: Text(
+                            title,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          );
-        }),
+              );
+            },
+          ),
+        ),
+        if (youtubeItems.length > 1) ...[
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(youtubeItems.length, (index) {
+              return Container(
+                width: index == _currentYouTubeIndex ? 16 : 6,
+                height: 6,
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                decoration: BoxDecoration(
+                  color: index == _currentYouTubeIndex ? Colors.red : Colors.grey[300],
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              );
+            }),
+          ),
+        ],
       ],
     );
   }
@@ -5453,15 +5527,18 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> with S
           const SizedBox(height: 14),
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 20),
+            padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
               color: const Color(0xFFF1F5F9),
               borderRadius: BorderRadius.circular(12),
             ),
             child: TabBar(
               controller: _tabController,
+              indicatorSize: TabBarIndicatorSize.tab,
+              dividerColor: Colors.transparent,
               indicator: BoxDecoration(
                 color: const Color(0xFF0F172A),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(8),
               ),
               labelColor: Colors.white,
               unselectedLabelColor: const Color(0xFF64748B),
@@ -5542,118 +5619,110 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> with S
           }
         }
 
-        return Card(
-          elevation: 0,
-          color: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: const BorderSide(color: Color(0xFFE2E8F0)),
-          ),
+        final status = isCompleted
+            ? 'APPROVED'
+            : (b['status']?.toString().toUpperCase() ?? 'PENDING');
+        final isApproved = status == 'APPROVED';
+        final isRejected = status == 'REJECTED';
+
+        Color statusBg = const Color(0xFFFEF3C7);
+        Color statusFg = const Color(0xFFD97706);
+        if (isApproved) {
+          statusBg = const Color(0xFFDCFCE7);
+          statusFg = const Color(0xFF15803D);
+        } else if (isRejected) {
+          statusBg = const Color(0xFFFEE2E2);
+          statusFg = const Color(0xFFB91C1C);
+        }
+
+        final titleName = guestName.isNotEmpty ? guestName : (widget.profile['name'] ?? 'Booking');
+        final ageLabel = (guestAge.isNotEmpty && guestAge != '---') ? ' • Age: $guestAge' : '';
+
+        return Container(
           margin: const EdgeInsets.only(bottom: 12),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: isCompleted ? const Color(0xFFE6F4EA) : const Color(0xFFFFF4E5),
-                        borderRadius: BorderRadius.circular(8),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      '$titleName$ageLabel',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: Color(0xFF0F172A),
                       ),
-                      child: Text(
-                        isCompleted ? 'APPROVED' : 'PENDING',
-                        style: TextStyle(
-                          color: isCompleted ? const Color(0xFF137333) : const Color(0xFFB06000),
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    Icon(
-                      isCompleted ? Icons.check_circle_rounded : Icons.pending_rounded,
-                      color: isCompleted ? Colors.green[600] : Colors.orange[600],
-                      size: 20,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    const Icon(Icons.person_outline_rounded, size: 18, color: Color(0xFF64748B)),
-                    const SizedBox(width: 8),
-                    Text(
-                      guestName,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF0F172A)),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        'Age: $guestAge',
-                        style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('ARRIVAL', style: TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 2),
-                          Text(arrivalText, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF475569))),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('DEPARTURE', style: TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 2),
-                          Text(departureText, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF475569))),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                if (isCompleted && roomAllocated.isNotEmpty) ...[
-                  const Divider(height: 20),
+                  ),
+                  const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.all(10),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(10),
+                      color: statusBg,
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.meeting_room_rounded, color: Color(0xFF0F172A), size: 18),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Room: ${roomAllocated.toString().replaceAll('ROOM: ', '')}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                            color: Color(0xFF0F172A),
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      status,
+                      style: TextStyle(
+                        color: statusFg,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  const Icon(Icons.calendar_today_rounded, size: 14, color: Color(0xFF64748B)),
+                  const SizedBox(width: 6),
+                  Text(
+                    '$arrivalText  ➔  $departureText',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF334155),
+                    ),
+                  ),
+                ],
+              ),
+              if (isApproved && roomAllocated.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.meeting_room_rounded, color: Color(0xFF0F172A), size: 15),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Room: ${roomAllocated.toString().replaceAll('ROOM: ', '')}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          color: Color(0xFF0F172A),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
-            ),
+            ],
           ),
         );
       },
@@ -5779,13 +5848,12 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> with S
               ],
             ),
             const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              height: 46,
+            Center(
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF0F172A),
                   foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   elevation: 0,
                 ),
