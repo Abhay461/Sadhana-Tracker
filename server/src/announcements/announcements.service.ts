@@ -32,11 +32,9 @@ export class AnnouncementsService {
   async deleteAnnouncement(id: string) {
     const item = await this.announcementModel.findById(id);
     if (item) {
-      if (item.banner_url) {
-        await this.mediaService.deleteCloudinaryImage(item.banner_url);
-      }
-      if (item.photo_url) {
-        await this.mediaService.deleteCloudinaryImage(item.photo_url);
+      const banner = item.bannerUrl || (item as any).banner_url || (item as any).photo_url || (item as any).imageUrl;
+      if (banner) {
+        await this.mediaService.deleteCloudinaryImage(banner);
       }
       await this.announcementModel.deleteOne({ _id: id });
     }

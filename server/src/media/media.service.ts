@@ -38,6 +38,8 @@ export class MediaService {
       folder,
       uploadUrl: `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
     };
+  }
+
   async deleteCloudinaryImage(url: string) {
     if (!url || typeof url !== 'string' || !url.includes('cloudinary.com')) return;
     try {
