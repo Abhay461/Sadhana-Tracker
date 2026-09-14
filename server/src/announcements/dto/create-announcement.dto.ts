@@ -33,4 +33,8 @@ export class CreateAnnouncementDto {
   @ApiPropertyOptional()
   @IsOptional()
   sessionTime?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  preacher_id?: string;
 }

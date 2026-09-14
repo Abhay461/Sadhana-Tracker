@@ -3,15 +3,21 @@ import { Document, Schema as MongooseSchema } from 'mongoose';
 
 export type AnnouncementDocument = Announcement & Document;
 
-@Schema({ timestamps: true, collection: 'announcements' })
+@Schema({ timestamps: true, collection: 'announcements', strict: false })
 export class Announcement {
-  @Prop({ type: String, required: true, trim: true })
+  @Prop({ type: String, required: false, default: '', trim: true })
   title: string;
+
+  @Prop({ type: String, default: '' })
+  content: string;
+
+  @Prop({ type: String, default: '' })
+  category: string;
 
   @Prop({ type: String, default: '' })
   description: string;
 
-  @Prop({ type: String, enum: ['session', 'announcement', 'general'], default: 'announcement' })
+  @Prop({ type: String, default: 'announcement' })
   type: string;
 
   @Prop({ type: String, default: '' })
@@ -23,7 +29,7 @@ export class Announcement {
   @Prop({ type: String, default: '' })
   sessionTime: string;
 
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true })
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: false })
   createdBy: MongooseSchema.Types.ObjectId;
 
   @Prop({ type: Boolean, default: true, index: true })

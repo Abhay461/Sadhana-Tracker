@@ -11,14 +11,19 @@ export class AnnouncementsService {
   ) {}
 
   async createAnnouncement(creatorUser: any, dto: CreateAnnouncementDto) {
+    const rawContent = dto.content || '';
+    const title = dto.title || (rawContent.length > 0 ? rawContent.split('\n')[0] : 'Announcement');
+    const createdBy = creatorUser?._id || creatorUser?.id || null;
+
     return this.announcementModel.create({
       ...dto,
-      createdBy: creatorUser?._id || null,
+      title: title,
+      createdBy: createdBy,
       isActive: true,
     });
   }
 
   async getActiveAnnouncements() {
-    return this.announcementModel.find({ isActive: true }).sort({ createdAt: -1 }).limit(30);
+    return this.announcementModel.find({ isActive: true }).sort({ createdAt: -1 }).limit(50);
   }
 }
