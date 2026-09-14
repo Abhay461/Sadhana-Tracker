@@ -1184,9 +1184,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             setPublishState(() => isUploading = true);
                             try {
                               List<String> imageUrls = [];
-                              final bytes = await selectedFiles.first.readAsBytes();
-                              final base64Str = 'data:image/jpeg;base64,${base64Encode(bytes)}';
-                              imageUrls.add(base64Str);
+                              for (var file in selectedFiles) {
+                                final url = await CloudinaryService.uploadToCloudinary(file);
+                                imageUrls.add(url);
+                              }
 
                               final today = DateTime.now().toIso8601String().split('T')[0];
                               await ApiService.post('/daily-quotes', {

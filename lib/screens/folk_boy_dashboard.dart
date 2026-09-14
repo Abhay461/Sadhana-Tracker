@@ -2174,8 +2174,77 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Donation & Seva Contribution Banner Card
+          Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF7C2D12), Color(0xFFC2410C), Color(0xFFEA580C)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFEA580C).withValues(alpha: 0.3),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.volunteer_activism_rounded, color: Colors.white, size: 28),
+                ),
+                const SizedBox(width: 14),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Support Spiritual Seva',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Contribute for Annadaan, Temple Seva & Youth Programs',
+                        style: TextStyle(fontSize: 11.5, color: Colors.white70),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: _showDonationDialog,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFFC2410C),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    'Donate Now',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
+                  ),
+                ),
+              ],
+            ),
+          ),
           Column(
             children: [
+              _buildServiceListItem(
+                title: 'Donate & Support (Seva)',
+                icon: Icons.volunteer_activism_outlined,
+                onTap: _showDonationDialog,
+              ),
               _buildServiceListItem(
                 title: 'Sadhana & Activity History',
                 icon: Icons.history_rounded,
@@ -2589,6 +2658,305 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
           SnackBar(content: Text('Network error: $e'), backgroundColor: Colors.red),
         );
       }
+    }
+  }
+
+  void _showDonationDialog() {
+    final List<int> presetAmounts = [108, 501, 1008, 2100, 5001];
+    final List<String> sevaCategories = [
+      'General Seva',
+      'Annadaan (Food Distribution)',
+      'Temple Development',
+      'Youth Awakening',
+      'Mantra Meditation Kits',
+    ];
+
+    String selectedCategory = sevaCategories[0];
+    int selectedPreset = 1008;
+    final customAmountController = TextEditingController(text: '1008');
+    final remarksController = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[300],
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFF7ED),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.volunteer_activism_rounded,
+                            color: Color(0xFFEA580C),
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Make a Seva Donation',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF0F172A),
+                              ),
+                            ),
+                            Text(
+                              'Support Vedic Wisdom & Community Programs',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Select Seva Category',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF334155),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: selectedCategory,
+                          isExpanded: true,
+                          icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                          items: sevaCategories.map((cat) {
+                            return DropdownMenuItem(
+                              value: cat,
+                              child: Text(cat, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF0F172A))),
+                            );
+                          }).toList(),
+                          onChanged: (val) {
+                            if (val != null) {
+                              setModalState(() {
+                                selectedCategory = val;
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    const Text(
+                      'Choose Amount (₹)',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF334155),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: presetAmounts.map((amt) {
+                        final bool isSelected = selectedPreset == amt;
+                        return ChoiceChip(
+                          label: Text(
+                            '₹$amt',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: isSelected ? Colors.white : const Color(0xFF334155),
+                            ),
+                          ),
+                          selected: isSelected,
+                          selectedColor: const Color(0xFFEA580C),
+                          backgroundColor: const Color(0xFFF1F5F9),
+                          onSelected: (bool selected) {
+                            if (selected) {
+                              setModalState(() {
+                                selectedPreset = amt;
+                                customAmountController.text = amt.toString();
+                              });
+                            }
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: customAmountController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: 'Enter Custom Amount (₹)',
+                        prefixText: '₹ ',
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFC),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFFEA580C), width: 1.5),
+                        ),
+                      ),
+                      onChanged: (val) {
+                        final parsed = int.tryParse(val);
+                        if (parsed != null && presetAmounts.contains(parsed)) {
+                          setModalState(() {
+                            selectedPreset = parsed;
+                          });
+                        } else {
+                          setModalState(() {
+                            selectedPreset = 0;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: remarksController,
+                      decoration: InputDecoration(
+                        labelText: 'Optional Remarks / Prayer',
+                        hintText: 'e.g. For peace, family well-being',
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFC),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFFEA580C), width: 1.5),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          final double? finalAmt = double.tryParse(customAmountController.text.trim());
+                          if (finalAmt == null || finalAmt <= 0) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Please enter a valid donation amount'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                            return;
+                          }
+                          Navigator.pop(ctx);
+                          _openRazorpayDonationCheckout(finalAmt, selectedCategory, remarksController.text.trim());
+                        },
+                        icon: const Icon(Icons.payment_rounded, color: Colors.white),
+                        label: const Text(
+                          'Proceed to Pay via Razorpay',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFEA580C),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _openRazorpayDonationCheckout(double amount, String sevaCategory, String remarks) async {
+    final int amountInPaise = (amount * 100).round();
+
+    var options = {
+      'key': _razorpayApiKey,
+      'amount': amountInPaise,
+      'name': 'FOLK Vrindavan - Seva Donation',
+      'description': 'Donation: $sevaCategory${remarks.isNotEmpty ? " ($remarks)" : ""}',
+      'prefill': {
+        'contact': _profile?['mobile_number'] ?? _profile?['whatsapp_number'] ?? '',
+        'email': _profile?['email'] ?? '',
+        'name': _profile?['full_name'] ?? _profile?['name'] ?? 'Devotee',
+      },
+      'external': {
+        'wallets': ['paytm']
+      }
+    };
+
+    bool openedNatively = false;
+    try {
+      if (_razorpay != null) {
+        _razorpay!.open(options);
+        openedNatively = true;
+      }
+    } catch (e) {
+      debugPrint('Razorpay native open error: $e');
+    }
+
+    if (!openedNatively) {
+      _openRazorpayWebCheckout({
+        'title': 'Donation - $sevaCategory',
+      }, amountInPaise);
     }
   }
 
@@ -3158,10 +3526,11 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
       if (pickedFile != null) {
         final url = await CloudinaryService.uploadToCloudinary(File(pickedFile.path));
-        await ApiService.patch('/users/me', {'photo_url': url});
+        await ApiService.patch('/users/me', {'photoUrl': url});
         setState(() {
           _photoUrl = url;
           _profile!['photo_url'] = url;
+          _profile!['photoUrl'] = url;
         });
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

@@ -82,7 +82,7 @@ class _SettingsTabState extends State<SettingsTab> {
       await ApiService.patch('/users/me', {
         'name': name,
         'whatsapp_number': whatsapp,
-        'photo_url': _settingsPhotoUrl,
+        'photoUrl': _settingsPhotoUrl,
       });
 
       await widget.onRefresh();

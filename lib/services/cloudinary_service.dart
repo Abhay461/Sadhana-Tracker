@@ -32,38 +32,39 @@ class CloudinaryService {
     }
 
     final url = Uri.parse('https://api.cloudinary.com/v1_1/$cloudName/image/upload');
-    
-    final request = http.MultipartRequest('POST', url)
-      ..fields['upload_preset'] = uploadPreset
-      ..files.add(await http.MultipartFile.fromPath('file', file.path));
 
-    try {
-      final streamedResponse = await request.send().timeout(
-        const Duration(seconds: 30),
-        onTimeout: () {
-          throw Exception('Upload timed out. Please try again.');
-        },
-      );
-      final response = await http.Response.fromStream(streamedResponse);
+    // Try with primary uploadPreset (e.g. sadhana_track), fallback to ml_default if needed
+    List<String> presetsToTry = [uploadPreset, 'ml_default'];
 
-      if (response.statusCode != 200) {
-        throw Exception('Upload failed. Please try again.');
-      }
+    for (String preset in presetsToTry) {
+      try {
+        final request = http.MultipartRequest('POST', url)
+          ..fields['upload_preset'] = preset
+          ..files.add(await http.MultipartFile.fromPath('file', file.path));
 
-      final Map<String, dynamic> responseData = json.decode(response.body);
-      final secureUrl = responseData['secure_url'] as String?;
-      if (secureUrl == null || secureUrl.isEmpty) {
-        throw Exception('Upload failed. No URL returned.');
+        final streamedResponse = await request.send().timeout(
+          const Duration(seconds: 30),
+          onTimeout: () {
+            throw Exception('Upload timed out. Please try again.');
+          },
+        );
+        final response = await http.Response.fromStream(streamedResponse);
+
+        if (response.statusCode == 200) {
+          final Map<String, dynamic> responseData = json.decode(response.body);
+          final secureUrl = responseData['secure_url'] as String?;
+          if (secureUrl != null && secureUrl.isNotEmpty) {
+            print('✅ [CLOUDINARY SUCCESS] Uploaded to: $secureUrl');
+            return secureUrl;
+          }
+        } else {
+          print('❌ [CLOUDINARY ERROR] Preset $preset (${response.statusCode}): ${response.body}');
+        }
+      } catch (e) {
+        print('❌ [CLOUDINARY EXCEPTION] Preset $preset: $e');
       }
-      return secureUrl;
-    } catch (e) {
-      if (e.toString().contains('Upload failed') || 
-          e.toString().contains('timed out') ||
-          e.toString().contains('too large') ||
-          e.toString().contains('Invalid file type')) {
-        rethrow;
-      }
-      throw Exception('Failed to upload image. Please check your internet connection.');
     }
+
+    throw Exception('Upload failed. Please ensure Unsigned Upload preset ("sadhana_track" or "ml_default") is enabled in Cloudinary Settings.');
   }
 }

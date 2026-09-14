@@ -12,6 +12,11 @@ export class UpdateUserProfileDto {
   @IsString()
   photoUrl?: string;
 
+  @ApiProperty({ description: 'Profile photo URL (alias)', required: false })
+  @IsOptional()
+  @IsString()
+  photo_url?: string;
+
   @ApiProperty({ description: 'Email address', required: false })
   @IsOptional()
   @IsEmail()

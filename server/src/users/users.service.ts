@@ -19,7 +19,8 @@ export class UsersService {
   async updateProfile(userId: string, dto: UpdateUserProfileDto) {
     const updateData: Record<string, any> = {};
     if (dto.name) updateData.name = dto.name;
-    if (dto.photoUrl) updateData.photoUrl = dto.photoUrl;
+    const photoUrl = dto.photoUrl || dto.photo_url;
+    if (photoUrl) updateData.photoUrl = photoUrl;
     if (dto.email) updateData.email = dto.email;
     if (dto.dob) updateData.dob = new Date(dto.dob);
     if (dto.joiningDate) updateData.joiningDate = new Date(dto.joiningDate);
