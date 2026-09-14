@@ -5208,11 +5208,12 @@ class _FolkAccommodationSheet extends StatefulWidget {
   State<_FolkAccommodationSheet> createState() => _FolkAccommodationSheetState();
 }
 
-class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> {
+class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   
   late TextEditingController _nameController;
   final _ageController = TextEditingController();
+  late TabController _tabController;
   
   DateTime? _arrivalDate;
   DateTime? _departureDate;
@@ -5224,12 +5225,14 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> {
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     _nameController = TextEditingController(text: widget.profile['name'] ?? '');
     _fetchBookings();
   }
 
   @override
   void dispose() {
+    _tabController.dispose();
     _nameController.dispose();
     _ageController.dispose();
     super.dispose();
@@ -5240,13 +5243,21 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> {
       setState(() => _isLoadingBookings = true);
       dynamic res;
       try {
-        res = await ApiService.get('/sadhana/updates');
-      } catch (_) {
         res = await ApiService.get('/sadhana/history');
+      } catch (_) {
+        try {
+          res = await ApiService.get('/sadhana/updates');
+        } catch (_) {}
       }
-      final List<dynamic> updatesList = res is List ? res : [];
 
-      final bookings = updatesList.where((u) => u['category'] == 'accommodation').toList();
+      List<dynamic> updatesList = [];
+      if (res is Map && res.containsKey('items')) {
+        updatesList = res['items'] is List ? res['items'] : [];
+      } else if (res is List) {
+        updatesList = res;
+      }
+
+      final bookings = updatesList.where((u) => u is Map && u['category'] == 'accommodation').toList();
 
       if (mounted) {
         setState(() {
@@ -5325,20 +5336,31 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> {
         'date': DateFormat('yyyy-MM-dd').format(DateTime.now()),
         'points': 0,
       };
+
+      final tempItem = {
+        ...updateData,
+        '_id': 'temp_${DateTime.now().millisecondsSinceEpoch}',
+        'created_at': DateTime.now().toIso8601String(),
+      };
+
       await ApiService.post('/sadhana', updateData);
       NotificationHelper.sendUpdateNotification(updateData).catchError((_) {});
 
       if (mounted) {
+        setState(() {
+          _bookings.insert(0, tempItem);
+          _arrivalDate = null;
+          _departureDate = null;
+          _ageController.clear();
+        });
+
+        _tabController.animateTo(0);
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Accommodation booking requested successfully!')),
         );
         widget.onBookingSuccess();
         _fetchBookings();
-        _ageController.clear();
-        setState(() {
-          _arrivalDate = null;
-          _departureDate = null;
-        });
       }
     } catch (e) {
       debugPrint('Error booking accommodation: $e');
@@ -5363,59 +5385,58 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> {
           topRight: Radius.circular(24),
         ),
       ),
-      child: DefaultTabController(
-        length: 2,
-        child: Column(
-          children: [
-            const SizedBox(height: 12),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
+      child: Column(
+        children: [
+          const SizedBox(height: 12),
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey[300],
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Accommodation Booking',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 20),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: TabBar(
+              controller: _tabController,
+              indicator: BoxDecoration(
+                color: const Color(0xFF0F172A),
                 borderRadius: BorderRadius.circular(10),
               ),
+              labelColor: Colors.white,
+              unselectedLabelColor: const Color(0xFF64748B),
+              labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              tabs: const [
+                Tab(text: 'My Bookings'),
+                Tab(text: 'New Booking'),
+              ],
             ),
-            const SizedBox(height: 16),
-            const Text(
-              'Accommodation Booking',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF0F172A),
-              ),
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildBookingsTab(),
+                _buildRequestTab(),
+              ],
             ),
-            const SizedBox(height: 14),
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 20),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: TabBar(
-                indicator: BoxDecoration(
-                  color: const Color(0xFF0F172A),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                labelColor: Colors.white,
-                unselectedLabelColor: const Color(0xFF64748B),
-                labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                tabs: const [
-                  Tab(text: 'My Bookings'),
-                  Tab(text: 'New Booking'),
-                ],
-              ),
-            ),
-            Expanded(
-              child: TabBarView(
-                children: [
-                  _buildBookingsTab(),
-                  _buildRequestTab(),
-                ],
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -5814,12 +5835,17 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
       List<dynamic> res = [];
       dynamic data;
       try {
-        data = await ApiService.get('/sadhana/updates');
-      } catch (_) {
         data = await ApiService.get('/sadhana/history');
+      } catch (_) {
+        try {
+          data = await ApiService.get('/sadhana/updates');
+        } catch (_) {}
+      }
+      if (data is Map && data.containsKey('items')) {
+        data = data['items'];
       }
       if (data is List) {
-        res = data.where((u) => u['category'] == 'preacher_appointment').toList();
+        res = data.where((u) => u is Map && u['category'] == 'preacher_appointment').toList();
       }
 
       if (mounted) {
