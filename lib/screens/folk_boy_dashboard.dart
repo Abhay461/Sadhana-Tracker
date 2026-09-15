@@ -3548,7 +3548,18 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     final emailController = TextEditingController(text: _profile?['email'] ?? '');
     final dobController = TextEditingController(text: displayDob);
     final joinController = TextEditingController(text: displayJoin);
-    final occupationController = TextEditingController(text: displayOcc.isNotEmpty ? displayOcc : 'Student');
+    final List<String> occupationOptions = [
+      'Student',
+      'Working Professional',
+      'Business / Self-Employed',
+      'Job Seeker / Other',
+    ];
+
+    String selectedOcc = displayOcc.isNotEmpty && occupationOptions.contains(displayOcc)
+        ? displayOcc
+        : 'Student';
+
+    final occupationController = TextEditingController(text: selectedOcc);
     final collegeController = TextEditingController(text: displayClg);
     final courseYearController = TextEditingController(text: displayCrs);
     final cityController = TextEditingController(text: displayCity);
@@ -3596,33 +3607,60 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    TextField(
-                      controller: occupationController,
+                    InputDecorator(
                       decoration: const InputDecoration(
                         labelText: 'Occupation / Status',
                         prefixIcon: Icon(Icons.work_outline),
                         border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: occupationOptions.contains(selectedOcc) ? selectedOcc : 'Student',
+                          isExpanded: true,
+                          icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF64748B), size: 20),
+                          items: occupationOptions.map((String option) {
+                            return DropdownMenuItem<String>(
+                              value: option,
+                              child: Text(option),
+                            );
+                          }).toList(),
+                          onChanged: (String? newValue) {
+                            if (newValue != null) {
+                              setDialogState(() {
+                                selectedOcc = newValue;
+                                occupationController.text = newValue;
+                                if (newValue != 'Student') {
+                                  collegeController.clear();
+                                  courseYearController.clear();
+                                }
+                              });
+                            }
+                          },
+                        ),
                       ),
                     ),
                     const SizedBox(height: 12),
-                    TextField(
-                      controller: collegeController,
-                      decoration: const InputDecoration(
-                        labelText: 'College / University Name',
-                        prefixIcon: Icon(Icons.school_outlined),
-                        border: OutlineInputBorder(),
+                    if (selectedOcc == 'Student') ...[
+                      TextField(
+                        controller: collegeController,
+                        decoration: const InputDecoration(
+                          labelText: 'College / University Name',
+                          prefixIcon: Icon(Icons.school_outlined),
+                          border: OutlineInputBorder(),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: courseYearController,
-                      decoration: const InputDecoration(
-                        labelText: 'Course & Year',
-                        prefixIcon: Icon(Icons.menu_book_outlined),
-                        border: OutlineInputBorder(),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: courseYearController,
+                        decoration: const InputDecoration(
+                          labelText: 'Course & Year',
+                          prefixIcon: Icon(Icons.menu_book_outlined),
+                          border: OutlineInputBorder(),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
+                      const SizedBox(height: 12),
+                    ],
                     TextField(
                       controller: cityController,
                       decoration: const InputDecoration(
