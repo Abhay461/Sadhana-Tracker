@@ -63,6 +63,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   TimeOfDay _wakeUpTime = const TimeOfDay(hour: 5, minute: 0);
   TimeOfDay _sleepTime = const TimeOfDay(hour: 22, minute: 0);
   final DateTime _templeVisitDate = DateTime.now();
+  String _ekadashiFastingType = 'Water Fasting';
 
   final PageController _pageController = PageController();
   int _currentAnnouncementIndex = 0;
