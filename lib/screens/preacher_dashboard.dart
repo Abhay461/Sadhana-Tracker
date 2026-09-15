@@ -25,6 +25,7 @@ import 'preacher/message_tab.dart';
 import 'preacher/settings_tab.dart';
 import 'preacher/residency_tab.dart';
 import 'preacher/student_list_tab.dart';
+import 'preacher/festival_tab.dart';
 
 class PreacherDashboard extends StatefulWidget {
   const PreacherDashboard({super.key});
@@ -39,6 +40,15 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
   Map<String, dynamic>? _profile;
   bool _isLoadingProfile = true;
   bool _isLoadingBoys = true;
+
+  bool get _isAdmin {
+    if (_profile == null) return false;
+    final role = (_profile!['role'] as String? ?? '').toLowerCase();
+    final isAdminFlag = _profile!['isAdmin'] == true || _profile!['is_admin'] == true;
+    final email = (_profile!['email'] as String? ?? '').toLowerCase();
+    final isSuperAdminEmail = email == 'sadhanatracker.in@gmail.com' || email.contains('admin');
+    return role == 'admin' || isAdminFlag || isSuperAdminEmail;
+  }
 
   List<dynamic> _folkBoys = [];
   Map<String, List<dynamic>> _allUpdates = {}; // userId -> list of updates
@@ -612,7 +622,9 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
                                       ? 'Notification'
                                       : _activeTab == 'student_list'
                                           ? 'Student List'
-                                          : _activeTab![0].toUpperCase() + _activeTab!.substring(1),
+                                          : _activeTab == 'festival'
+                                              ? 'Festival Management'
+                                              : _activeTab![0].toUpperCase() + _activeTab!.substring(1),
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF1E293B)),
                 ),
               ],
@@ -703,6 +715,12 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
                 icon: Icons.people_outline_rounded,
                 onTap: () => setState(() => _activeTab = 'student_list'),
               ),
+              if (_isAdmin)
+                _buildServiceListItem(
+                  title: 'Festival Management (Admin Only)',
+                  icon: Icons.festival_outlined,
+                  onTap: () => setState(() => _activeTab = 'festival'),
+                ),
             ],
           ),
         ],
@@ -878,6 +896,20 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
     
           onRefresh: _loadProfileAndData,
         );
+      case 'festival':
+        if (!_isAdmin) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(24.0),
+              child: Text(
+                '🔒 Access Restricted: Festival Management is available for Admin accounts only.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent, fontSize: 15),
+              ),
+            ),
+          );
+        }
+        return const FestivalTab();
     }
     return const SizedBox.shrink();
   }

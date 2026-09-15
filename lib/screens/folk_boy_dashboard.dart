@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show File, Platform;
+import 'dart:io' show File, Platform, Directory;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
@@ -25,6 +25,7 @@ class FolkBoyDashboard extends StatefulWidget {
 
 class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   static const _screenTimeChannel = MethodChannel('com.example.mobile_app/screen_time');
+  static const _downloadChannel = MethodChannel('com.example.mobile_app/media_download');
   
   Map<String, dynamic>? _profile;
   Map<String, dynamic>? _preacher;
@@ -32,6 +33,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   List<Map<String, dynamic>> _announcements = [];
   Map<String, dynamic>? _todayDarshan;
   Map<String, dynamic>? _todayQuote;
+  Map<String, dynamic>? _todayFestival;
   bool _isLoadingProfile = true;
   bool _isAutoPromoting = false;
   bool _showPersonalInfoCard = false;
@@ -103,6 +105,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     _fetchAnnouncements();
     _fetchDailyDarshan();
     _fetchDailyQuote();
+    _fetchTodayFestival();
     _fetchCourses();
     _initRazorpay();
   }
@@ -302,6 +305,32 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       }
     } catch (e) {
       debugPrint('Error fetching daily quote: $e');
+    }
+  }
+
+  Future<void> _fetchTodayFestival() async {
+    try {
+      final response = await ApiService.get('/festivals/today');
+      if (response != null && response is Map<String, dynamic>) {
+        if (mounted) {
+          setState(() {
+            _todayFestival = response;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _todayFestival = null;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching today festival: $e');
+      if (mounted) {
+        setState(() {
+          _todayFestival = null;
+        });
+      }
     }
   }
 
@@ -4279,6 +4308,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _buildTodayFestivalCard(),
         const Text(
           'Your Sadhana',
           style: TextStyle(
@@ -4296,11 +4326,122 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
             crossAxisCount: 2,
             crossAxisSpacing: 8,
             mainAxisSpacing: 8,
-            childAspectRatio: 2.6,
+            childAspectRatio: 3.0,
           ),
           itemBuilder: (context, index) {
             return _buildSadhanaGridCard(activities[index]);
           },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTodayFestivalCard() {
+    if (_todayFestival == null) return const SizedBox.shrink();
+
+    final title = _todayFestival!['title'] as String? ?? '';
+    final description = _todayFestival!['description'] as String? ?? '';
+    final imageUrl = _todayFestival!['imageUrl'] as String? ?? '';
+
+    if (title.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: const [
+            Icon(Icons.festival_rounded, color: Color(0xFFD97706), size: 18),
+            SizedBox(width: 6),
+            Text(
+              "Today's Festival",
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0F172A),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFFFFFBEB), Color(0xFFFEF3C7)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFFCD34D), width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFD97706).withOpacity(0.08),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFDE68A),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 4,
+                    ),
+                  ],
+                ),
+                child: ClipOval(
+                  child: imageUrl.isNotEmpty
+                      ? Image.network(
+                          imageUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => const Icon(Icons.festival_rounded, color: Color(0xFFD97706), size: 24),
+                        )
+                      : const Icon(Icons.festival_rounded, color: Color(0xFFD97706), size: 24),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF92400E),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (description.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        description,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFFB45309),
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -4484,10 +4625,10 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                       titleText,
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: 12,
+                        fontSize: 12.5,
                         color: isLogged ? const Color(0xFF065F46) : const Color(0xFF0F172A),
                       ),
-                      maxLines: 2,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     if (isLogged && loggedDetails.isNotEmpty) ...[
@@ -4495,11 +4636,11 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                       Text(
                         loggedDetails,
                         style: const TextStyle(
-                          fontSize: 10.5,
+                          fontSize: 11.5,
                           fontWeight: FontWeight.bold,
                           color: Color(0xFF047857),
                         ),
-                        maxLines: 2,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
@@ -4526,6 +4667,138 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     return url;
   }
 
+  static final Map<String, File> _cachedImageFiles = {};
+
+  Future<File?> _getOrCacheImageFile(String imageUrl, String title) async {
+    if (imageUrl.isEmpty) return null;
+    if (_cachedImageFiles.containsKey(imageUrl)) {
+      final f = _cachedImageFiles[imageUrl]!;
+      if (f.existsSync()) return f;
+    }
+    try {
+      final response = await http.get(Uri.parse(imageUrl));
+      if (response.statusCode == 200) {
+        final bytes = response.bodyBytes;
+        final tempDir = Directory.systemTemp;
+        final cleanTitle = title.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_').toLowerCase();
+        final fileName = 'share_${cleanTitle}_${imageUrl.hashCode}.jpg';
+        final file = File('${tempDir.path}/$fileName');
+        await file.writeAsBytes(bytes);
+        _cachedImageFiles[imageUrl] = file;
+        return file;
+      }
+    } catch (e) {
+      debugPrint('Error caching image file for share: $e');
+    }
+    return null;
+  }
+
+  void _preloadImageFiles(List<String> imageUrls, String title) {
+    for (final url in imageUrls) {
+      if (url.isNotEmpty && !_cachedImageFiles.containsKey(url)) {
+        _getOrCacheImageFile(url, title);
+      }
+    }
+  }
+
+  Future<void> _shareImage(String imageUrl, String title) async {
+    try {
+      if (imageUrl.isEmpty) return;
+
+      // 1. Check if image file is already pre-cached in background
+      File? imageFile = _cachedImageFiles[imageUrl];
+      if (imageFile == null || !imageFile.existsSync()) {
+        // Fetch file if not pre-cached yet
+        imageFile = await _getOrCacheImageFile(imageUrl, title);
+      }
+
+      final shareText = 'Hare Krishna! 🙏 $title\nDownloaded from Sadhana Tracker App';
+
+      if (imageFile != null && imageFile.existsSync()) {
+        // Share actual JPEG image file instantly!
+        await Share.shareXFiles(
+          [XFile(imageFile.path)],
+          text: shareText,
+        );
+      } else {
+        // Fallback to text link if download fails
+        await Share.share(
+          'Hare Krishna! 🙏 $title:\n$imageUrl\n\nTrack your daily sadhana with Sadhana Tracker App!',
+          subject: title,
+        );
+      }
+    } catch (e) {
+      debugPrint('Error sharing image: $e');
+    }
+  }
+
+  Future<void> _downloadImage(BuildContext context, String imageUrl, String title) async {
+    if (imageUrl.isEmpty) return;
+    try {
+      final response = await http.get(Uri.parse(imageUrl));
+      if (response.statusCode == 200) {
+        final bytes = response.bodyBytes;
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final cleanTitle = title.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
+        final fileName = 'SadhanaTracker_${cleanTitle}_$timestamp.jpg';
+
+        bool savedToGallery = false;
+        File? savedFile;
+
+        // 1. Primary: Use Native Android MediaStore (Saves to Gallery & triggers Mobile System Notification)
+        if (Platform.isAndroid) {
+          try {
+            final result = await _downloadChannel.invokeMethod<bool>('saveImageToGallery', {
+              'bytes': bytes,
+              'fileName': fileName,
+            });
+            if (result == true) {
+              savedToGallery = true;
+            }
+          } catch (nativeErr) {
+            debugPrint('Native MediaStore save error: $nativeErr');
+          }
+        }
+
+        // 2. Secondary: Fallback to public Download directory
+        if (!savedToGallery) {
+          final pathsToTry = [
+            '/storage/emulated/0/Download',
+            '/sdcard/Download',
+            '/storage/emulated/0/Downloads',
+          ];
+          for (final p in pathsToTry) {
+            try {
+              final d = Directory(p);
+              if (!d.existsSync()) {
+                d.createSync(recursive: true);
+              }
+              final f = File('${d.path}/$fileName');
+              await f.writeAsBytes(bytes);
+              if (f.existsSync()) {
+                savedFile = f;
+                break;
+              }
+            } catch (e) {
+              debugPrint('Download path error for $p: $e');
+            }
+          }
+        }
+
+        // 3. Fallback to temp dir if needed
+        if (!savedToGallery && (savedFile == null || !savedFile.existsSync())) {
+          final tempDir = Directory.systemTemp;
+          savedFile = File('${tempDir.path}/$fileName');
+          await savedFile.writeAsBytes(bytes);
+        }
+      } else {
+        throw Exception('Server code: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('Error downloading image: $e');
+    }
+  }
+
   Widget _buildDailyDarshanCard() {
     if (_todayDarshan == null) return const SizedBox.shrink();
 
@@ -4533,6 +4806,8 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     final List<dynamic> rawUrls = _todayDarshan!['imageUrls'] is List ? _todayDarshan!['imageUrls'] : [];
     final List<String> imageUrls = rawUrls.map((u) => _optimizeCloudinaryUrl(u.toString())).toList();
     if (imageUrls.isEmpty) return const SizedBox.shrink();
+
+    _preloadImageFiles(imageUrls, 'Daily Darshan');
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -4550,7 +4825,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
             ),
             if (title.isNotEmpty)
               Text(
-                title,
+                '($title)',
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -4562,7 +4837,10 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         const SizedBox(height: 10),
         _DailyDarshanCarouselWidget(
           imageUrls: imageUrls,
-          onTapImage: (idx) => _openFullDarshanDialog(imageUrls, idx),
+          title: 'Daily Darshan',
+          onTapImage: (idx) => _openFullDarshanDialog(imageUrls, idx, title: 'Daily Darshan'),
+          onDownload: (idx) => _downloadImage(context, imageUrls[idx], 'Daily Darshan'),
+          onShare: (idx) => _shareImage(imageUrls[idx], 'Daily Darshan'),
         ),
       ],
     );
@@ -4758,74 +5036,118 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
 
     if (imageUrls.isEmpty) return const SizedBox.shrink();
 
+    _preloadImageFiles(imageUrls, 'Daily Quote');
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: const [
-            Text(
-              'Daily Quotes',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF0F172A),
-              ),
-            ),
-          ],
+        const Text(
+          'Daily Quotes',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF0F172A),
+          ),
         ),
         const SizedBox(height: 10),
         _DailyDarshanCarouselWidget(
           imageUrls: imageUrls,
-          onTapImage: (idx) => _openFullDarshanDialog(imageUrls, idx),
+          title: 'Daily Quote',
+          onTapImage: (idx) => _openFullDarshanDialog(imageUrls, idx, title: 'Daily Quote'),
+          onDownload: (idx) => _downloadImage(context, imageUrls[idx], 'Daily Quote'),
+          onShare: (idx) => _shareImage(imageUrls[idx], 'Daily Quote'),
         ),
       ],
     );
   }
 
-  void _openFullDarshanDialog(List<String> urls, int initialIndex) {
+  void _openFullDarshanDialog(List<String> urls, int initialIndex, {String title = 'Daily Image'}) {
     showDialog(
       context: context,
       builder: (context) {
         final PageController pageController = PageController(initialPage: initialIndex);
-        return Dialog(
-          backgroundColor: Colors.black,
-          insetPadding: EdgeInsets.zero,
-          child: Stack(
-            children: [
-              PageView.builder(
-                controller: pageController,
-                itemCount: urls.length,
-                itemBuilder: (context, idx) {
-                  return InteractiveViewer(
-                    minScale: 0.8,
-                    maxScale: 4.0,
-                    child: Center(
-                      child: _buildSmartImage(
-                        _optimizeCloudinaryUrl(urls[idx]),
-                        fit: BoxFit.contain,
-                        placeholderBgColor: Colors.black,
-                        loadingColor: Colors.white,
-                      ),
+        int currentIdx = initialIndex;
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final currentUrl = urls[currentIdx];
+            return Dialog(
+              backgroundColor: Colors.black,
+              insetPadding: EdgeInsets.zero,
+              child: Stack(
+                children: [
+                  PageView.builder(
+                    controller: pageController,
+                    itemCount: urls.length,
+                    onPageChanged: (idx) {
+                      setDialogState(() {
+                        currentIdx = idx;
+                      });
+                    },
+                    itemBuilder: (context, idx) {
+                      return InteractiveViewer(
+                        minScale: 0.8,
+                        maxScale: 4.0,
+                        child: Center(
+                          child: _buildSmartImage(
+                            _optimizeCloudinaryUrl(urls[idx]),
+                            fit: BoxFit.contain,
+                            placeholderBgColor: Colors.black,
+                            loadingColor: Colors.white,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  Positioned(
+                    top: 40,
+                    left: 16,
+                    right: 16,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            '${currentIdx + 1} / ${urls.length}',
+                            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.download_rounded, color: Colors.white, size: 24),
+                              tooltip: 'Download',
+                              onPressed: () => _downloadImage(context, currentUrl, title),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.share_rounded, color: Colors.white, size: 22),
+                              tooltip: 'Share',
+                              onPressed: () => _shareImage(currentUrl, title),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close_rounded, color: Colors.white, size: 28),
+                              onPressed: () => Navigator.pop(context),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                  );
-                },
+                  ),
+                ],
               ),
-              Positioned(
-                top: 40,
-                right: 20,
-                child: IconButton(
-                  icon: const Icon(Icons.close_rounded, color: Colors.white, size: 30),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
   }
+
 
   static Widget _buildSmartImage(
     String url, {
@@ -7660,11 +7982,17 @@ class _LiveDateTimeWidgetState extends State<_LiveDateTimeWidget> {
 
 class _DailyDarshanCarouselWidget extends StatefulWidget {
   final List<String> imageUrls;
+  final String? title;
   final Function(int index) onTapImage;
+  final Function(int index)? onDownload;
+  final Function(int index)? onShare;
 
   const _DailyDarshanCarouselWidget({
     required this.imageUrls,
+    this.title,
     required this.onTapImage,
+    this.onDownload,
+    this.onShare,
   });
 
   @override
@@ -7784,6 +8112,54 @@ class _DailyDarshanCarouselWidgetState extends State<_DailyDarshanCarouselWidget
                     );
                   },
                 ),
+                if (widget.onDownload != null || widget.onShare != null)
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (widget.onDownload != null)
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => widget.onDownload!(_currentIndex),
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              margin: const EdgeInsets.only(left: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.55),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white38, width: 1),
+                              ),
+                              child: const Icon(
+                                Icons.file_download_rounded,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                        if (widget.onShare != null)
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => widget.onShare!(_currentIndex),
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              margin: const EdgeInsets.only(left: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.55),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white38, width: 1),
+                              ),
+                              child: const Icon(
+                                Icons.share_rounded,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 if (widget.imageUrls.length > 1)
                   Positioned(
                     bottom: 12,

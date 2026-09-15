@@ -23,6 +23,7 @@ import { MediaModule } from './media/media.module';
 import { DailyDarshanModule } from './daily-darshan/daily-darshan.module';
 import { DailyQuotesModule } from './daily-quotes/daily-quotes.module';
 import { CoursesModule } from './courses/courses.module';
+import { FestivalsModule } from './festivals/festivals.module';
 
 @Module({
   imports: [
@@ -72,6 +73,7 @@ import { CoursesModule } from './courses/courses.module';
     DailyDarshanModule,
     DailyQuotesModule,
     CoursesModule,
+    FestivalsModule,
   ],
 })
 export class AppModule {}

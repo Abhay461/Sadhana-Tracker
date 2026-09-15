@@ -11,6 +11,11 @@ import android.os.Build
 import android.os.Process
 import android.provider.Settings
 import android.util.Log
+import android.content.ContentValues
+import android.os.Environment
+import android.provider.MediaStore
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -18,10 +23,35 @@ import java.util.Calendar
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.example.mobile_app/screen_time"
+    private val DOWNLOAD_CHANNEL = "com.example.mobile_app/media_download"
     private val TAG = "ScreenTimeNative"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DOWNLOAD_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "saveImageToGallery" -> {
+                    try {
+                        val bytes = call.argument<ByteArray>("bytes")
+                        val fileName = call.argument<String>("fileName") ?: "image_${System.currentTimeMillis()}.jpg"
+                        if (bytes != null) {
+                            val saved = saveImageToGallery(bytes, fileName)
+                            if (saved) {
+                                showDownloadNotification()
+                            }
+                            result.success(saved)
+                        } else {
+                            result.error("INVALID_ARGS", "Bytes cannot be null", null)
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error in saveImageToGallery: ${e.message}", e)
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
@@ -52,6 +82,72 @@ class MainActivity : FlutterActivity() {
                 }
                 else -> result.notImplemented()
             }
+        }
+    }
+
+    private fun saveImageToGallery(bytes: ByteArray, fileName: String): Boolean {
+        return try {
+            val resolver = contentResolver
+            val contentValues = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/SadhanaTracker")
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+            }
+
+            val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+                ?: return false
+
+            resolver.openOutputStream(uri)?.use { os ->
+                os.write(bytes)
+                os.flush()
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                contentValues.clear()
+                contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                resolver.update(uri, contentValues, null, null)
+            }
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving image via MediaStore: ${e.message}", e)
+            false
+        }
+    }
+
+    private fun showDownloadNotification() {
+        try {
+            val channelId = "sadhana_downloads"
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(
+                    channelId,
+                    "Downloads",
+                    NotificationManager.IMPORTANCE_DEFAULT
+                ).apply {
+                    description = "Download notifications"
+                }
+                notificationManager.createNotificationChannel(channel)
+            }
+
+            val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                android.app.Notification.Builder(this, channelId)
+            } else {
+                @Suppress("DEPRECATION")
+                android.app.Notification.Builder(this)
+            }
+
+            builder.setSmallIcon(android.R.drawable.stat_sys_download_done)
+                .setContentTitle("Downloaded")
+                .setContentText("Image saved to Gallery")
+                .setAutoCancel(true)
+
+            notificationManager.notify((System.currentTimeMillis() % 10000).toInt(), builder.build())
+        } catch (e: Exception) {
+            Log.e(TAG, "Error showing download notification: ${e.message}", e)
         }
     }
 

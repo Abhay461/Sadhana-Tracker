@@ -15,6 +15,14 @@ class CloudinaryService {
   );
 
   static Future<String> uploadToCloudinary(File file) async {
+    return _doUpload(file);
+  }
+
+  static Future<String> uploadImage(File file) async {
+    return _doUpload(file);
+  }
+
+  static Future<String> _doUpload(File file) async {
     // Validate file exists
     if (!await file.exists()) {
       throw Exception('File does not exist');
