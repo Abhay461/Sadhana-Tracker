@@ -2038,8 +2038,16 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       if (wc.isNotEmpty) return wc;
       return 'Completed';
     } else if (activity == 'Ekadashi Fasting' || activity == 'Ekadashi') {
+      if (wc.isNotEmpty && wc.toLowerCase() != 'completed' && wc != 'null') {
+        if (wc.contains(':')) return wc.split(':')[1].trim();
+        return wc;
+      }
       if (ws.contains(':')) return ws.split(':')[1].trim();
-      if (wc.isNotEmpty) return wc;
+      if (ws.contains('(') && ws.contains(')')) {
+        final firstParen = ws.indexOf('(');
+        final lastParen = ws.lastIndexOf(')');
+        if (lastParen > firstParen) return ws.substring(firstParen + 1, lastParen).trim();
+      }
       return 'Fasting';
     } else if (activity == 'Temple Visit') {
       if (wc.isNotEmpty) return wc;
@@ -5106,6 +5114,8 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         workCompletedVal = _formatTimeSpanWithDuration(_sbStartTime, _sbEndTime);
       } else if (activity == 'Bhagavad Gita Class') {
         workCompletedVal = _formatTimeSpanWithDuration(_bgStartTime, _bgEndTime);
+      } else if (activity == 'Ekadashi Fasting' || activity == 'Ekadashi') {
+        workCompletedVal = _ekadashiFastingType;
       }
 
       final updateData = {
@@ -5168,7 +5178,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                 if (activity == 'Temple Visit') 'templeVisit': {'visited': true},
                 if (activity == 'Srimad Bhagavatam Class') 'srimadBhagavatamClass': {'attended': true, 'timeSpan': workCompletedVal},
                 if (activity == 'Bhagavad Gita Class') 'bhagavadGitaClass': {'attended': true, 'timeSpan': workCompletedVal},
-                if (activity == 'Ekadashi Fasting') 'ekadashiFasting': {'fastingType': 'Fasting'},
+                if (activity == 'Ekadashi Fasting') 'ekadashiFasting': {'fastingType': _ekadashiFastingType.isNotEmpty ? _ekadashiFastingType : 'Fasting'},
               },
             });
             await _fetchUpdates();
@@ -5762,6 +5772,8 @@ class _SadhanaLogSheetState extends State<_SadhanaLogSheet> {
         }
 
         workCompletedVal = durationText.isNotEmpty ? '$startStr to $endStr ($durationText)' : '$startStr to $endStr';
+      } else if (_selectedSubOption == 'Ekadashi Fasting') {
+        workCompletedVal = _ekadashiFastingType;
       }
 
       final updateData = {

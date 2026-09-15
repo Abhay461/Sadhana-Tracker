@@ -140,7 +140,16 @@ class ApiService {
       }
       activities['bhagavadGitaClass'] = {'attended': true, if (t.isNotEmpty && t.toLowerCase() != 'attended') 'timeSpan': t};
     } else if (lower.contains('ekadashi')) {
-      activities['ekadashiFasting'] = {'fastingType': 'Fasting'};
+      String f = workCompleted;
+      if (f.isEmpty || f.toLowerCase() == 'fasting') {
+        if (workStarted.contains(':')) {
+          f = workStarted.split(':')[1].trim();
+        } else {
+          final match = RegExp(r'\(([^)]+)\)').firstMatch(workStarted);
+          if (match != null) f = match.group(1)!.trim();
+        }
+      }
+      activities['ekadashiFasting'] = {'fastingType': f.isNotEmpty ? f : 'Fasting'};
     }
 
     final cleanMap = <String, dynamic>{

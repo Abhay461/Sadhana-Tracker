@@ -163,7 +163,16 @@ export class SadhanaService {
       }
       newAct.bhagavadGitaClass = { attended: true, timeSpan: t && t.toLowerCase() !== 'attended' ? t : '' };
     } else if (lower.includes('ekadashi')) {
-      newAct.ekadashiFasting = { fastingType: 'Fasting' };
+      let f = workCompleted;
+      if (!f || f.toLowerCase() === 'fasting') {
+        if (workStarted.includes(':')) {
+          f = workStarted.split(':')[1].trim();
+        } else {
+          const match = workStarted.match(/\(([^)]+)\)/);
+          if (match) f = match[1].trim();
+        }
+      }
+      newAct.ekadashiFasting = { fastingType: f && f.toLowerCase() !== 'fasting' ? f : 'Fasting' };
     }
 
     const entry = await this.logSadhana(userId, {
