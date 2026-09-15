@@ -22,6 +22,7 @@ class _StudentListTabState extends State<StudentListTab> {
   String _searchTerm = '';
   String _selectedRoleFilter = 'All'; // 'All', 'folk_boy', 'residency'
   Map<String, dynamic>? _selectedBoy;
+  bool _showStudentCard = false;
 
   @override
   void initState() {
@@ -260,10 +261,9 @@ class _StudentListTabState extends State<StudentListTab> {
               ),
               const SizedBox(height: 14),
 
-              // Simple Personal Info Card
+              // Simple Personal Info Card (Hidden by default)
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF8FAFC),
                   borderRadius: BorderRadius.circular(14),
@@ -272,34 +272,75 @@ class _StudentListTabState extends State<StudentListTab> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.badge_outlined, size: 16, color: Color(0xFF0F172A)),
-                        SizedBox(width: 6),
-                        Text(
-                          'Personal Info Card',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF0F172A),
-                            letterSpacing: 0.3,
-                          ),
+                    InkWell(
+                      onTap: () {
+                        setState(() {
+                          _showStudentCard = !_showStudentCard;
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(14),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.badge_outlined, size: 16, color: Color(0xFF0F172A)),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Personal Info Card',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF0F172A),
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Row(
+                              children: [
+                                Text(
+                                  _showStudentCard ? 'Hide Card' : 'View Card',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF3B82F6),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Icon(
+                                  _showStudentCard ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                                  size: 18,
+                                  color: const Color(0xFF3B82F6),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
-                    const SizedBox(height: 8),
-                    const Divider(height: 1, color: Color(0xFFE2E8F0)),
-                    const SizedBox(height: 8),
-                    _buildDetailRow(Icons.phone_android, 'WhatsApp', details['phone']!, const Color(0xFF25D366)),
-                    _buildDetailRow(Icons.email_outlined, 'Email', details['email']!, const Color(0xFF6366F1)),
-                    _buildDetailRow(Icons.work_outline, 'Occupation', details['occ']!, const Color(0xFFD97706)),
-                    if (details['clg'] != 'Not specified')
-                      _buildDetailRow(Icons.school_outlined, 'College', details['clg']!, const Color(0xFF0284C7)),
-                    if (details['crs'] != 'Not specified')
-                      _buildDetailRow(Icons.menu_book_outlined, 'Course & Year', details['crs']!, const Color(0xFF7C3AED)),
-                    _buildDetailRow(Icons.location_city_outlined, 'City', details['city']!, const Color(0xFF059669)),
-                    _buildDetailRow(Icons.cake_outlined, 'DOB', details['dob']!, const Color(0xFFEC4899)),
-                    _buildDetailRow(Icons.calendar_today_outlined, 'Joined', details['join']!, const Color(0xFF3B82F6)),
+                    if (_showStudentCard) ...[
+                      const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                      Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          children: [
+                            _buildDetailRow(Icons.phone_android, 'WhatsApp', details['phone']!, const Color(0xFF25D366)),
+                            _buildDetailRow(Icons.email_outlined, 'Email', details['email']!, const Color(0xFF6366F1)),
+                            _buildDetailRow(Icons.work_outline, 'Occupation', details['occ']!, const Color(0xFFD97706)),
+                            if (details['clg'] != 'Not specified')
+                              _buildDetailRow(Icons.school_outlined, 'College', details['clg']!, const Color(0xFF0284C7)),
+                            if (details['crs'] != 'Not specified')
+                              _buildDetailRow(Icons.menu_book_outlined, 'Course & Year', details['crs']!, const Color(0xFF7C3AED)),
+                            _buildDetailRow(Icons.location_city_outlined, 'City', details['city']!, const Color(0xFF059669)),
+                            _buildDetailRow(Icons.cake_outlined, 'DOB', details['dob']!, const Color(0xFFEC4899)),
+                            _buildDetailRow(Icons.calendar_today_outlined, 'Joined', details['join']!, const Color(0xFF3B82F6)),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
