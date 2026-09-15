@@ -7120,13 +7120,13 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
           ),
           const SizedBox(height: 20),
 
-          SizedBox(
-            height: 48,
+          Center(
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF0F172A),
                 foregroundColor: Colors.white,
                 elevation: 0,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
               onPressed: _isLoading ? null : _submitBooking,
