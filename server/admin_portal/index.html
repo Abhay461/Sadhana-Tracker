@@ -1084,7 +1084,11 @@
 
       const data = await res.json();
       console.log('✅ [CLOUDINARY SUCCESS] Uploaded:', data.secure_url);
-      return data.secure_url;
+      const rawUrl = data.secure_url;
+      if (rawUrl && rawUrl.includes('/upload/') && !rawUrl.includes('/q_auto')) {
+        return rawUrl.replace('/upload/', '/upload/q_auto,f_auto,w_800/');
+      }
+      return rawUrl;
     }
     // ─────────────────────────────────────────────────────────────────────
 
