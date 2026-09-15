@@ -237,33 +237,71 @@ class _StudentListTabState extends State<StudentListTab> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   CircleAvatar(
-                    radius: 28,
+                    radius: 26,
                     backgroundImage: _selectedBoy!['photo_url'] != null ? NetworkImage(_selectedBoy!['photo_url']) : null,
                     child: _selectedBoy!['photo_url'] == null
-                        ? Text(_selectedBoy!['name'][0].toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20))
+                        ? Text(_selectedBoy!['name'][0].toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18))
                         : null,
                   ),
-                  const SizedBox(width: 14),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(_selectedBoy!['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        const SizedBox(height: 2),
-                        _buildDetailRow(Icons.phone_android, 'WhatsApp', details['phone']!, const Color(0xFF25D366)),
-                        _buildDetailRow(Icons.email_outlined, 'Email', details['email']!, const Color(0xFF6366F1)),
-                        _buildDetailRow(Icons.work_outline, 'Occupation', details['occ']!, const Color(0xFFD97706)),
-                        if (details['clg'] != 'Not specified')
-                          _buildDetailRow(Icons.school_outlined, 'College', details['clg']!, const Color(0xFF0284C7)),
-                        if (details['crs'] != 'Not specified')
-                          _buildDetailRow(Icons.menu_book_outlined, 'Course & Year', details['crs']!, const Color(0xFF7C3AED)),
-                        _buildDetailRow(Icons.location_city_outlined, 'City', details['city']!, const Color(0xFF059669)),
-                        _buildDetailRow(Icons.cake_outlined, 'DOB', details['dob']!, const Color(0xFFEC4899)),
-                        _buildDetailRow(Icons.calendar_today_outlined, 'Joined', details['join']!, const Color(0xFF3B82F6)),
+                        Text(
+                          details['phone']!,
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+                        ),
                       ],
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 14),
+
+              // Simple Personal Info Card
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.badge_outlined, size: 16, color: Color(0xFF0F172A)),
+                        SizedBox(width: 6),
+                        Text(
+                          'Personal Info Card',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF0F172A),
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                    const SizedBox(height: 8),
+                    _buildDetailRow(Icons.phone_android, 'WhatsApp', details['phone']!, const Color(0xFF25D366)),
+                    _buildDetailRow(Icons.email_outlined, 'Email', details['email']!, const Color(0xFF6366F1)),
+                    _buildDetailRow(Icons.work_outline, 'Occupation', details['occ']!, const Color(0xFFD97706)),
+                    if (details['clg'] != 'Not specified')
+                      _buildDetailRow(Icons.school_outlined, 'College', details['clg']!, const Color(0xFF0284C7)),
+                    if (details['crs'] != 'Not specified')
+                      _buildDetailRow(Icons.menu_book_outlined, 'Course & Year', details['crs']!, const Color(0xFF7C3AED)),
+                    _buildDetailRow(Icons.location_city_outlined, 'City', details['city']!, const Color(0xFF059669)),
+                    _buildDetailRow(Icons.cake_outlined, 'DOB', details['dob']!, const Color(0xFFEC4899)),
+                    _buildDetailRow(Icons.calendar_today_outlined, 'Joined', details['join']!, const Color(0xFF3B82F6)),
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
               Row(

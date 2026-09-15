@@ -824,6 +824,20 @@
     </div>
   </div>
 
+  <!-- Modal: Student Personal Info Card -->
+  <div class="modal-overlay" id="studentCardModal">
+    <div class="modal-box" style="max-width: 480px; border-radius: 16px;">
+      <div class="modal-header" style="border-bottom: 1px solid #E2E8F0; padding-bottom: 12px;">
+        <h2 style="font-size: 18px; font-weight: 800; color: #0F172A;"><i class="ri-user-card-line" style="color: #6366F1;"></i> Student Personal Details</h2>
+        <i class="ri-close-line" style="cursor: pointer; font-size: 24px; color: #64748B;" onclick="closeStudentCardModal()"></i>
+      </div>
+      <div id="studentCardBody" style="padding: 16px 0;">
+        <!-- Card details inserted here -->
+      </div>
+      <button class="btn btn-secondary" style="width: 100%; margin-top: 10px;" onclick="closeStudentCardModal()">Close Card</button>
+    </div>
+  </div>
+
   <!-- Toast Notification -->
   <div id="toast">Operation completed successfully!</div>
 
@@ -1202,42 +1216,21 @@
       container.innerHTML = preachersList.map(p => {
         const students = p.students || [];
         const studentsRowsHtml = students.length === 0
-          ? `<tr><td colspan="10" style="padding: 16px; text-align: center; color: var(--text-muted); font-size: 13px;">No students assigned to this preacher yet.</td></tr>`
+          ? `<tr><td colspan="4" style="padding: 16px; text-align: center; color: var(--text-muted); font-size: 13px;">No students assigned to this preacher yet.</td></tr>`
           : students.map((s, idx) => {
-              let dobStr = s.dob ? new Date(s.dob).toISOString().split('T')[0] : 'Not specified';
-              let joinStr = (s.joiningDate || s.joining_date) ? new Date(s.joiningDate || s.joining_date).toISOString().split('T')[0] : 'Not specified';
               let rawPhone = s.whatsapp_number || s.phoneNumber || 'Not specified';
-              let phoneStr = rawPhone;
-              let occStr = s.occupation || 'Not specified';
-              let clgStr = s.college || 'Not specified';
-              let crsStr = s.courseYear || 'Not specified';
-              let cityStr = s.city || 'Not specified';
-
-              if (rawPhone.indexOf('|') !== -1) {
-                const parts = rawPhone.split('|');
-                phoneStr = parts[0].trim();
-                parts.forEach(part => {
-                  if (part.indexOf('DOB:') !== -1 && (dobStr === 'Not specified' || dobStr === 'N/A' || !dobStr)) dobStr = part.replace('DOB:', '').trim();
-                  if (part.indexOf('JOIN:') !== -1 && (joinStr === 'Not specified' || joinStr === 'N/A' || !joinStr)) joinStr = part.replace('JOIN:', '').trim();
-                  if (part.indexOf('OCC:') !== -1 && (occStr === 'Not specified' || occStr === 'N/A' || !occStr)) occStr = part.replace('OCC:', '').trim();
-                  if (part.indexOf('CLG:') !== -1 && (clgStr === 'Not specified' || clgStr === 'N/A' || !clgStr)) clgStr = part.replace('CLG:', '').trim();
-                  if (part.indexOf('CRS:') !== -1 && (crsStr === 'Not specified' || crsStr === 'N/A' || !crsStr)) crsStr = part.replace('CRS:', '').trim();
-                  if (part.indexOf('CITY:') !== -1 && (cityStr === 'Not specified' || cityStr === 'N/A' || !cityStr)) cityStr = part.replace('CITY:', '').trim();
-                });
-              }
+              let phoneStr = rawPhone.indexOf('|') !== -1 ? rawPhone.split('|')[0].trim() : rawPhone;
 
               return `
                 <tr style="border-bottom: 1px solid #F1F5F9; font-size: 13px;">
                   <td style="padding: 12px; font-weight: 600; color: #64748B;">${idx + 1}</td>
                   <td style="padding: 12px; font-weight: 700; color: var(--text-main);">${s.name || 'Unnamed Student'}</td>
                   <td style="padding: 12px; font-weight: 600; color: #2563EB;"><i class="ri-whatsapp-line" style="color: #25D366;"></i> ${phoneStr}</td>
-                  <td style="padding: 12px; color: #475569;">${occStr}</td>
-                  <td style="padding: 12px; color: #475569;">${clgStr}</td>
-                  <td style="padding: 12px; color: #475569;">${crsStr}</td>
-                  <td style="padding: 12px; color: #475569;">${cityStr}</td>
-                  <td style="padding: 12px; color: #475569;">${dobStr}</td>
-                  <td style="padding: 12px; color: #475569;">${s.email || '-'}</td>
-                  <td style="padding: 12px; color: #475569;">${joinStr}</td>
+                  <td style="padding: 12px;">
+                    <button class="btn btn-secondary btn-sm" onclick="showStudentDetailsCard('${p.name.replace(/'/g, "\\'")}', '${encodeURIComponent(JSON.stringify(s))}')" style="font-size: 12px; padding: 6px 14px; background: #F8FAFC; color: #0F172A; border: 1px solid #CBD5E1; border-radius: 6px; font-weight: 600;">
+                      <i class="ri-user-search-line" style="color: #6366F1;"></i> View Personal Info Card
+                    </button>
+                  </td>
                 </tr>
               `;
             }).join('');
@@ -1277,13 +1270,7 @@
                     <th style="padding: 10px 12px;">#</th>
                     <th style="padding: 10px 12px;">Student Name</th>
                     <th style="padding: 10px 12px;">Mobile / WhatsApp</th>
-                    <th style="padding: 10px 12px;">Occupation</th>
-                    <th style="padding: 10px 12px;">College</th>
-                    <th style="padding: 10px 12px;">Course & Year</th>
-                    <th style="padding: 10px 12px;">City</th>
-                    <th style="padding: 10px 12px;">Date of Birth (DOB)</th>
-                    <th style="padding: 10px 12px;">Email Address</th>
-                    <th style="padding: 10px 12px;">Joining Date</th>
+                    <th style="padding: 10px 12px;">Personal Details</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1294,6 +1281,84 @@
           </div>
         `;
       }).join('');
+    }
+
+    function showStudentDetailsCard(preacherName, encodedStudentJson) {
+      const s = JSON.parse(decodeURIComponent(encodedStudentJson));
+      let dobStr = s.dob ? new Date(s.dob).toISOString().split('T')[0] : 'Not specified';
+      let joinStr = (s.joiningDate || s.joining_date) ? new Date(s.joiningDate || s.joining_date).toISOString().split('T')[0] : 'Not specified';
+      let rawPhone = s.whatsapp_number || s.phoneNumber || 'Not specified';
+      let phoneStr = rawPhone;
+      let occStr = s.occupation || 'Not specified';
+      let clgStr = s.college || 'Not specified';
+      let crsStr = s.courseYear || 'Not specified';
+      let cityStr = s.city || 'Not specified';
+
+      if (rawPhone.indexOf('|') !== -1) {
+        const parts = rawPhone.split('|');
+        phoneStr = parts[0].trim();
+        parts.forEach(part => {
+          if (part.indexOf('DOB:') !== -1 && (dobStr === 'Not specified' || dobStr === 'N/A' || !dobStr)) dobStr = part.replace('DOB:', '').trim();
+          if (part.indexOf('JOIN:') !== -1 && (joinStr === 'Not specified' || joinStr === 'N/A' || !joinStr)) joinStr = part.replace('JOIN:', '').trim();
+          if (part.indexOf('OCC:') !== -1 && (occStr === 'Not specified' || occStr === 'N/A' || !occStr)) occStr = part.replace('OCC:', '').trim();
+          if (part.indexOf('CLG:') !== -1 && (clgStr === 'Not specified' || clgStr === 'N/A' || !clgStr)) clgStr = part.replace('CLG:', '').trim();
+          if (part.indexOf('CRS:') !== -1 && (crsStr === 'Not specified' || crsStr === 'N/A' || !crsStr)) crsStr = part.replace('CRS:', '').trim();
+          if (part.indexOf('CITY:') !== -1 && (cityStr === 'Not specified' || cityStr === 'N/A' || !cityStr)) cityStr = part.replace('CITY:', '').trim();
+        });
+      }
+
+      const html = `
+        <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px; font-family: sans-serif;">
+          <div style="font-size: 18px; font-weight: 800; color: #0F172A; margin-bottom: 4px;">${s.name || 'Unnamed Student'}</div>
+          <div style="font-size: 13px; color: #64748B; margin-bottom: 16px;">Assigned Preacher: <strong>${preacherName}</strong></div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px; font-size: 13.5px;">
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #E2E8F0; padding-bottom: 6px;">
+              <span style="color: #64748B;"><i class="ri-whatsapp-line" style="color: #25D366;"></i> WhatsApp / Phone:</span>
+              <strong style="color: #0F172A;">${phoneStr}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #E2E8F0; padding-bottom: 6px;">
+              <span style="color: #64748B;"><i class="ri-mail-line" style="color: #6366F1;"></i> Email Address:</span>
+              <strong style="color: #0F172A;">${s.email || 'Not specified'}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #E2E8F0; padding-bottom: 6px;">
+              <span style="color: #64748B;"><i class="ri-briefcase-line" style="color: #D97706;"></i> Occupation / Status:</span>
+              <strong style="color: #0F172A;">${occStr}</strong>
+            </div>
+            ${clgStr !== 'Not specified' ? `
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #E2E8F0; padding-bottom: 6px;">
+              <span style="color: #64748B;"><i class="ri-building-line" style="color: #0284C7;"></i> College / University:</span>
+              <strong style="color: #0F172A;">${clgStr}</strong>
+            </div>
+            ` : ''}
+            ${crsStr !== 'Not specified' ? `
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #E2E8F0; padding-bottom: 6px;">
+              <span style="color: #64748B;"><i class="ri-book-read-line" style="color: #7C3AED;"></i> Course & Year:</span>
+              <strong style="color: #0F172A;">${crsStr}</strong>
+            </div>
+            ` : ''}
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #E2E8F0; padding-bottom: 6px;">
+              <span style="color: #64748B;"><i class="ri-map-pin-line" style="color: #059669;"></i> City / Hometown:</span>
+              <strong style="color: #0F172A;">${cityStr}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #E2E8F0; padding-bottom: 6px;">
+              <span style="color: #64748B;"><i class="ri-cake-line" style="color: #EC4899;"></i> Date of Birth (DOB):</span>
+              <strong style="color: #0F172A;">${dobStr}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #E2E8F0; padding-bottom: 6px;">
+              <span style="color: #64748B;"><i class="ri-calendar-event-line" style="color: #3B82F6;"></i> Joining Date:</span>
+              <strong style="color: #0F172A;">${joinStr}</strong>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('studentCardBody').innerHTML = html;
+      document.getElementById('studentCardModal').classList.add('active');
+    }
+
+    function closeStudentCardModal() {
+      document.getElementById('studentCardModal').classList.remove('active');
     }
 
     function exportStudentsExcel() {
