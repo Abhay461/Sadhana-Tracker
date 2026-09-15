@@ -264,18 +264,63 @@ class _SignupScreenState extends State<SignupScreen> {
                                     modalError = null;
                                   });
                                   try {
+                                    // 1. Verify OTP
                                     await ApiService.post('/auth/verify-email-otp', {
                                       'email': email,
                                       'otp': otpCode,
                                     });
-                                    Navigator.pop(context);
-                                    await _completeRegistration();
+
+                                    // 2. Create Firebase Auth user
+                                    final password = _passwordController.text.trim();
+                                    final userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+                                      email: email,
+                                      password: password,
+                                    );
+
+                                    final user = userCredential.user;
+                                    if (user != null) {
+                                      final String rawWhatsapp = _whatsappController.text.trim();
+                                      final String dobStr = _selectedDob != null ? DateFormat('yyyy-MM-dd').format(_selectedDob!) : 'N/A';
+                                      final String joinStr = _selectedJoiningDate != null ? DateFormat('yyyy-MM-dd').format(_selectedJoiningDate!) : 'N/A';
+                                      final String occStr = _selectedOccupation;
+                                      final String clgStr = (_selectedOccupation == 'Student' && _collegeController.text.trim().isNotEmpty) ? _collegeController.text.trim() : 'N/A';
+                                      final String crsStr = (_selectedOccupation == 'Student' && _courseYearController.text.trim().isNotEmpty) ? _courseYearController.text.trim() : 'N/A';
+                                      final String cityStr = _cityController.text.trim().isNotEmpty ? _cityController.text.trim() : 'N/A';
+
+                                      final String formattedWhatsappWithDates = '$rawWhatsapp | DOB:$dobStr | JOIN:$joinStr | OCC:$occStr | CLG:$clgStr | CRS:$crsStr | CITY:$cityStr';
+
+                                      // 3. Sync profile to server
+                                      await ApiService.post('/auth/sync', {
+                                        'name': _nameController.text.trim(),
+                                        'role': _role,
+                                        'preacherId': _selectedPreacher?['id'] ?? _selectedPreacher?['_id'],
+                                        'phoneNumber': formattedWhatsappWithDates,
+                                        'email': email,
+                                      });
+
+                                      NotificationHelper.loginUser(user.uid).catchError((_) {});
+                                    }
+
+                                    if (!mounted) return;
+                                    Navigator.pop(context); // Close dialog
+
+                                    // Direct navigation to destination screen
+                                    if (_role == 'preacher') {
+                                      Navigator.pushNamedAndRemoveUntil(context, '/preacher', (route) => false);
+                                    } else {
+                                      Navigator.pushNamedAndRemoveUntil(context, '/folk-boy', (route) => false);
+                                    }
                                   } catch (err) {
                                     setModalState(() {
                                       isVerifying = false;
-                                      modalError = err is ApiException
+                                      final String rawErr = err is ApiException
                                           ? err.message
                                           : err.toString().replaceAll('Exception: ', '');
+                                      if (rawErr.contains('already linked') || rawErr.contains('ACCOUNT_CONFLICT') || rawErr.contains('email-already-in-use')) {
+                                        modalError = 'An account with this email already exists! Please tap Sign In below.';
+                                      } else {
+                                        modalError = rawErr;
+                                      }
                                     });
                                   }
                                 },
@@ -335,68 +380,6 @@ class _SignupScreenState extends State<SignupScreen> {
         );
       },
     );
-  }
-
-  Future<void> _completeRegistration() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    try {
-      final email = _emailController.text.trim();
-      final password = _passwordController.text.trim();
-
-      final userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-
-      final user = userCredential.user;
-
-      if (user != null) {
-        final String rawWhatsapp = _whatsappController.text.trim();
-        final String dobStr = _selectedDob != null ? DateFormat('yyyy-MM-dd').format(_selectedDob!) : 'N/A';
-        final String joinStr = _selectedJoiningDate != null ? DateFormat('yyyy-MM-dd').format(_selectedJoiningDate!) : 'N/A';
-        final String occStr = _selectedOccupation;
-        final String clgStr = (_selectedOccupation == 'Student' && _collegeController.text.trim().isNotEmpty) ? _collegeController.text.trim() : 'N/A';
-        final String crsStr = (_selectedOccupation == 'Student' && _courseYearController.text.trim().isNotEmpty) ? _courseYearController.text.trim() : 'N/A';
-        final String cityStr = _cityController.text.trim().isNotEmpty ? _cityController.text.trim() : 'N/A';
-
-        final String formattedWhatsappWithDates = '$rawWhatsapp | DOB:$dobStr | JOIN:$joinStr | OCC:$occStr | CLG:$clgStr | CRS:$crsStr | CITY:$cityStr';
-
-        await ApiService.post('/auth/sync', {
-          'name': _nameController.text.trim(),
-          'role': _role,
-          'preacherId': _selectedPreacher?['id'] ?? _selectedPreacher?['_id'],
-          'phoneNumber': formattedWhatsappWithDates,
-          'email': email,
-        });
-      }
-
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _successMessage = 'Email verified & registration successful!';
-      });
-
-      Future.delayed(const Duration(seconds: 1), () {
-        if (mounted) {
-          Navigator.pushReplacementNamed(context, '/home');
-        }
-      });
-    } catch (e) {
-      if (!mounted) return;
-      final String rawErr = e is ApiException ? e.message : e.toString().replaceAll('Exception: ', '');
-      setState(() {
-        _isLoading = false;
-        if (rawErr.contains('already linked') || rawErr.contains('ACCOUNT_CONFLICT') || rawErr.contains('email-already-in-use')) {
-          _errorMessage = 'An account with this email already exists! Please tap Sign In below.';
-        } else {
-          _errorMessage = rawErr;
-        }
-      });
-    }
   }
 
   void _showPreacherPicker() {
