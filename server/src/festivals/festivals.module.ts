@@ -9,7 +9,7 @@ import { FestivalsService } from './festivals.service';
     MongooseModule.forFeature([{ name: Festival.name, schema: FestivalSchema }]),
   ],
   controllers: [FestivalsController],
-  services: [FestivalsService],
+  providers: [FestivalsService],
   exports: [FestivalsService],
 })
 export class FestivalsModule {}
