@@ -1252,6 +1252,9 @@
                 <span style="background: rgba(16, 185, 129, 0.12); color: #047857; font-size: 12px; font-weight: 700; padding: 6px 14px; border-radius: 8px;">
                   ${students.length} Student(s)
                 </span>
+                <button class="btn btn-secondary btn-sm" style="color: var(--danger); border-color: var(--danger); font-size: 12px; padding: 6px 12px;" onclick="deletePreacherWeb('${p._id}', '${p.name.replace(/'/g, "\\'")}')">
+                  <i class="ri-delete-bin-line"></i> Delete
+                </button>
               </div>
             </div>
 
@@ -1403,6 +1406,22 @@
 
     function closePreacherSuccessModal() {
       document.getElementById('preacherSuccessModal').classList.remove('active');
+    }
+
+    async function deletePreacherWeb(id, name) {
+      if (!confirm(`Are you sure you want to delete Preacher "${name}"?\nThis will remove their account from Firebase Auth, deactivate them in database, and unassign their students.`)) return;
+      try {
+        const res = await fetch(`${API_BASE}/admin/preachers/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+          showToast(`Preacher ${name} deleted successfully!`);
+          loadPreachers();
+        } else {
+          const errData = await res.json();
+          showToast(errData.message || 'Failed to delete preacher', true);
+        }
+      } catch (err) {
+        showToast('Error deleting preacher: ' + err.message, true);
+      }
     }
 
     function toggleAnnCategory() {

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { CreatePreacherDto } from './dto/create-preacher.dto';
@@ -19,5 +19,11 @@ export class AdminController {
   @ApiOperation({ summary: 'List all preachers and their assigned students' })
   async getAllPreachers() {
     return this.adminService.getAllPreachers();
+  }
+
+  @Delete('preachers/:id')
+  @ApiOperation({ summary: 'Delete preacher account from Firebase Auth and deactivates profile in MongoDB' })
+  async deletePreacher(@CurrentUser() adminUser: any, @Param('id') id: string) {
+    return this.adminService.deletePreacher(adminUser, id);
   }
 }

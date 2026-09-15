@@ -2,6 +2,7 @@ import {
   Injectable,
   Logger,
   BadRequestException,
+  NotFoundException,
   InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/mongoose';
@@ -165,5 +166,45 @@ export class AdminService {
       assignedStudentsCount: grouped[p._id.toString()]?.length || 0,
       students: grouped[p._id.toString()] || [],
     }));
+  }
+
+  async deletePreacher(adminUser: any, preacherId: string) {
+    const preacher = await this.userModel.findById(preacherId);
+    if (!preacher) {
+      throw new NotFoundException('Preacher profile not found.');
+    }
+
+    if (preacher.firebaseUid) {
+      try {
+        await this.firebaseService.getAuth().deleteUser(preacher.firebaseUid);
+        this.logger.log(`Deleted Firebase Auth user ${preacher.firebaseUid} for preacher ${preacherId}`);
+      } catch (err: any) {
+        if (err.code === 'auth/user-not-found') {
+          this.logger.warn(`Firebase Auth user ${preacher.firebaseUid} already deleted or not found.`);
+        } else {
+          this.logger.error(`Failed to delete Firebase Auth user ${preacher.firebaseUid}: ${err.message}`);
+        }
+      }
+    }
+
+    await this.userModel.updateMany(
+      { preacherId: preacher._id },
+      { $unset: { preacherId: 1 } },
+    );
+
+    await this.userModel.findByIdAndUpdate(preacherId, {
+      status: 'DEACTIVATED',
+      isBlocked: true,
+      role: 'user',
+    });
+
+    await this.auditLogModel.create({
+      performedBy: adminUser?._id || preacher._id,
+      action: 'DELETE_PREACHER',
+      targetUserId: preacher._id,
+      metadata: { preacherName: preacher.name, preacherCode: preacher.preacherCode },
+    });
+
+    return { message: `Preacher ${preacher.name} successfully deleted and unassigned.` };
   }
 }

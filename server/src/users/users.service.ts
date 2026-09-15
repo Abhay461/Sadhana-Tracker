@@ -1,12 +1,18 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User, UserDocument } from '../database/schemas/users.schema';
 import { UpdateUserProfileDto } from './dto/update-user-profile.dto';
+import { FirebaseService } from '../firebase/firebase.service';
 
 @Injectable()
 export class UsersService {
-  constructor(@InjectModel(User.name) private readonly userModel: Model<UserDocument>) {}
+  private readonly logger = new Logger(UsersService.name);
+
+  constructor(
+    @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+    private readonly firebaseService: FirebaseService,
+  ) {}
 
   async getProfile(userId: string) {
     const user = await this.userModel.findById(userId).populate('preacherId', 'name email photoUrl phoneNumber whatsapp_number');
@@ -47,10 +53,30 @@ export class UsersService {
   async getPublicPreachers() {
     const preachers = await this.userModel
       .find({ role: 'preacher', status: 'ACTIVE' })
-      .select('_id name email preacherCode photoUrl phoneNumber')
+      .select('_id name email preacherCode photoUrl phoneNumber firebaseUid')
       .sort({ name: 1 });
 
-    return preachers.map((p) => ({
+    const validPreachers: any[] = [];
+
+    for (const p of preachers) {
+      if (p.firebaseUid) {
+        try {
+          await this.firebaseService.getAuth().getUser(p.firebaseUid);
+          validPreachers.push(p);
+        } catch (err: any) {
+          if (err.code === 'auth/user-not-found') {
+            this.logger.warn(`Preacher ${p.name} (${p._id}) not found in Firebase Auth. Deactivating orphan in MongoDB.`);
+            await this.userModel.findByIdAndUpdate(p._id, { status: 'DEACTIVATED', isBlocked: true });
+            continue;
+          }
+          validPreachers.push(p);
+        }
+      } else {
+        validPreachers.push(p);
+      }
+    }
+
+    return validPreachers.map((p) => ({
       id: p._id.toString(),
       _id: p._id.toString(),
       name: p.name,
