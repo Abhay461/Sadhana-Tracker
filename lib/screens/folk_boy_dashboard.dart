@@ -3563,6 +3563,8 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                           }
 
                           setDialogState(() => isSaving = true);
+                          final messenger = ScaffoldMessenger.of(context);
+                          final nav = Navigator.of(context);
                           try {
                             String formattedWhatsapp = whatsapp;
                             List<String> extraParts = [];
@@ -3581,22 +3583,17 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                               'joiningDate': join.isNotEmpty ? join : null,
                             });
 
-                            if (mounted) {
-                              Navigator.pop(context);
-                              await _loadProfileAndData();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Personal Information updated successfully!')),
-                              );
-                            }
+                            nav.pop();
+                            await _loadProfileAndData();
+                            messenger.showSnackBar(
+                              const SnackBar(content: Text('Personal Information updated successfully!')),
+                            );
                           } catch (e) {
                             debugPrint('Error updating profile: $e');
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Failed to update profile: $e')),
-                              );
-                            }
-                          } finally {
                             setDialogState(() => isSaving = false);
+                            messenger.showSnackBar(
+                              SnackBar(content: Text('Failed to update profile: $e')),
+                            );
                           }
                         },
                   child: isSaving
