@@ -22,6 +22,8 @@ export class UsersService {
     const photoUrl = dto.photoUrl || dto.photo_url;
     if (photoUrl) updateData.photoUrl = photoUrl;
     if (dto.email) updateData.email = dto.email;
+    if (dto.phoneNumber) updateData.phoneNumber = dto.phoneNumber;
+    if (dto.whatsapp_number) updateData.whatsapp_number = dto.whatsapp_number;
     if (dto.dob) updateData.dob = new Date(dto.dob);
     if (dto.joiningDate) updateData.joiningDate = new Date(dto.joiningDate);
     if (dto.preacherId) updateData.preacherId = dto.preacherId;

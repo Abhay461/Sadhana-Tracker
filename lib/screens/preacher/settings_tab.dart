@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../services/api_service.dart';
 import '../../services/cloudinary_service.dart';
 
@@ -128,6 +130,22 @@ class _SettingsTabState extends State<SettingsTab> {
     );
   }
 
+  Future<void> _launchFeedbackEmail() async {
+    final Uri emailUri = Uri(
+      scheme: 'mailto',
+      path: 'sadhanatracker.in@gmail.com',
+    );
+    try {
+      if (await canLaunchUrl(emailUri)) {
+        await launchUrl(emailUri, mode: LaunchMode.externalApplication);
+      } else {
+        await launchUrl(emailUri);
+      }
+    } catch (_) {
+      _showFeedbackDialog();
+    }
+  }
+
   void _showFeedbackDialog() {
     final controller = TextEditingController();
     showDialog(
@@ -135,13 +153,24 @@ class _SettingsTabState extends State<SettingsTab> {
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: const Text('Feedback & Suggestions', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: TextField(
-          controller: controller,
-          maxLines: 4,
-          decoration: const InputDecoration(
-            hintText: 'Enter your suggestions or report issues here...',
-            border: OutlineInputBorder(),
-          ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Email: sadhanatracker.in@gmail.com',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                hintText: 'Enter your suggestions or report issues here...',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -151,11 +180,9 @@ class _SettingsTabState extends State<SettingsTab> {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Thank you for your feedback!')),
-              );
+              _launchFeedbackEmail();
             },
-            child: const Text('SUBMIT', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF3F1200))),
+            child: const Text('OPEN EMAIL APP', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF3F1200))),
           ),
         ],
       ),
@@ -208,7 +235,7 @@ class _SettingsTabState extends State<SettingsTab> {
                 Text('4. Data Deletion Rights', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                 SizedBox(height: 4),
                 Text(
-                  'You have the right to request deletion of your account and data at any time. For support or deletion, contact us at: abhaykumarsalempur8521@gmail.com',
+                  'You have the right to request deletion of your account and data at any time. For support or deletion, contact us at: sadhanatracker.in@gmail.com',
                   style: TextStyle(fontSize: 13, height: 1.4),
                 ),
               ],
@@ -252,10 +279,19 @@ class _SettingsTabState extends State<SettingsTab> {
   }
 
   void _shareApp() {
-    Clipboard.setData(const ClipboardData(text: 'Check out the Sadhana Tracker App to track your daily sadhana! https://sadhana-tracker.example.com'));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('App sharing link copied to clipboard!')),
-    );
+    const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.sadhanatracker.app';
+    const shareMessage = 'Hare Krishna! 🙏 Track your daily sadhana, lectures, and spiritual activities with the Sadhana Tracker App.\n\nDownload now: $playStoreUrl';
+
+    try {
+      Share.share(shareMessage, subject: 'Sadhana Tracker App');
+    } catch (_) {
+      Clipboard.setData(const ClipboardData(text: shareMessage));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('App sharing link copied to clipboard!')),
+        );
+      }
+    }
   }
 
   @override
@@ -418,8 +454,8 @@ class _SettingsTabState extends State<SettingsTab> {
                           child: Icon(Icons.rate_review_outlined, color: Color(0xFF3F1200)),
                         ),
                         title: const Text('Feedback & Suggestions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                        subtitle: const Text('Send us your valuable feedback', style: TextStyle(fontSize: 12)),
-                        onTap: _showFeedbackDialog,
+                        subtitle: const Text('sadhanatracker.in@gmail.com', style: TextStyle(fontSize: 12)),
+                        onTap: _launchFeedbackEmail,
                       ),
                       const Divider(indent: 56, color: Color(0xFFF1F5F9)),
                       ListTile(
@@ -462,7 +498,7 @@ class _SettingsTabState extends State<SettingsTab> {
           const SizedBox(height: 28),
           Center(
             child: SizedBox(
-              width: 220,
+              width: 190,
               height: 48,
               child: _SwipeToLogoutButton(
                 onSwipeCompleted: () async {
@@ -515,16 +551,22 @@ class _SwipeToLogoutButtonState extends State<_SwipeToLogoutButton> {
           child: Stack(
             alignment: Alignment.centerLeft,
             children: [
-              Center(
-                child: Opacity(
-                  opacity: (1.0 - (_dragPosition / maxDrag)).clamp(0.2, 1.0),
-                  child: Text(
-                    _isFinished ? 'LOGGING OUT...' : 'SWIPE TO LOGOUT',
-                    style: const TextStyle(
-                      color: Color(0xFFEF4444),
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.1,
+              Positioned.fill(
+                left: 38,
+                right: 8,
+                child: Center(
+                  child: Opacity(
+                    opacity: (1.0 - (_dragPosition / maxDrag)).clamp(0.2, 1.0),
+                    child: Text(
+                      _isFinished ? 'LOGGING OUT...' : 'SWIPE TO LOGOUT',
+                      style: const TextStyle(
+                        color: Color(0xFFEF4444),
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.6,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.visible,
                     ),
                   ),
                 ),

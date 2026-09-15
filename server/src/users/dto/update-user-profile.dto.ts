@@ -22,6 +22,16 @@ export class UpdateUserProfileDto {
   @IsEmail()
   email?: string;
 
+  @ApiProperty({ description: 'Phone number', required: false })
+  @IsOptional()
+  @IsString()
+  phoneNumber?: string;
+
+  @ApiProperty({ description: 'WhatsApp number', required: false })
+  @IsOptional()
+  @IsString()
+  whatsapp_number?: string;
+
   @ApiProperty({ description: 'Date of birth', required: false })
   @IsOptional()
   @IsDateString()

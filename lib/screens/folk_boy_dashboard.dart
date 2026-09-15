@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:razorpay_flutter/razorpay_flutter.dart';
+import 'package:share_plus/share_plus.dart';
 import 'resident_enrollment_form_screen.dart';
 import 'student_payment_screen.dart';
 import '../utils/notification_helper.dart';
@@ -3135,196 +3136,184 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Card(
-            color: Colors.white,
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-              side: const BorderSide(color: Color(0xFFE2E8F0)),
-            ),
-            child: Column(
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
               children: [
-                Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Row(
-                    children: [
-                      InkWell(
-                        onTap: _isSavingProfile ? null : _updatePhoto,
-                        child: CircleAvatar(
-                          radius: 40,
-                          backgroundImage: _photoUrl != null ? NetworkImage(_photoUrl!) : null,
-                          backgroundColor: const Color(0xFFF1F5F9),
-                          child: _photoUrl == null
-                              ? Text(
-                                  (_profile?['name'] ?? 'U')[0].toUpperCase(),
-                                  style: const TextStyle(
-                                    fontSize: 32,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF3F1200),
-                                  ),
-                                )
-                              : null,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _profile?['name'] ?? 'Folk Boy Student',
-                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
+                InkWell(
+                  onTap: _isSavingProfile ? null : _updatePhoto,
+                  child: CircleAvatar(
+                    radius: 36,
+                    backgroundImage: _photoUrl != null ? NetworkImage(_photoUrl!) : null,
+                    backgroundColor: const Color(0xFFF1F5F9),
+                    child: _photoUrl == null
+                        ? Text(
+                            (_profile?['name'] ?? 'U')[0].toUpperCase(),
+                            style: const TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF3F1200),
                             ),
-                            const SizedBox(height: 4),
-                            const Text(
-                              'FOLK BOY STUDENT',
-                              style: TextStyle(color: Color(0xFF3F1200), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1),
-                            ),
-                          ],
-                        ),
-                      )
-                    ],
+                          )
+                        : null,
                   ),
                 ),
-                
-                const Divider(height: 1, color: Color(0xFFF1F5F9), thickness: 1.5),
-
-                Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const CircleAvatar(
-                            backgroundColor: Color(0xFFEEF2F6),
-                            child: Icon(Icons.person_outline, color: Color(0xFF3F1200)),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Personal Information',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black87),
-                                ),
-                                const SizedBox(height: 2),
-                                const Text(
-                                  'Your profile details',
-                                  style: TextStyle(fontSize: 12, color: Colors.grey),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const Divider(height: 32),
-                      _buildProfileInfoRow(Icons.person_outline, 'Full Name', _profile?['name'] ?? ''),
-                      const Divider(height: 20, color: Color(0xFFF1F5F9)),
-                      _buildProfileInfoRow(Icons.psychology_outlined, 'Preacher', _preacher?['name'] ?? 'Preacher'),
-                      const Divider(height: 20, color: Color(0xFFF1F5F9)),
-                      _buildProfileInfoRow(Icons.phone_android_outlined, 'WhatsApp Number', displayWhatsapp),
-                      const Divider(height: 20, color: Color(0xFFF1F5F9)),
-                      _buildProfileInfoRow(Icons.cake_outlined, 'Date of Birth', displayDob),
-                      const Divider(height: 20, color: Color(0xFFF1F5F9)),
-                      _buildProfileInfoRow(Icons.calendar_month_outlined, 'Joining Date', displayJoin),
-                      const Divider(height: 20, color: Color(0xFFF1F5F9)),
-                      _buildProfileInfoRow(Icons.email_outlined, 'Email Address', _profile?['email'] ?? ''),
-                    ],
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    _profile?['name'] ?? 'User',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
                   ),
-                ),
-
-                const Divider(height: 1, color: Color(0xFFF1F5F9), thickness: 1.5),
-
-                Padding(
-                  padding: const EdgeInsets.only(top: 20, bottom: 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ListTile(
-                        leading: const CircleAvatar(
-                          backgroundColor: Color(0xFFF8FAFC),
-                          child: Icon(Icons.help_outline_rounded, color: Color(0xFF3F1200)),
-                        ),
-                        title: const Text('About the App', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                        subtitle: const Text('View app version and description', style: TextStyle(fontSize: 12)),
-                        onTap: _showAboutDialog,
-                      ),
-                      const Divider(indent: 56),
-                      ListTile(
-                        leading: const CircleAvatar(
-                          backgroundColor: Color(0xFFF8FAFC),
-                          child: Icon(Icons.rate_review_outlined, color: Color(0xFF3F1200)),
-                        ),
-                        title: const Text('Feedback & Suggestions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                        subtitle: const Text('Send us your valuable feedback', style: TextStyle(fontSize: 12)),
-                        onTap: _showFeedbackDialog,
-                      ),
-                      const Divider(indent: 56),
-                      ListTile(
-                        leading: const CircleAvatar(
-                          backgroundColor: Color(0xFFF8FAFC),
-                          child: Icon(Icons.privacy_tip_outlined, color: Color(0xFF3F1200)),
-                        ),
-                        title: const Text('Privacy Policy', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                        subtitle: const Text('Read our data and privacy terms', style: TextStyle(fontSize: 12)),
-                        onTap: _showPrivacyPolicyDialog,
-                      ),
-                      const Divider(indent: 56),
-                      ListTile(
-                        leading: const CircleAvatar(
-                          backgroundColor: Color(0xFFF8FAFC),
-                          child: Icon(Icons.star_outline_rounded, color: Color(0xFF3F1200)),
-                        ),
-                        title: const Text('Rate the App', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                        subtitle: const Text('Show your support in the store', style: TextStyle(fontSize: 12)),
-                        onTap: _showRateAppDialog,
-                      ),
-                      const Divider(indent: 56),
-                      ListTile(
-                        leading: const CircleAvatar(
-                          backgroundColor: Color(0xFFF8FAFC),
-                          child: Icon(Icons.share_outlined, color: Color(0xFF3F1200)),
-                        ),
-                        title: const Text('Share App', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                        subtitle: const Text('Invite other students to track sadhana', style: TextStyle(fontSize: 12)),
-                        onTap: _shareApp,
-                      ),
-                    ],
-                  ),
-                ),
-                
-                const Divider(height: 1, color: Color(0xFFF1F5F9), thickness: 1.5),
-
-                Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Session Management',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF94A3B8), letterSpacing: 1),
-                      ),
-                      const SizedBox(height: 12),
-                      _SwipeToLogoutButton(
-                        onSwipeCompleted: () async {
-                          try {
-                            await FirebaseAuth.instance.signOut();
-                          } catch (_) {}
-                          if (mounted) {
-                            Navigator.pushReplacementNamed(context, '/login');
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                ),
+                )
               ],
             ),
           ),
+          
+          const SizedBox(height: 16),
+
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const CircleAvatar(
+                    backgroundColor: Color(0xFFEEF2F6),
+                    child: Icon(Icons.person_outline, color: Color(0xFF3F1200)),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        Text(
+                          'Personal Information',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black87),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Your profile details',
+                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined, color: Color(0xFF3F1200)),
+                    tooltip: 'Edit Personal Information',
+                    onPressed: _showEditProfileDialog,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(child: _buildProfileInfoRow(Icons.person_outline, 'Full Name', _profile?['name'] ?? '')),
+                  const SizedBox(width: 12),
+                  Expanded(child: _buildProfileInfoRow(Icons.psychology_outlined, 'Preacher', _preacher?['name'] ?? 'Preacher')),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(child: _buildProfileInfoRow(Icons.phone_android_outlined, 'WhatsApp Number', displayWhatsapp)),
+                  const SizedBox(width: 12),
+                  Expanded(child: _buildProfileInfoRow(Icons.cake_outlined, 'Date of Birth', displayDob)),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(child: _buildProfileInfoRow(Icons.calendar_month_outlined, 'Joining Date', displayJoin)),
+                  const SizedBox(width: 12),
+                  Expanded(child: _buildProfileInfoRow(Icons.email_outlined, 'Email Address', _profile?['email'] ?? '')),
+                ],
+              ),
+            ],
+          ),
+
           const SizedBox(height: 20),
+
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFFF8FAFC),
+                  child: Icon(Icons.help_outline_rounded, color: Color(0xFF3F1200)),
+                ),
+                title: const Text('About the App', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                subtitle: const Text('View app version and description', style: TextStyle(fontSize: 12)),
+                onTap: _showAboutDialog,
+              ),
+              const SizedBox(height: 4),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFFF8FAFC),
+                  child: Icon(Icons.rate_review_outlined, color: Color(0xFF3F1200)),
+                ),
+                title: const Text('Feedback & Suggestions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                subtitle: const Text('sadhanatracker.in@gmail.com', style: TextStyle(fontSize: 12)),
+                onTap: _launchFeedbackEmail,
+              ),
+              const SizedBox(height: 4),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFFF8FAFC),
+                  child: Icon(Icons.privacy_tip_outlined, color: Color(0xFF3F1200)),
+                ),
+                title: const Text('Privacy Policy', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                subtitle: const Text('Read our data and privacy terms', style: TextStyle(fontSize: 12)),
+                onTap: _showPrivacyPolicyDialog,
+              ),
+              const SizedBox(height: 4),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFFF8FAFC),
+                  child: Icon(Icons.star_outline_rounded, color: Color(0xFF3F1200)),
+                ),
+                title: const Text('Rate the App', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                subtitle: const Text('Show your support in the store', style: TextStyle(fontSize: 12)),
+                onTap: _showRateAppDialog,
+              ),
+              const SizedBox(height: 4),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFFF8FAFC),
+                  child: Icon(Icons.share_outlined, color: Color(0xFF3F1200)),
+                ),
+                title: const Text('Share App', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                subtitle: const Text('Invite other students to track sadhana', style: TextStyle(fontSize: 12)),
+                onTap: _shareApp,
+              ),
+            ],
+          ),
+          
+          const SizedBox(height: 20),
+
+          Center(
+            child: SizedBox(
+              width: 190,
+              height: 48,
+              child: _SwipeToLogoutButton(
+                onSwipeCompleted: () async {
+                  try {
+                    await FirebaseAuth.instance.signOut();
+                  } catch (_) {}
+                  if (mounted) {
+                    Navigator.pushReplacementNamed(context, '/login');
+                  }
+                },
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
         ],
       ),
     );
@@ -3332,27 +3321,31 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
 
   Widget _buildProfileInfoRow(IconData icon, String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         children: [
           CircleAvatar(
-            radius: 20,
+            radius: 18,
             backgroundColor: const Color(0xFF3F1200).withValues(alpha: 0.06),
-            child: Icon(icon, color: const Color(0xFF3F1200), size: 20),
+            child: Icon(icon, color: const Color(0xFF3F1200), size: 18),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   label,
-                  style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w600),
+                  style: const TextStyle(fontSize: 10.5, color: Color(0xFF64748B), fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 2),
                 Text(
                   value.isNotEmpty ? value : 'Not specified',
-                  style: const TextStyle(fontSize: 14, color: Color(0xFF1E293B), fontWeight: FontWeight.bold),
+                  style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B), fontWeight: FontWeight.bold),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -3424,6 +3417,216 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     );
   }
 
+  void _showEditProfileDialog() {
+    String rawWhatsapp = _profile?['whatsapp_number'] ?? _profile?['whatsapp'] ?? _profile?['phoneNumber'] ?? '';
+    String displayWhatsapp = rawWhatsapp;
+    String displayDob = _profile?['dob'] ?? '';
+    String displayJoin = _profile?['joining_date'] ?? '';
+
+    if (rawWhatsapp.contains('|')) {
+      final parts = rawWhatsapp.split('|');
+      displayWhatsapp = parts[0].trim();
+      for (var part in parts) {
+        if (part.contains('DOB:')) {
+          displayDob = part.replaceAll('DOB:', '').trim();
+        } else if (part.contains('JOIN:')) {
+          displayJoin = part.replaceAll('JOIN:', '').trim();
+        }
+      }
+    } else {
+      displayWhatsapp = rawWhatsapp.trim();
+    }
+
+    final nameController = TextEditingController(text: _profile?['name'] ?? '');
+    final whatsappController = TextEditingController(text: displayWhatsapp);
+    final emailController = TextEditingController(text: _profile?['email'] ?? '');
+    final dobController = TextEditingController(text: displayDob);
+    final joinController = TextEditingController(text: displayJoin);
+
+    bool isSaving = false;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: const Text('Edit Personal Information', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Full Name',
+                        prefixIcon: Icon(Icons.person_outline),
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: whatsappController,
+                      keyboardType: TextInputType.phone,
+                      decoration: const InputDecoration(
+                        labelText: 'WhatsApp Number',
+                        prefixIcon: Icon(Icons.phone_android_outlined),
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: const InputDecoration(
+                        labelText: 'Email Address',
+                        prefixIcon: Icon(Icons.email_outlined),
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: dobController,
+                      readOnly: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Date of Birth',
+                        prefixIcon: Icon(Icons.cake_outlined),
+                        border: OutlineInputBorder(),
+                        hintText: 'Tap to select date',
+                      ),
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: DateTime.now().subtract(const Duration(days: 365 * 18)),
+                          firstDate: DateTime(1950),
+                          lastDate: DateTime.now(),
+                        );
+                        if (picked != null) {
+                          setDialogState(() {
+                            dobController.text = "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: joinController,
+                      readOnly: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Joining Date',
+                        prefixIcon: Icon(Icons.calendar_month_outlined),
+                        border: OutlineInputBorder(),
+                        hintText: 'Tap to select date',
+                      ),
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: DateTime.now(),
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime.now(),
+                        );
+                        if (picked != null) {
+                          setDialogState(() {
+                            joinController.text = "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+                          });
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSaving ? null : () => Navigator.pop(context),
+                  child: const Text('CANCEL', style: TextStyle(color: Colors.grey)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF3F1200),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          final name = nameController.text.trim();
+                          final whatsapp = whatsappController.text.trim();
+                          final email = emailController.text.trim();
+                          final dob = dobController.text.trim();
+                          final join = joinController.text.trim();
+
+                          if (name.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Name cannot be empty')),
+                            );
+                            return;
+                          }
+
+                          setDialogState(() => isSaving = true);
+                          try {
+                            String formattedWhatsapp = whatsapp;
+                            List<String> extraParts = [];
+                            if (dob.isNotEmpty) extraParts.add('DOB: $dob');
+                            if (join.isNotEmpty) extraParts.add('JOIN: $join');
+                            if (extraParts.isNotEmpty) {
+                              formattedWhatsapp = '$whatsapp | ${extraParts.join(' | ')}';
+                            }
+
+                            await ApiService.patch('/users/me', {
+                              'name': name,
+                              'phoneNumber': whatsapp,
+                              'whatsapp_number': formattedWhatsapp,
+                              'email': email,
+                              'dob': dob.isNotEmpty ? dob : null,
+                              'joiningDate': join.isNotEmpty ? join : null,
+                            });
+
+                            if (mounted) {
+                              Navigator.pop(context);
+                              await _loadProfileAndData();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Personal Information updated successfully!')),
+                              );
+                            }
+                          } catch (e) {
+                            debugPrint('Error updating profile: $e');
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Failed to update profile: $e')),
+                              );
+                            }
+                          } finally {
+                            setDialogState(() => isSaving = false);
+                          }
+                        },
+                  child: isSaving
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Text('SAVE', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _launchFeedbackEmail() async {
+    final Uri emailUri = Uri(
+      scheme: 'mailto',
+      path: 'sadhanatracker.in@gmail.com',
+    );
+    try {
+      if (await canLaunchUrl(emailUri)) {
+        await launchUrl(emailUri, mode: LaunchMode.externalApplication);
+      } else {
+        await launchUrl(emailUri);
+      }
+    } catch (_) {
+      _showFeedbackDialog();
+    }
+  }
+
   void _showFeedbackDialog() {
     final controller = TextEditingController();
     showDialog(
@@ -3431,13 +3634,24 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: const Text('Feedback & Suggestions', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: TextField(
-          controller: controller,
-          maxLines: 4,
-          decoration: const InputDecoration(
-            hintText: 'Enter your suggestions or report issues here...',
-            border: OutlineInputBorder(),
-          ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Email: sadhanatracker.in@gmail.com',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                hintText: 'Enter your suggestions or report issues here...',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -3447,11 +3661,9 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Thank you for your feedback!')),
-              );
+              _launchFeedbackEmail();
             },
-            child: const Text('SUBMIT', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF3F1200))),
+            child: const Text('OPEN EMAIL APP', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF3F1200))),
           ),
         ],
       ),
@@ -3504,7 +3716,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                 Text('4. Data Deletion Rights', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                 SizedBox(height: 4),
                 Text(
-                  'You have the right to request deletion of your account and data at any time. For support or deletion, contact us at: abhaykumarsalempur8521@gmail.com',
+                  'You have the right to request deletion of your account and data at any time. For support or deletion, contact us at: sadhanatracker.in@gmail.com',
                   style: TextStyle(fontSize: 13, height: 1.4),
                 ),
               ],
@@ -3548,10 +3760,19 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   }
 
   void _shareApp() {
-    Clipboard.setData(const ClipboardData(text: 'Check out the Sadhana Tracker App to track your daily sadhana! https://sadhana-tracker.example.com'));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('App sharing link copied to clipboard!')),
-    );
+    const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.sadhanatracker.app';
+    const shareMessage = 'Hare Krishna! 🙏 Track your daily sadhana, lectures, and spiritual activities with the Sadhana Tracker App.\n\nDownload now: $playStoreUrl';
+
+    try {
+      Share.share(shareMessage, subject: 'Sadhana Tracker App');
+    } catch (_) {
+      Clipboard.setData(const ClipboardData(text: shareMessage));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('App sharing link copied to clipboard!')),
+        );
+      }
+    }
   }
 
   void _contactPreacher() {
@@ -6862,16 +7083,22 @@ class _SwipeToLogoutButtonState extends State<_SwipeToLogoutButton> {
           child: Stack(
             alignment: Alignment.centerLeft,
             children: [
-              Center(
-                child: Opacity(
-                  opacity: (1.0 - (_dragPosition / maxDrag)).clamp(0.2, 1.0),
-                  child: Text(
-                    _isFinished ? 'LOGGING OUT...' : 'SWIPE TO LOGOUT',
-                    style: const TextStyle(
-                      color: Color(0xFFEF4444),
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.1,
+              Positioned.fill(
+                left: 38,
+                right: 8,
+                child: Center(
+                  child: Opacity(
+                    opacity: (1.0 - (_dragPosition / maxDrag)).clamp(0.2, 1.0),
+                    child: Text(
+                      _isFinished ? 'LOGGING OUT...' : 'SWIPE TO LOGOUT',
+                      style: const TextStyle(
+                        color: Color(0xFFEF4444),
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.6,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.visible,
                     ),
                   ),
                 ),
