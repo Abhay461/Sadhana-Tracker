@@ -4414,7 +4414,6 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildTodayFestivalCard(),
         const Text(
           'Your Sadhana',
           style: TextStyle(
@@ -4437,117 +4436,6 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
           itemBuilder: (context, index) {
             return _buildSadhanaGridCard(activities[index]);
           },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTodayFestivalCard() {
-    if (_todayFestival == null) return const SizedBox.shrink();
-
-    final title = _todayFestival!['title'] as String? ?? '';
-    final description = _todayFestival!['description'] as String? ?? '';
-    final imageUrl = _todayFestival!['imageUrl'] as String? ?? '';
-
-    if (title.isEmpty) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: const [
-            Icon(Icons.festival_rounded, color: Color(0xFFD97706), size: 18),
-            SizedBox(width: 6),
-            Text(
-              "Today's Festival",
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF0F172A),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Container(
-          width: double.infinity,
-          margin: const EdgeInsets.only(bottom: 16),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFFFFFBEB), Color(0xFFFEF3C7)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFFCD34D), width: 1),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFFD97706).withOpacity(0.08),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFDE68A),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 4,
-                    ),
-                  ],
-                ),
-                child: ClipOval(
-                  child: imageUrl.isNotEmpty
-                      ? Image.network(
-                          imageUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const Icon(Icons.festival_rounded, color: Color(0xFFD97706), size: 24),
-                        )
-                      : const Icon(Icons.festival_rounded, color: Color(0xFFD97706), size: 24),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF92400E),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (description.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        description,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFFB45309),
-                          fontWeight: FontWeight.w500,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
         ),
       ],
     );
