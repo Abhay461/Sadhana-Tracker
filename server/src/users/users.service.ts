@@ -22,10 +22,19 @@ export class UsersService {
     const photoUrl = dto.photoUrl || dto.photo_url;
     if (photoUrl) updateData.photoUrl = photoUrl;
     if (dto.email) updateData.email = dto.email;
-    if (dto.phoneNumber) updateData.phoneNumber = dto.phoneNumber;
-    if (dto.whatsapp_number) updateData.whatsapp_number = dto.whatsapp_number;
+    if (dto.phoneNumber) {
+      updateData.phoneNumber = dto.phoneNumber;
+      updateData.whatsapp_number = dto.phoneNumber;
+    }
+    if (dto.whatsapp_number) {
+      updateData.whatsapp_number = dto.whatsapp_number;
+    }
     if (dto.dob) updateData.dob = new Date(dto.dob);
-    if (dto.joiningDate) updateData.joiningDate = new Date(dto.joiningDate);
+    if (dto.joiningDate || dto.joining_date) {
+      const jDate = dto.joiningDate || dto.joining_date;
+      updateData.joiningDate = new Date(jDate);
+      updateData.joining_date = new Date(jDate);
+    }
     if (dto.preacherId) updateData.preacherId = dto.preacherId;
 
     const user = await this.userModel.findByIdAndUpdate(userId, { $set: updateData }, { new: true }).populate('preacherId', 'name email photoUrl phoneNumber whatsapp_number');

@@ -42,11 +42,17 @@ export class User {
   @Prop({ type: String, default: null })
   photoUrl: string;
 
+  @Prop({ type: String, default: null })
+  whatsapp_number: string;
+
   @Prop({ type: Date, default: null })
   dob: Date;
 
   @Prop({ type: Date, default: null })
   joiningDate: Date;
+
+  @Prop({ type: Date, default: null })
+  joining_date: Date;
 
   @Prop({ type: Boolean, default: false, index: true })
   isBlocked: boolean;

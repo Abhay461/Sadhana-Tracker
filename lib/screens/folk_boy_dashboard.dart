@@ -3114,19 +3114,29 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   }
 
   Widget _buildProfileTab() {
-    final rawWhatsapp = _profile?['whatsapp_number'] as String? ?? '';
-    String displayWhatsapp = '';
-    String displayDob = _profile?['dob'] ?? '';
-    String displayJoin = _profile?['joining_date'] ?? '';
+    String formatDate(dynamic val) {
+      if (val == null) return '';
+      String str = val.toString().trim();
+      if (str.isEmpty) return '';
+      if (str.contains('T')) {
+        str = str.split('T')[0];
+      }
+      return str;
+    }
+
+    String rawWhatsapp = _profile?['whatsapp_number'] ?? _profile?['whatsapp'] ?? _profile?['phoneNumber'] ?? '';
+    String displayWhatsapp = rawWhatsapp;
+    String displayDob = formatDate(_profile?['dob']);
+    String displayJoin = formatDate(_profile?['joiningDate'] ?? _profile?['joining_date']);
 
     if (rawWhatsapp.contains('|')) {
       final parts = rawWhatsapp.split('|');
       displayWhatsapp = parts[0].trim();
       for (var part in parts) {
-        if (part.contains('DOB:')) {
-          displayDob = part.replaceAll('DOB:', '').trim();
-        } else if (part.contains('JOIN:')) {
-          displayJoin = part.replaceAll('JOIN:', '').trim();
+        if (part.contains('DOB:') && displayDob.isEmpty) {
+          displayDob = formatDate(part.replaceAll('DOB:', '').trim());
+        } else if (part.contains('JOIN:') && displayJoin.isEmpty) {
+          displayJoin = formatDate(part.replaceAll('JOIN:', '').trim());
         }
       }
     } else {
@@ -3418,19 +3428,29 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   }
 
   void _showEditProfileDialog() {
+    String formatDate(dynamic val) {
+      if (val == null) return '';
+      String str = val.toString().trim();
+      if (str.isEmpty) return '';
+      if (str.contains('T')) {
+        str = str.split('T')[0];
+      }
+      return str;
+    }
+
     String rawWhatsapp = _profile?['whatsapp_number'] ?? _profile?['whatsapp'] ?? _profile?['phoneNumber'] ?? '';
     String displayWhatsapp = rawWhatsapp;
-    String displayDob = _profile?['dob'] ?? '';
-    String displayJoin = _profile?['joining_date'] ?? '';
+    String displayDob = formatDate(_profile?['dob']);
+    String displayJoin = formatDate(_profile?['joiningDate'] ?? _profile?['joining_date']);
 
     if (rawWhatsapp.contains('|')) {
       final parts = rawWhatsapp.split('|');
       displayWhatsapp = parts[0].trim();
       for (var part in parts) {
-        if (part.contains('DOB:')) {
-          displayDob = part.replaceAll('DOB:', '').trim();
-        } else if (part.contains('JOIN:')) {
-          displayJoin = part.replaceAll('JOIN:', '').trim();
+        if (part.contains('DOB:') && displayDob.isEmpty) {
+          displayDob = formatDate(part.replaceAll('DOB:', '').trim());
+        } else if (part.contains('JOIN:') && displayJoin.isEmpty) {
+          displayJoin = formatDate(part.replaceAll('JOIN:', '').trim());
         }
       }
     } else {
@@ -3581,6 +3601,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                               'email': email,
                               'dob': dob.isNotEmpty ? dob : null,
                               'joiningDate': join.isNotEmpty ? join : null,
+                              'joining_date': join.isNotEmpty ? join : null,
                             });
 
                             nav.pop();
