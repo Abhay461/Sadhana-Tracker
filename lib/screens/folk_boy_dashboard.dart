@@ -308,10 +308,23 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     }
   }
 
+  static String _getOptimizedFestivalImageUrl(String url) {
+    if (url.isEmpty) return '';
+    if (url.contains('cloudinary.com') && url.contains('/upload/') && !url.contains('/q_auto')) {
+      return url.replaceFirst('/upload/', '/upload/q_auto,f_auto,w_500/');
+    }
+    return url;
+  }
+
   Future<void> _fetchTodayFestival() async {
     try {
       final response = await ApiService.get('/festivals/today');
       if (response != null && response is Map<String, dynamic>) {
+        final img = (response['imageUrl'] as String? ?? '').trim();
+        if (img.isNotEmpty && mounted) {
+          final optUrl = _getOptimizedFestivalImageUrl(img);
+          precacheImage(NetworkImage(optUrl), context).catchError((_) {});
+        }
         if (mounted) {
           setState(() {
             _todayFestival = response;
@@ -1769,7 +1782,8 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     if (_todayFestival == null) return const SizedBox.shrink();
 
     final title = _todayFestival!['title'] as String? ?? 'Today\'s Festival';
-    final imageUrl = _todayFestival!['imageUrl'] as String? ?? '';
+    final rawImageUrl = _todayFestival!['imageUrl'] as String? ?? '';
+    final imageUrl = _getOptimizedFestivalImageUrl(rawImageUrl);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -1785,69 +1799,30 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
             ),
           ),
           const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFF0F172A), width: 1.5),
-              boxShadow: const [
-                BoxShadow(
-                  color: Colors.black12,
-                  blurRadius: 4,
-                  offset: Offset(0, 2),
+          Row(
+            children: [
+              if (imageUrl.isNotEmpty)
+                Image.network(
+                  imageUrl,
+                  height: 64,
+                  fit: BoxFit.contain,
+                  gaplessPlayback: true,
+                  errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
                 ),
-              ],
-            ),
-            child: Row(
-              children: [
-                if (imageUrl.isNotEmpty)
-                  Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: const Color(0xFF3F1200), width: 1.5),
-                    ),
-                    child: ClipOval(
-                      child: Image.network(
-                        imageUrl,
-                        width: 64,
-                        height: 64,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          color: const Color(0xFFFEF3C7),
-                          child: const Icon(Icons.festival, color: Color(0xFFD97706), size: 30),
-                        ),
-                      ),
-                    ),
-                  )
-                else
-                  Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: const Color(0xFFFEF3C7),
-                      border: Border.all(color: const Color(0xFFD97706), width: 1.5),
-                    ),
-                    child: const Icon(Icons.festival, color: Color(0xFFD97706), size: 32),
+              if (imageUrl.isNotEmpty) const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0F172A),
                   ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF0F172A),
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ],
       ),
