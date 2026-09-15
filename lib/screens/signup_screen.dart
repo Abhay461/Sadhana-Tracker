@@ -43,9 +43,19 @@ class _SignupScreenState extends State<SignupScreen> {
   DateTime? _selectedDob;
   DateTime? _selectedJoiningDate;
 
+  // Occupation options
+  String _selectedOccupation = 'Student';
+  final List<String> _occupationOptions = [
+    'Student',
+    'Working Professional',
+    'Business / Self-Employed',
+    'Job Seeker / Other',
+  ];
+
   @override
   void initState() {
     super.initState();
+    _occupationController.text = 'Student';
     _fetchPreachers();
   }
 
@@ -348,9 +358,9 @@ class _SignupScreenState extends State<SignupScreen> {
         final String rawWhatsapp = _whatsappController.text.trim();
         final String dobStr = _selectedDob != null ? DateFormat('yyyy-MM-dd').format(_selectedDob!) : 'N/A';
         final String joinStr = _selectedJoiningDate != null ? DateFormat('yyyy-MM-dd').format(_selectedJoiningDate!) : 'N/A';
-        final String occStr = _occupationController.text.trim().isNotEmpty ? _occupationController.text.trim() : 'N/A';
-        final String clgStr = _collegeController.text.trim().isNotEmpty ? _collegeController.text.trim() : 'N/A';
-        final String crsStr = _courseYearController.text.trim().isNotEmpty ? _courseYearController.text.trim() : 'N/A';
+        final String occStr = _selectedOccupation;
+        final String clgStr = (_selectedOccupation == 'Student' && _collegeController.text.trim().isNotEmpty) ? _collegeController.text.trim() : 'N/A';
+        final String crsStr = (_selectedOccupation == 'Student' && _courseYearController.text.trim().isNotEmpty) ? _courseYearController.text.trim() : 'N/A';
         final String cityStr = _cityController.text.trim().isNotEmpty ? _cityController.text.trim() : 'N/A';
 
         final String formattedWhatsappWithDates = '$rawWhatsapp | DOB:$dobStr | JOIN:$joinStr | OCC:$occStr | CLG:$clgStr | CRS:$crsStr | CITY:$cityStr';
@@ -875,6 +885,63 @@ class _SignupScreenState extends State<SignupScreen> {
     );
   }
 
+  Widget _buildOccupationDropdown() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Occupation / Status',
+          style: TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF1E293B),
+          ),
+        ),
+        const SizedBox(height: 5),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: _selectedOccupation,
+              isExpanded: true,
+              icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF64748B), size: 20),
+              style: const TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 14,
+                color: Color(0xFF0F172A),
+              ),
+              items: _occupationOptions.map((String option) {
+                return DropdownMenuItem<String>(
+                  value: option,
+                  child: Text(option),
+                );
+              }).toList(),
+              onChanged: (String? newValue) {
+                if (newValue != null) {
+                  setState(() {
+                    _selectedOccupation = newValue;
+                    _occupationController.text = newValue;
+                    if (newValue != 'Student') {
+                      _collegeController.clear();
+                      _courseYearController.clear();
+                    }
+                  });
+                }
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildPageTwo() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -932,47 +999,37 @@ class _SignupScreenState extends State<SignupScreen> {
         ),
         const SizedBox(height: 12),
 
-        // 4. Occupation / Status Field
-        _buildSimpleTextField(
-          controller: _occupationController,
-          label: 'Occupation / Status',
-          hintText: 'e.g. Student / Working / Job',
-          validator: (value) {
-            if (value == null || value.trim().isEmpty) {
-              return 'Please enter your Occupation / Status';
-            }
-            return null;
-          },
-        ),
+        // 4. Occupation / Status Dropdown Field
+        _buildOccupationDropdown(),
         const SizedBox(height: 12),
 
-        // 5. College / University Name Field
-        _buildSimpleTextField(
-          controller: _collegeController,
-          label: 'College / University Name',
-          hintText: 'e.g. GLA University / Mathura College',
-          validator: (value) {
-            if (value == null || value.trim().isEmpty) {
-              return 'Please enter your College / University name';
-            }
-            return null;
-          },
-        ),
-        const SizedBox(height: 12),
-
-        // 6. Course & Year Field
-        _buildSimpleTextField(
-          controller: _courseYearController,
-          label: 'Course & Year',
-          hintText: 'e.g. B.Tech 3rd Year / BCA 2nd Year',
-          validator: (value) {
-            if (value == null || value.trim().isEmpty) {
-              return 'Please enter your Course & Year';
-            }
-            return null;
-          },
-        ),
-        const SizedBox(height: 12),
+        // 5. College / University Name Field & 6. Course & Year Field (Shown only if Student)
+        if (_selectedOccupation == 'Student') ...[
+          _buildSimpleTextField(
+            controller: _collegeController,
+            label: 'College / University Name',
+            hintText: 'e.g. GLA University / Mathura College',
+            validator: (value) {
+              if (_selectedOccupation == 'Student' && (value == null || value.trim().isEmpty)) {
+                return 'Please enter your College / University name';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 12),
+          _buildSimpleTextField(
+            controller: _courseYearController,
+            label: 'Course & Year',
+            hintText: 'e.g. B.Tech 3rd Year / BCA 2nd Year',
+            validator: (value) {
+              if (_selectedOccupation == 'Student' && (value == null || value.trim().isEmpty)) {
+                return 'Please enter your Course & Year';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 12),
+        ],
 
         // 7. City / Native Hometown Field
         _buildSimpleTextField(
@@ -1094,17 +1151,15 @@ class _SignupScreenState extends State<SignupScreen> {
                             setState(() => _errorMessage = 'Please select your FOLK Joining Date');
                             return;
                           }
-                          if (_occupationController.text.trim().isEmpty) {
-                            setState(() => _errorMessage = 'Please enter your Occupation / Status');
-                            return;
-                          }
-                          if (_collegeController.text.trim().isEmpty) {
-                            setState(() => _errorMessage = 'Please enter your College / University Name');
-                            return;
-                          }
-                          if (_courseYearController.text.trim().isEmpty) {
-                            setState(() => _errorMessage = 'Please enter your Course & Year');
-                            return;
+                          if (_selectedOccupation == 'Student') {
+                            if (_collegeController.text.trim().isEmpty) {
+                              setState(() => _errorMessage = 'Please enter your College / University Name');
+                              return;
+                            }
+                            if (_courseYearController.text.trim().isEmpty) {
+                              setState(() => _errorMessage = 'Please enter your Course & Year');
+                              return;
+                            }
                           }
                           if (_cityController.text.trim().isEmpty) {
                             setState(() => _errorMessage = 'Please enter your City / Native Hometown');
