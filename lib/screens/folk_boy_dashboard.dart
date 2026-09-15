@@ -2225,22 +2225,22 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                                 SizedBox(
                                   width: 32,
                                   child: Center(
-                                    child: Text('Status', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
+                                    child: Text('Status', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
                                   ),
                                 ),
                                 SizedBox(width: 8),
                                 Expanded(
-                                  flex: 4,
-                                  child: Text('Sadhana Activity', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
+                                  flex: 5,
+                                  child: Text('Sadhana Activity', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
                                 ),
                                 Expanded(
-                                  flex: 4,
-                                  child: Text('Time / Detail', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
+                                  flex: 5,
+                                  child: Text('Time / Detail', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
                                 ),
                                 SizedBox(
                                   width: 32,
                                   child: Center(
-                                    child: Text('Action', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
+                                    child: Text('Action', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
                                   ),
                                 ),
                               ],
@@ -2283,26 +2283,26 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(
-                                    flex: 4,
+                                    flex: 5,
                                     child: Text(
                                       label,
                                       style: TextStyle(
-                                        fontWeight: isLogged ? FontWeight.bold : FontWeight.w500,
-                                        fontSize: 12,
+                                        fontWeight: isLogged ? FontWeight.bold : FontWeight.w600,
+                                        fontSize: 13,
                                         color: isLogged ? const Color(0xFF065F46) : const Color(0xFF334155),
                                       ),
                                     ),
                                   ),
                                   Expanded(
-                                    flex: 4,
+                                    flex: 5,
                                     child: Text(
                                       valText,
                                       style: TextStyle(
-                                        fontSize: 11.5,
-                                        fontWeight: isLogged ? FontWeight.bold : FontWeight.normal,
+                                        fontSize: 12.5,
+                                        fontWeight: isLogged ? FontWeight.bold : FontWeight.w500,
                                         color: isLogged ? const Color(0xFF047857) : const Color(0xFF94A3B8),
                                       ),
-                                      maxLines: 1,
+                                      maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
@@ -4296,7 +4296,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
             crossAxisCount: 2,
             crossAxisSpacing: 8,
             mainAxisSpacing: 8,
-            childAspectRatio: 3.0,
+            childAspectRatio: 2.6,
           ),
           itemBuilder: (context, index) {
             return _buildSadhanaGridCard(activities[index]);
@@ -4484,10 +4484,10 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                       titleText,
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: 11,
+                        fontSize: 12,
                         color: isLogged ? const Color(0xFF065F46) : const Color(0xFF0F172A),
                       ),
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                     if (isLogged && loggedDetails.isNotEmpty) ...[
@@ -4495,11 +4495,11 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                       Text(
                         loggedDetails,
                         style: const TextStyle(
-                          fontSize: 9.5,
+                          fontSize: 10.5,
                           fontWeight: FontWeight.bold,
                           color: Color(0xFF047857),
                         ),
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
