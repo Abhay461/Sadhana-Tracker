@@ -289,7 +289,7 @@ class _StudentListTabState extends State<StudentListTab> {
                                 Icon(Icons.badge_outlined, size: 16, color: Color(0xFF0F172A)),
                                 SizedBox(width: 6),
                                 Text(
-                                  'Personal Info Card',
+                                  'Personal Information',
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
@@ -302,7 +302,7 @@ class _StudentListTabState extends State<StudentListTab> {
                             Row(
                               children: [
                                 Text(
-                                  _showStudentCard ? 'Hide Card' : 'View Card',
+                                  _showStudentCard ? 'Hide Details' : 'View Details',
                                   style: const TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.bold,

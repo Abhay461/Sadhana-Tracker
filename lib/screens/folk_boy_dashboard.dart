@@ -3240,7 +3240,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                _showPersonalInfoCard ? 'Tap to hide profile card' : 'Tap to view profile card',
+                                _showPersonalInfoCard ? 'Tap to hide profile details' : 'Tap to view profile details',
                                 style: const TextStyle(fontSize: 12, color: Colors.grey),
                               ),
                             ],
@@ -3268,7 +3268,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  _showPersonalInfoCard ? 'Hide' : 'View Card',
+                                  _showPersonalInfoCard ? 'Hide Details' : 'View Details',
                                   style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF3F1200)),
                                 ),
                               ],
