@@ -13,6 +13,9 @@
   <!-- Remix Icons -->
   <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
 
+  <!-- SheetJS Excel Exporter -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
   <style>
     :root {
       --bg-dark: #F8FAFC;
@@ -602,29 +605,25 @@
 
       <!-- Tab: Preachers & User IDs Management -->
       <div id="preachersTab" class="tab-content">
-        <div class="stat-card" style="margin-bottom: 20px;">
-          <div class="stat-icon" style="color: var(--accent); background: rgba(245, 158, 11, 0.15);"><i class="ri-user-star-line"></i></div>
-          <div class="stat-info">
-            <h3 id="statTotalPreachers">0</h3>
-            <p>Active Preachers Registered</p>
+        <div class="stats-grid" style="margin-bottom: 24px;">
+          <div class="stat-card">
+            <div class="stat-icon" style="color: var(--accent); background: rgba(245, 158, 11, 0.15);"><i class="ri-user-star-line"></i></div>
+            <div class="stat-info">
+              <h3 id="statTotalPreachers">0</h3>
+              <p>Active Preachers</p>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon" style="color: var(--success); background: rgba(16, 185, 129, 0.15);"><i class="ri-team-line"></i></div>
+            <div class="stat-info">
+              <h3 id="statTotalStudents">0</h3>
+              <p>Total Enrolled Students</p>
+            </div>
           </div>
         </div>
 
-        <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; padding: 24px; overflow-x: auto; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);">
-          <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13.5px;">
-            <thead>
-              <tr style="border-bottom: 1px solid var(--border-color); color: var(--text-muted);">
-                <th style="padding: 12px 10px;">NAME</th>
-                <th style="padding: 12px 10px;">PREACHER CODE</th>
-                <th style="padding: 12px 10px;">EMAIL (USER ID)</th>
-                <th style="padding: 12px 10px;">MOBILE / WHATSAPP</th>
-                <th style="padding: 12px 10px;">ROLE</th>
-              </tr>
-            </thead>
-            <tbody id="preachersTableBody">
-              <!-- Preacher rows dynamically loaded -->
-            </tbody>
-          </table>
+        <div id="preachersContainer">
+          <!-- Preacher cards and assigned students loaded dynamically -->
         </div>
       </div>
 
@@ -865,6 +864,9 @@
         headerActions.innerHTML = `
           <button class="btn btn-primary" onclick="openAddPreacherModal()">
             <i class="ri-user-add-line"></i> Create New Preacher Account
+          </button>
+          <button class="btn btn-secondary" onclick="exportStudentsExcel()" style="background: #10B981; color: white; border: none; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);">
+            <i class="ri-file-excel-2-line"></i> Download Excel Report (.xlsx)
           </button>
         `;
         loadPreachers();
@@ -1180,23 +1182,183 @@
     }
 
     function renderPreachers() {
-      const tbody = document.getElementById('preachersTableBody');
+      const container = document.getElementById('preachersContainer');
+      if (!container) return;
+
       document.getElementById('statTotalPreachers').innerText = preachersList.length;
 
+      let totalStudentsCount = 0;
+      preachersList.forEach(p => {
+        totalStudentsCount += (p.assignedStudentsCount || (p.students ? p.students.length : 0));
+      });
+      const statTotalStudEl = document.getElementById('statTotalStudents');
+      if (statTotalStudEl) statTotalStudEl.innerText = totalStudentsCount;
+
       if (!preachersList || preachersList.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" style="padding: 20px; text-align: center; color: var(--text-muted);">No preachers created yet. Click 'Create New Preacher Account' above to add.</td></tr>`;
+        container.innerHTML = `<div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; padding: 32px; text-align: center; color: var(--text-muted);">No preachers created yet. Click 'Create New Preacher Account' above to add.</div>`;
         return;
       }
 
-      tbody.innerHTML = preachersList.map(p => `
-        <tr style="border-bottom: 1px solid var(--border-color);">
-          <td style="padding: 12px; font-weight: 600; color: var(--text-main);">${p.name || p.full_name || 'Preacher'}</td>
-          <td style="padding: 12px; font-weight: bold; color: var(--accent);">${p.preacherCode || p.code || 'N/A'}</td>
-          <td style="padding: 12px; color: var(--text-muted);">${p.email || 'N/A'}</td>
-          <td style="padding: 12px; color: var(--text-muted);">${p.phoneNumber || p.phone || 'N/A'}</td>
-          <td style="padding: 12px;"><span style="background: rgba(11, 114, 231, 0.2); color: var(--primary); padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: bold;">PREACHER</span></td>
-        </tr>
-      `).join('');
+      container.innerHTML = preachersList.map(p => {
+        const students = p.students || [];
+        const studentsRowsHtml = students.length === 0
+          ? `<tr><td colspan="6" style="padding: 16px; text-align: center; color: var(--text-muted); font-size: 13px;">No students assigned to this preacher yet.</td></tr>`
+          : students.map((s, idx) => {
+              let dobStr = s.dob ? new Date(s.dob).toISOString().split('T')[0] : 'Not specified';
+              let joinStr = (s.joiningDate || s.joining_date) ? new Date(s.joiningDate || s.joining_date).toISOString().split('T')[0] : 'Not specified';
+              let rawPhone = s.whatsapp_number || s.phoneNumber || 'Not specified';
+              let phoneStr = rawPhone;
+
+              if (rawPhone.indexOf('|') !== -1) {
+                const parts = rawPhone.split('|');
+                phoneStr = parts[0].trim();
+                parts.forEach(part => {
+                  if (part.indexOf('DOB:') !== -1 && dobStr === 'Not specified') dobStr = part.replace('DOB:', '').trim();
+                  if (part.indexOf('JOIN:') !== -1 && joinStr === 'Not specified') joinStr = part.replace('JOIN:', '').trim();
+                });
+              }
+
+              return `
+                <tr style="border-bottom: 1px solid #F1F5F9; font-size: 13px;">
+                  <td style="padding: 12px; font-weight: 600; color: #64748B;">${idx + 1}</td>
+                  <td style="padding: 12px; font-weight: 700; color: var(--text-main);">${s.name || 'Unnamed Student'}</td>
+                  <td style="padding: 12px; font-weight: 600; color: #2563EB;"><i class="ri-whatsapp-line" style="color: #25D366;"></i> ${phoneStr}</td>
+                  <td style="padding: 12px; color: #475569;">${dobStr}</td>
+                  <td style="padding: 12px; color: #475569;">${s.email || '-'}</td>
+                  <td style="padding: 12px; color: #475569;">${joinStr}</td>
+                </tr>
+              `;
+            }).join('');
+
+        return `
+          <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; margin-bottom: 24px; overflow: hidden; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.03);">
+            <div style="padding: 20px 24px; background: #F8FAFC; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+              <div style="display: flex; align-items: center; gap: 14px;">
+                <div style="width: 44px; height: 44px; border-radius: 50%; background: #0F172A; color: white; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 17px;">
+                  ${(p.name || 'P')[0].toUpperCase()}
+                </div>
+                <div>
+                  <div style="font-weight: 800; font-size: 16px; color: var(--text-main);">${p.name}</div>
+                  <div style="font-size: 12.5px; color: var(--text-muted); display: flex; gap: 16px; align-items: center; margin-top: 3px;">
+                    <span><i class="ri-mail-line"></i> ${p.email || 'No email'}</span>
+                    <span><i class="ri-phone-line"></i> ${p.phoneNumber || 'No phone'}</span>
+                  </div>
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <span style="background: rgba(217, 119, 6, 0.12); color: #B45309; font-size: 12px; font-weight: 800; padding: 6px 14px; border-radius: 8px; letter-spacing: 0.5px;">
+                  CODE: ${p.preacherCode || 'PRCH'}
+                </span>
+                <span style="background: rgba(16, 185, 129, 0.12); color: #047857; font-size: 12px; font-weight: 700; padding: 6px 14px; border-radius: 8px;">
+                  ${students.length} Student(s)
+                </span>
+              </div>
+            </div>
+
+            <div style="padding: 16px 24px; overflow-x: auto;">
+              <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                <thead>
+                  <tr style="border-bottom: 2px solid #E2E8F0; color: #64748B; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.6px;">
+                    <th style="padding: 10px 12px;">#</th>
+                    <th style="padding: 10px 12px;">Student Name</th>
+                    <th style="padding: 10px 12px;">Mobile / WhatsApp</th>
+                    <th style="padding: 10px 12px;">Date of Birth (DOB)</th>
+                    <th style="padding: 10px 12px;">Email Address</th>
+                    <th style="padding: 10px 12px;">Joining Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${studentsRowsHtml}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function exportStudentsExcel() {
+      if (!preachersList || preachersList.length === 0) {
+        showToast('No preacher data available to export', true);
+        return;
+      }
+
+      if (typeof XLSX === 'undefined') {
+        showToast('Excel exporter library is loading, please try again in a moment', true);
+        return;
+      }
+
+      const excelRows = [];
+      preachersList.forEach(preacher => {
+        const preacherName = preacher.name || 'Unassigned';
+        const preacherCode = preacher.preacherCode || '-';
+        const preacherEmail = preacher.email || '-';
+        const preacherPhone = preacher.phoneNumber || '-';
+
+        const students = preacher.students || [];
+        if (students.length > 0) {
+          students.forEach((s, idx) => {
+            let dobStr = s.dob ? new Date(s.dob).toISOString().split('T')[0] : 'Not specified';
+            let joinStr = (s.joiningDate || s.joining_date) ? new Date(s.joiningDate || s.joining_date).toISOString().split('T')[0] : 'Not specified';
+            let rawPhone = s.whatsapp_number || s.phoneNumber || 'Not specified';
+            let phoneStr = rawPhone;
+
+            if (rawPhone.indexOf('|') !== -1) {
+              const parts = rawPhone.split('|');
+              phoneStr = parts[0].trim();
+              parts.forEach(part => {
+                if (part.indexOf('DOB:') !== -1 && dobStr === 'Not specified') dobStr = part.replace('DOB:', '').trim();
+                if (part.indexOf('JOIN:') !== -1 && joinStr === 'Not specified') joinStr = part.replace('JOIN:', '').trim();
+              });
+            }
+
+            excelRows.push({
+              'Preacher Name': preacherName,
+              'Preacher Code': preacherCode,
+              'Preacher Email': preacherEmail,
+              'Preacher Phone': preacherPhone,
+              'Student S.No': idx + 1,
+              'Student Name': s.name || 'Unnamed',
+              'WhatsApp / Mobile': phoneStr,
+              'Date of Birth (DOB)': dobStr,
+              'Email Address': s.email || 'Not specified',
+              'Joining Date': joinStr,
+              'Role': s.role === 'residency' ? 'Residency Student' : 'Folk Boy Student',
+              'Account Status': s.status || 'ACTIVE'
+            });
+          });
+        } else {
+          excelRows.push({
+            'Preacher Name': preacherName,
+            'Preacher Code': preacherCode,
+            'Preacher Email': preacherEmail,
+            'Preacher Phone': preacherPhone,
+            'Student S.No': '-',
+            'Student Name': '(No Students Assigned)',
+            'WhatsApp / Mobile': '-',
+            'Date of Birth (DOB)': '-',
+            'Email Address': '-',
+            'Joining Date': '-',
+            'Role': '-',
+            'Account Status': '-'
+          });
+        }
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(excelRows);
+      
+      worksheet['!cols'] = [
+        { wch: 22 }, { wch: 16 }, { wch: 26 }, { wch: 18 },
+        { wch: 12 }, { wch: 24 }, { wch: 20 }, { wch: 20 },
+        { wch: 28 }, { wch: 16 }, { wch: 18 }, { wch: 14 }
+      ];
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Preachers & Students");
+
+      const todayStr = new Date().toISOString().split('T')[0];
+      XLSX.writeFile(workbook, `Sadhana_Tracker_Preachers_Students_Directory_${todayStr}.xlsx`);
+      showToast('Excel Report downloaded successfully!');
     }
 
     // Submit New Preacher Account
