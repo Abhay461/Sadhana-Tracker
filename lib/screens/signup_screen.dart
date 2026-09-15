@@ -650,25 +650,211 @@ class _SignupScreenState extends State<SignupScreen> {
     );
   }
 
-  Widget _buildStepIndicator() {
-    return Row(
+  Widget _buildPageOne() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(
-          child: Container(
-            height: 4,
+        // 1. Full Name Field
+        _buildSimpleTextField(
+          controller: _nameController,
+          label: 'Full Name',
+          hintText: 'Enter your full name',
+          keyboardType: TextInputType.name,
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Please enter your full name';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 12),
+
+        // 2. Email Address Field
+        _buildSimpleTextField(
+          controller: _emailController,
+          label: 'Email Address',
+          hintText: 'Enter your email address',
+          keyboardType: TextInputType.emailAddress,
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Please enter your email address';
+            }
+            if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value.trim())) {
+              return 'Please enter a valid email address';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 12),
+
+        // 3. Assigned Preacher Field
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Assigned Preacher',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF1E293B),
+              ),
+            ),
+            const SizedBox(height: 5),
+            InkWell(
+              onTap: _showPreacherPicker,
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: _selectedPreacher != null ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0),
+                    width: _selectedPreacher != null ? 1.5 : 1.0,
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _selectedPreacher != null
+                            ? (_selectedPreacher!['name'] ?? 'Selected Preacher')
+                            : 'Select assigned preacher',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 14,
+                          color: _selectedPreacher != null ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
+                          fontWeight: _selectedPreacher != null ? FontWeight.w600 : FontWeight.w400,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: Color(0xFF64748B),
+                      size: 20,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        // 4. Password Field
+        _buildSimpleTextField(
+          controller: _passwordController,
+          label: 'Password',
+          hintText: 'Enter your password',
+          obscureText: true,
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Please enter your password';
+            }
+            if (value.trim().length < 6) {
+              return 'Password must be at least 6 characters';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 12),
+
+        // 5. Confirm Password Field
+        _buildSimpleTextField(
+          controller: _confirmPasswordController,
+          label: 'Confirm Password',
+          hintText: 'Re-enter your password',
+          obscureText: true,
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Please confirm your password';
+            }
+            if (value.trim() != _passwordController.text.trim()) {
+              return 'Passwords do not match';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 16),
+
+        // Error Banner
+        if (_errorMessage != null) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: const Color(0xFF0F172A),
-              borderRadius: BorderRadius.circular(2),
+              color: const Color(0xFFFEF2F2),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFFCA5A5)),
+            ),
+            child: Text(
+              _errorMessage!,
+              style: const TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 13,
+                color: Color(0xFF991B1B),
+              ),
             ),
           ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Container(
-            height: 4,
-            decoration: BoxDecoration(
-              color: _currentStep == 1 ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0),
-              borderRadius: BorderRadius.circular(2),
+          const SizedBox(height: 14),
+        ],
+
+        // Next Button
+        SizedBox(
+          height: 44,
+          child: ElevatedButton(
+            onPressed: () {
+              if (_nameController.text.trim().isEmpty) {
+                setState(() => _errorMessage = 'Please enter your full name');
+                return;
+              }
+              if (_emailController.text.trim().isEmpty || !RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(_emailController.text.trim())) {
+                setState(() => _errorMessage = 'Please enter a valid email address');
+                return;
+              }
+              if (_selectedPreacher == null) {
+                setState(() => _errorMessage = 'Please select your assigned preacher');
+                return;
+              }
+              if (_passwordController.text.trim().length < 6) {
+                setState(() => _errorMessage = 'Password must be at least 6 characters');
+                return;
+              }
+              if (_passwordController.text.trim() != _confirmPasswordController.text.trim()) {
+                setState(() => _errorMessage = 'Passwords do not match');
+                return;
+              }
+              setState(() {
+                _errorMessage = null;
+                _currentStep = 1;
+              });
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0F172A),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'Next: Personal Details',
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+                SizedBox(width: 8),
+                Icon(Icons.arrow_forward_rounded, size: 18, color: Colors.white),
+              ],
             ),
           ),
         ),
@@ -676,524 +862,211 @@ class _SignupScreenState extends State<SignupScreen> {
     );
   }
 
-  Widget _buildCardOne() {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color.fromRGBO(0, 0, 0, 0.03),
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Step 1: Account Credentials',
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF0F172A),
-                ),
+  Widget _buildPageTwo() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // 1. WhatsApp / Mobile Number Field
+        _buildSimpleTextField(
+          controller: _whatsappController,
+          label: 'WhatsApp / Mobile Number',
+          hintText: 'Enter 10-digit WhatsApp number',
+          keyboardType: TextInputType.phone,
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Please enter your WhatsApp number';
+            }
+            final cleaned = value.trim().replaceAll(RegExp(r'\D'), '');
+            if (cleaned.length < 10) {
+              return 'Please enter a valid 10-digit mobile number';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 12),
+
+        // 2. Date of Birth (DOB) Field
+        _buildSimpleTextField(
+          controller: _dobController,
+          label: 'Date of Birth (DOB)',
+          hintText: 'Select your date of birth',
+          readOnly: true,
+          onTap: () => _selectDob(context),
+          suffixIcon: const Icon(Icons.calendar_today_rounded, color: Color(0xFF64748B), size: 18),
+          validator: (value) {
+            if (value == null || value.trim().isEmpty || _selectedDob == null) {
+              return 'Please select your Date of Birth';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 12),
+
+        // 3. FOLK Joining Date Field
+        _buildSimpleTextField(
+          controller: _joiningDateController,
+          label: 'FOLK Joining Date',
+          hintText: 'Select your FOLK joining date',
+          readOnly: true,
+          onTap: () => _selectJoiningDate(context),
+          suffixIcon: const Icon(Icons.calendar_month_rounded, color: Color(0xFF64748B), size: 18),
+          validator: (value) {
+            if (value == null || value.trim().isEmpty || _selectedJoiningDate == null) {
+              return 'Please select your FOLK Joining Date';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 16),
+
+        // Error Banner
+        if (_errorMessage != null) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFEF2F2),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFFCA5A5)),
+            ),
+            child: Text(
+              _errorMessage!,
+              style: const TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 13,
+                color: Color(0xFF991B1B),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Text(
-                  '1 / 2',
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF64748B),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
           const SizedBox(height: 14),
+        ],
 
-          // 1. Full Name Field
-          _buildSimpleTextField(
-            controller: _nameController,
-            label: 'Full Name',
-            hintText: 'Enter your full name',
-            keyboardType: TextInputType.name,
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'Please enter your full name';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 12),
-
-          // 2. Email Address Field
-          _buildSimpleTextField(
-            controller: _emailController,
-            label: 'Email Address',
-            hintText: 'Enter your email address',
-            keyboardType: TextInputType.emailAddress,
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'Please enter your email address';
-              }
-              if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value.trim())) {
-                return 'Please enter a valid email address';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 12),
-
-          // 3. Assigned Preacher Field
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Assigned Preacher',
-                style: TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF1E293B),
-                ),
+        // Success Banner
+        if (_successMessage != null) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0FDF4),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFF86EFAC)),
+            ),
+            child: Text(
+              _successMessage!,
+              style: const TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 13,
+                color: Color(0xFF166534),
               ),
-              const SizedBox(height: 5),
-              InkWell(
-                onTap: _showPreacherPicker,
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
+            ),
+          ),
+          const SizedBox(height: 14),
+        ],
+
+        // Action Buttons Row: Back & Create Account
+        Row(
+          children: [
+            SizedBox(
+              height: 44,
+              width: 80,
+              child: OutlinedButton(
+                onPressed: () {
+                  setState(() {
+                    _currentStep = 0;
+                    _errorMessage = null;
+                  });
+                },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF0F172A),
+                  side: const BorderSide(color: Color(0xFFCBD5E1)),
+                  padding: EdgeInsets.zero,
+                  shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: _selectedPreacher != null ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0),
-                      width: _selectedPreacher != null ? 1.5 : 1.0,
-                    ),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          _selectedPreacher != null
-                              ? (_selectedPreacher!['name'] ?? 'Selected Preacher')
-                              : 'Select assigned preacher',
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 14,
-                            color: _selectedPreacher != null ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
-                            fontWeight: _selectedPreacher != null ? FontWeight.w600 : FontWeight.w400,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.arrow_back_rounded, size: 16, color: Color(0xFF0F172A)),
+                    SizedBox(width: 4),
+                    Text(
+                      'Back',
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF0F172A),
                       ),
-                      const Icon(
-                        Icons.keyboard_arrow_down_rounded,
-                        color: Color(0xFF64748B),
-                        size: 20,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // 4. Password Field
-          _buildSimpleTextField(
-            controller: _passwordController,
-            label: 'Password',
-            hintText: 'Enter your password',
-            obscureText: true,
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'Please enter your password';
-              }
-              if (value.trim().length < 6) {
-                return 'Password must be at least 6 characters';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 12),
-
-          // 5. Confirm Password Field
-          _buildSimpleTextField(
-            controller: _confirmPasswordController,
-            label: 'Confirm Password',
-            hintText: 'Re-enter your password',
-            obscureText: true,
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'Please confirm your password';
-              }
-              if (value.trim() != _passwordController.text.trim()) {
-                return 'Passwords do not match';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 16),
-
-          // Error Banner
-          if (_errorMessage != null) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFEF2F2),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFFCA5A5)),
-              ),
-              child: Text(
-                _errorMessage!,
-                style: const TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 13,
-                  color: Color(0xFF991B1B),
-                ),
-              ),
-            ),
-            const SizedBox(height: 14),
-          ],
-
-          // Next Button
-          SizedBox(
-            height: 44,
-            child: ElevatedButton(
-              onPressed: () {
-                if (_nameController.text.trim().isEmpty) {
-                  setState(() => _errorMessage = 'Please enter your full name');
-                  return;
-                }
-                if (_emailController.text.trim().isEmpty || !RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(_emailController.text.trim())) {
-                  setState(() => _errorMessage = 'Please enter a valid email address');
-                  return;
-                }
-                if (_selectedPreacher == null) {
-                  setState(() => _errorMessage = 'Please select your assigned preacher');
-                  return;
-                }
-                if (_passwordController.text.trim().length < 6) {
-                  setState(() => _errorMessage = 'Password must be at least 6 characters');
-                  return;
-                }
-                if (_passwordController.text.trim() != _confirmPasswordController.text.trim()) {
-                  setState(() => _errorMessage = 'Passwords do not match');
-                  return;
-                }
-                setState(() {
-                  _errorMessage = null;
-                  _currentStep = 1;
-                });
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0F172A),
-                foregroundColor: Colors.white,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'Next: Personal Details',
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
                     ),
-                  ),
-                  SizedBox(width: 8),
-                  Icon(Icons.arrow_forward_rounded, size: 18, color: Colors.white),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCardTwo() {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color.fromRGBO(0, 0, 0, 0.03),
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Step 2: Personal Details',
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF0F172A),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Text(
-                  '2 / 2',
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF64748B),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-
-          // 1. WhatsApp / Mobile Number Field
-          _buildSimpleTextField(
-            controller: _whatsappController,
-            label: 'WhatsApp / Mobile Number',
-            hintText: 'Enter 10-digit WhatsApp number',
-            keyboardType: TextInputType.phone,
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'Please enter your WhatsApp number';
-              }
-              final cleaned = value.trim().replaceAll(RegExp(r'\D'), '');
-              if (cleaned.length < 10) {
-                return 'Please enter a valid 10-digit mobile number';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 12),
-
-          // 2. Date of Birth (DOB) Field
-          _buildSimpleTextField(
-            controller: _dobController,
-            label: 'Date of Birth (DOB)',
-            hintText: 'Select your date of birth',
-            readOnly: true,
-            onTap: () => _selectDob(context),
-            suffixIcon: const Icon(Icons.calendar_today_rounded, color: Color(0xFF64748B), size: 18),
-            validator: (value) {
-              if (value == null || value.trim().isEmpty || _selectedDob == null) {
-                return 'Please select your Date of Birth';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 12),
-
-          // 3. FOLK Joining Date Field
-          _buildSimpleTextField(
-            controller: _joiningDateController,
-            label: 'FOLK Joining Date',
-            hintText: 'Select your FOLK joining date',
-            readOnly: true,
-            onTap: () => _selectJoiningDate(context),
-            suffixIcon: const Icon(Icons.calendar_month_rounded, color: Color(0xFF64748B), size: 18),
-            validator: (value) {
-              if (value == null || value.trim().isEmpty || _selectedJoiningDate == null) {
-                return 'Please select your FOLK Joining Date';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 16),
-
-          // Error Banner
-          if (_errorMessage != null) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFEF2F2),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFFCA5A5)),
-              ),
-              child: Text(
-                _errorMessage!,
-                style: const TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 13,
-                  color: Color(0xFF991B1B),
+                  ],
                 ),
               ),
             ),
-            const SizedBox(height: 14),
-          ],
-
-          // Success Banner
-          if (_successMessage != null) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF0FDF4),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFF86EFAC)),
-              ),
-              child: Text(
-                _successMessage!,
-                style: const TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 13,
-                  color: Color(0xFF166534),
-                ),
-              ),
-            ),
-            const SizedBox(height: 14),
-          ],
-
-          // Action Buttons Row: Back & Create Account
-          Row(
-            children: [
-              SizedBox(
+            const SizedBox(width: 10),
+            Expanded(
+              child: SizedBox(
                 height: 44,
-                width: 80,
-                child: OutlinedButton(
-                  onPressed: () {
-                    setState(() {
-                      _currentStep = 0;
-                      _errorMessage = null;
-                    });
-                  },
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF0F172A),
-                    side: const BorderSide(color: Color(0xFFCBD5E1)),
-                    padding: EdgeInsets.zero,
+                child: ElevatedButton(
+                  onPressed: _isLoading
+                      ? null
+                      : () {
+                          if (_whatsappController.text.trim().isEmpty) {
+                            setState(() => _errorMessage = 'Please enter your WhatsApp number');
+                            return;
+                          }
+                          final cleanedPhone = _whatsappController.text.trim().replaceAll(RegExp(r'\D'), '');
+                          if (cleanedPhone.length < 10) {
+                            setState(() => _errorMessage = 'Please enter a valid 10-digit mobile number');
+                            return;
+                          }
+                          if (_selectedDob == null) {
+                            setState(() => _errorMessage = 'Please select your Date of Birth');
+                            return;
+                          }
+                          if (_selectedJoiningDate == null) {
+                            setState(() => _errorMessage = 'Please select your FOLK Joining Date');
+                            return;
+                          }
+                          setState(() {
+                            _errorMessage = null;
+                          });
+                          _handleSignup();
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0F172A),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.arrow_back_rounded, size: 16, color: Color(0xFF0F172A)),
-                      SizedBox(width: 4),
-                      Text(
-                        'Back',
-                        style: TextStyle(
-                          fontFamily: 'Inter',
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF0F172A),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: SizedBox(
-                  height: 44,
-                  child: ElevatedButton(
-                    onPressed: _isLoading
-                        ? null
-                        : () {
-                            if (_whatsappController.text.trim().isEmpty) {
-                              setState(() => _errorMessage = 'Please enter your WhatsApp number');
-                              return;
-                            }
-                            final cleanedPhone = _whatsappController.text.trim().replaceAll(RegExp(r'\D'), '');
-                            if (cleanedPhone.length < 10) {
-                              setState(() => _errorMessage = 'Please enter a valid 10-digit mobile number');
-                              return;
-                            }
-                            if (_selectedDob == null) {
-                              setState(() => _errorMessage = 'Please select your Date of Birth');
-                              return;
-                            }
-                            if (_selectedJoiningDate == null) {
-                              setState(() => _errorMessage = 'Please select your FOLK Joining Date');
-                              return;
-                            }
-                            setState(() {
-                              _errorMessage = null;
-                            });
-                            _handleSignup();
-                          },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0F172A),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2.5,
-                            ),
-                          )
-                        : const Text(
-                            'Create Account',
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2.5,
                           ),
-                  ),
+                        )
+                      : const Text(
+                          'Create Account',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
                 ),
               ),
-            ],
-          ),
-        ],
-      ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
-  Widget _buildTwoCardForm() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildStepIndicator(),
-        const SizedBox(height: 16),
-        if (_currentStep == 0) _buildCardOne() else _buildCardTwo(),
-      ],
-    );
+  Widget _buildSignupForm() {
+    return _currentStep == 0 ? _buildPageOne() : _buildPageTwo();
   }
 
   @override
@@ -1251,8 +1124,8 @@ class _SignupScreenState extends State<SignupScreen> {
                     ),
                     const SizedBox(height: 28),
 
-                    // 2-Card Multi-Step Signup Form
-                    _buildTwoCardForm(),
+                    // Clean Direct Screen Multi-Step Form
+                    _buildSignupForm(),
 
                     const SizedBox(height: 24),
 
