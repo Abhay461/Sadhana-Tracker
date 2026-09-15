@@ -487,7 +487,8 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
           final o = activities['onlineSession'] as Map;
           if (o['attended'] == true) {
             final timeSpan = (o['timeSpan'] ?? o['time'] ?? o['duration'] ?? '').toString();
-            final displaySpan = timeSpan.isNotEmpty && timeSpan.toLowerCase() != 'attended' ? timeSpan : 'Attended';
+            final cleaned = _cleanDurationOnly(timeSpan);
+            final displaySpan = cleaned.isNotEmpty && cleaned.toLowerCase() != 'attended' ? cleaned : 'Attended';
             result.add({
               'id': u['_id'] ?? u['id'],
               'date': date,
@@ -552,7 +553,8 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
           final sb = activities['srimadBhagavatamClass'] as Map;
           if (sb['attended'] == true) {
             final timeSpan = (sb['timeSpan'] ?? sb['time'] ?? sb['duration'] ?? '').toString();
-            final displaySpan = timeSpan.isNotEmpty && timeSpan.toLowerCase() != 'attended' ? timeSpan : 'Attended';
+            final cleaned = _cleanDurationOnly(timeSpan);
+            final displaySpan = cleaned.isNotEmpty && cleaned.toLowerCase() != 'attended' ? cleaned : 'Attended';
             result.add({
               'id': u['_id'] ?? u['id'],
               'date': date,
@@ -569,7 +571,8 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
           final bg = activities['bhagavadGitaClass'] as Map;
           if (bg['attended'] == true) {
             final timeSpan = (bg['timeSpan'] ?? bg['time'] ?? bg['duration'] ?? '').toString();
-            final displaySpan = timeSpan.isNotEmpty && timeSpan.toLowerCase() != 'attended' ? timeSpan : 'Attended';
+            final cleaned = _cleanDurationOnly(timeSpan);
+            final displaySpan = cleaned.isNotEmpty && cleaned.toLowerCase() != 'attended' ? cleaned : 'Attended';
             result.add({
               'id': u['_id'] ?? u['id'],
               'date': date,
@@ -1959,25 +1962,41 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     if (dtEnd.isBefore(dtStart)) {
       dtEnd = dtEnd.add(const Duration(days: 1));
     }
-    final startStr = DateFormat('hh:mm a').format(dtStart);
-    final endStr = DateFormat('hh:mm a').format(dtEnd);
     final durationMins = dtEnd.difference(dtStart).inMinutes;
 
     if (durationMins > 0) {
-      String durationText;
       if (durationMins % 60 == 0) {
         final hrs = durationMins ~/ 60;
-        durationText = '$hrs hr${hrs > 1 ? "s" : ""}';
+        return '$hrs hr${hrs > 1 ? "s" : ""}';
       } else if (durationMins >= 60) {
         final hrs = durationMins ~/ 60;
         final mins = durationMins % 60;
-        durationText = '$hrs hr $mins mins';
+        return '$hrs hr $mins mins';
       } else {
-        durationText = '$durationMins mins';
+        return '$durationMins mins';
       }
-      return '$startStr to $endStr ($durationText)';
     }
-    return '$startStr to $endStr';
+    return '0 mins';
+  }
+
+  String _cleanDurationOnly(String str) {
+    if (str.isEmpty) return str;
+    var s = str.trim();
+    while (s.contains('(') && s.contains(')')) {
+      final firstParen = s.indexOf('(');
+      final lastParen = s.lastIndexOf(')');
+      if (lastParen > firstParen) {
+        final inside = s.substring(firstParen + 1, lastParen).trim();
+        if (inside.toLowerCase() == 'attended') break;
+        s = inside;
+      } else {
+        break;
+      }
+    }
+    if (s.contains(' to ') && (s.contains('AM') || s.contains('PM'))) {
+      return 'Attended';
+    }
+    return s;
   }
 
   String _getSadhanaValueText(String activity, String workStarted, [String workCompleted = '']) {
@@ -2001,18 +2020,14 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       if (wc.isNotEmpty) return wc;
       return 'Attended';
     } else if (activity == 'Online Session' || activity == 'Srimad Bhagavatam Class' || activity == 'Bhagavad Gita Class') {
-      if (wc.isNotEmpty && wc.toLowerCase() != 'attended' && wc.toLowerCase() != 'completed') {
-        return wc;
+      if (wc.isNotEmpty && wc.toLowerCase() != 'attended' && wc.toLowerCase() != 'completed' && wc != 'null') {
+        final cleaned = _cleanDurationOnly(wc);
+        if (cleaned.isNotEmpty) return cleaned;
       }
-      if (ws.contains('(')) {
-        final firstParen = ws.indexOf('(');
-        final lastParen = ws.lastIndexOf(')');
-        if (lastParen > firstParen) {
-          final extracted = ws.substring(firstParen + 1, lastParen).trim();
-          if (extracted.toLowerCase() != 'attended') return extracted;
-        }
+      if (ws.isNotEmpty) {
+        final cleaned = _cleanDurationOnly(ws);
+        if (cleaned.isNotEmpty && cleaned.toLowerCase() != 'attended' && cleaned != ws) return cleaned;
       }
-      if (wc.isNotEmpty) return wc;
       return 'Attended';
     } else if (activity == 'Morning') {
       if (ws.contains('Wake-up:')) return ws.split('Wake-up:')[1].replaceAll(')', '').trim();
