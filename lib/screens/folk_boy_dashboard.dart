@@ -254,7 +254,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       profileData['preacher_id'] ??= profileData['preacherId'];
 
       final role = profileData['role'] as String?;
-      if (role != 'folk_boy' && role != 'residency' && role != 'admin') {
+      if (role != 'folk_boy' && role != 'residency') {
         if (mounted) {
           if (role == 'preacher') {
             Navigator.pushReplacementNamed(context, '/preacher');

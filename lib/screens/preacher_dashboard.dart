@@ -82,7 +82,7 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
       }
 
       final role = (profileData is Map ? profileData['role'] : null) as String?;
-      if (role != 'preacher' && role != 'admin') {
+      if (role != 'preacher') {
         if (mounted) {
           Navigator.pushReplacementNamed(context, '/home');
         }

@@ -43,8 +43,6 @@ class _SplashScreenState extends State<SplashScreen> {
     if (!mounted) return;
     if (role == 'preacher') {
       Navigator.pushReplacementNamed(context, '/preacher', arguments: profileData);
-    } else if (role == 'admin') {
-      Navigator.pushReplacementNamed(context, '/admin-control-panel', arguments: profileData);
     } else {
       Navigator.pushReplacementNamed(context, '/folk-boy', arguments: profileData);
     }

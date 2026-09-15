@@ -96,8 +96,6 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           // DIRECT Seamless Navigation - No 2nd Loading Page!
           if (role == 'preacher') {
             Navigator.pushReplacementNamed(context, '/preacher', arguments: profileData);
-          } else if (role == 'admin') {
-            Navigator.pushReplacementNamed(context, '/admin-control-panel', arguments: profileData);
           } else {
             Navigator.pushReplacementNamed(context, '/folk-boy', arguments: profileData);
           }

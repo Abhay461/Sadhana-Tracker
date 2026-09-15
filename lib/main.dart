@@ -7,8 +7,6 @@ import 'screens/login_screen.dart';
 import 'screens/signup_screen.dart';
 import 'screens/home_wrapper.dart';
 import 'screens/folk_boy_dashboard.dart';
-import 'screens/preacher_dashboard.dart';
-import 'screens/admin_dashboard.dart';
 import 'screens/reset_password_screen.dart';
 
 import 'utils/notification_helper.dart';
@@ -55,7 +53,6 @@ class MyApp extends StatelessWidget {
         '/folk-boy': (context) => const FolkBoyDashboard(),
         '/residency': (context) => const FolkBoyDashboard(),
         '/preacher': (context) => const PreacherDashboard(),
-        '/admin-control-panel': (context) => const AdminDashboard(),
       },
       debugShowCheckedModeBanner: false,
     );
