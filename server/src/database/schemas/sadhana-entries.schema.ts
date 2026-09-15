@@ -66,18 +66,20 @@ export class Activities {
   @Prop({
     type: {
       attended: { type: Boolean, default: false },
+      timeSpan: { type: String, default: null },
     },
-    default: { attended: false },
+    default: { attended: false, timeSpan: null },
   })
-  srimadBhagavatamClass: { attended: boolean };
+  srimadBhagavatamClass: { attended: boolean; timeSpan?: string };
 
   @Prop({
     type: {
       attended: { type: Boolean, default: false },
+      timeSpan: { type: String, default: null },
     },
-    default: { attended: false },
+    default: { attended: false, timeSpan: null },
   })
-  bhagavadGitaClass: { attended: boolean };
+  bhagavadGitaClass: { attended: boolean; timeSpan?: string };
 
   @Prop({
     type: {

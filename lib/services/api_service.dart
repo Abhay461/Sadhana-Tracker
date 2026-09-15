@@ -83,18 +83,38 @@ class ApiService {
     String lower = '$workStarted $description $category'.toLowerCase();
 
     if (lower.contains('wake-up') || lower.contains('wakeup') || lower.contains('wake up') || lower.contains('morning')) {
-      activities['wakeUpTime'] = workCompleted.isNotEmpty ? workCompleted : '05:30 AM';
+      String t = workCompleted;
+      if (t.isEmpty) {
+        final match = RegExp(r'wake-up:\s*([^)]+)', caseSensitive: false).firstMatch(workStarted);
+        if (match != null) t = match.group(1)!.trim();
+      }
+      activities['wakeUpTime'] = t.isNotEmpty ? t : '05:30 AM';
     } else if (lower.contains('sleep')) {
-      activities['sleepTime'] = workCompleted.isNotEmpty ? workCompleted : '10:00 PM';
+      String t = workCompleted;
+      if (t.isEmpty) {
+        final match = RegExp(r'time:\s*([^)]+)', caseSensitive: false).firstMatch(workStarted);
+        if (match != null) t = match.group(1)!.trim();
+      }
+      activities['sleepTime'] = t.isNotEmpty ? t : '10:00 PM';
     } else if (lower.contains('mangla')) {
-      activities['manglaArti'] = {'attended': true, 'time': workCompleted.isNotEmpty ? workCompleted : '04:30 AM'};
+      String t = workCompleted;
+      if (t.isEmpty) {
+        final match = RegExp(r'\(([^)]+)\)').firstMatch(workStarted);
+        if (match != null) t = match.group(1)!.trim();
+      }
+      activities['manglaArti'] = {'attended': true, 'time': t.isNotEmpty ? t : '04:30 AM'};
     } else if (lower.contains('chanting')) {
       RegExp reg = RegExp(r'(\d+)\s*round');
       Match? match = reg.firstMatch(lower);
       int rounds = match != null ? int.parse(match.group(1)!) : 16;
       activities['chanting'] = {'rounds': rounds};
     } else if (lower.contains('online')) {
-      activities['onlineSession'] = {'attended': true};
+      String t = workCompleted;
+      if (t.isEmpty || t.toLowerCase() == 'attended') {
+        final match = RegExp(r'\(([^)]+)\)').firstMatch(workStarted);
+        if (match != null) t = match.group(1)!.trim();
+      }
+      activities['onlineSession'] = {'attended': true, if (t.isNotEmpty && t.toLowerCase() != 'attended') 'timeSpan': t};
     } else if (lower.contains('book') || lower.contains('reading')) {
       String bookName = workStarted.replaceFirst(RegExp(r'^Book Reading\s*-\s*', caseSensitive: false), '').trim();
       if (bookName.isEmpty) bookName = 'Bhagavad Gita';
@@ -106,9 +126,19 @@ class ApiService {
     } else if (lower.contains('temple')) {
       activities['templeVisit'] = {'visited': true};
     } else if (lower.contains('bhagavatam')) {
-      activities['srimadBhagavatamClass'] = {'attended': true};
+      String t = workCompleted;
+      if (t.isEmpty || t.toLowerCase() == 'attended') {
+        final match = RegExp(r'\(([^)]+)\)').firstMatch(workStarted);
+        if (match != null) t = match.group(1)!.trim();
+      }
+      activities['srimadBhagavatamClass'] = {'attended': true, if (t.isNotEmpty && t.toLowerCase() != 'attended') 'timeSpan': t};
     } else if (lower.contains('gita')) {
-      activities['bhagavadGitaClass'] = {'attended': true};
+      String t = workCompleted;
+      if (t.isEmpty || t.toLowerCase() == 'attended') {
+        final match = RegExp(r'\(([^)]+)\)').firstMatch(workStarted);
+        if (match != null) t = match.group(1)!.trim();
+      }
+      activities['bhagavadGitaClass'] = {'attended': true, if (t.isNotEmpty && t.toLowerCase() != 'attended') 'timeSpan': t};
     } else if (lower.contains('ekadashi')) {
       activities['ekadashiFasting'] = {'fastingType': 'Fasting'};
     }

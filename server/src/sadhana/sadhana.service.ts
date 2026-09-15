@@ -111,17 +111,37 @@ export class SadhanaService {
     const lower = (workStarted + ' ' + (body.description || '')).toLowerCase();
 
     if (lower.includes('wake-up') || lower.includes('wake up')) {
-      newAct.wakeUpTime = workCompleted || '05:30 AM';
+      let t = workCompleted;
+      if (!t) {
+        const match = workStarted.match(/wake-up:\s*([^)]+)/i);
+        if (match) t = match[1].trim();
+      }
+      newAct.wakeUpTime = t || '05:30 AM';
     } else if (lower.includes('sleep')) {
-      newAct.sleepTime = workCompleted || '10:00 PM';
+      let t = workCompleted;
+      if (!t) {
+        const match = workStarted.match(/time:\s*([^)]+)/i);
+        if (match) t = match[1].trim();
+      }
+      newAct.sleepTime = t || '10:00 PM';
     } else if (lower.includes('mangla')) {
-      newAct.manglaArti = { attended: true, time: workCompleted || '04:30 AM' };
+      let t = workCompleted;
+      if (!t) {
+        const match = workStarted.match(/\(([^)]+)\)/);
+        if (match) t = match[1].trim();
+      }
+      newAct.manglaArti = { attended: true, time: t || '04:30 AM' };
     } else if (lower.includes('chanting')) {
       const match = lower.match(/(\d+)\s*round/);
       const rounds = match ? parseInt(match[1], 10) : 16;
       newAct.chanting = { rounds };
     } else if (lower.includes('online')) {
-      newAct.onlineSession = { attended: true };
+      let t = workCompleted;
+      if (!t || t.toLowerCase() === 'attended') {
+        const match = workStarted.match(/\(([^)]+)\)/);
+        if (match) t = match[1].trim();
+      }
+      newAct.onlineSession = { attended: true, timeSpan: t && t.toLowerCase() !== 'attended' ? t : '' };
     } else if (lower.includes('book')) {
       newAct.bookReading = { bookName: workStarted, pagesOrMinutes: workCompleted || '30 mins' };
     } else if (lower.includes('service')) {
@@ -129,9 +149,19 @@ export class SadhanaService {
     } else if (lower.includes('temple')) {
       newAct.templeVisit = { visited: true };
     } else if (lower.includes('bhagavatam')) {
-      newAct.srimadBhagavatamClass = { attended: true };
+      let t = workCompleted;
+      if (!t || t.toLowerCase() === 'attended') {
+        const match = workStarted.match(/\(([^)]+)\)/);
+        if (match) t = match[1].trim();
+      }
+      newAct.srimadBhagavatamClass = { attended: true, timeSpan: t && t.toLowerCase() !== 'attended' ? t : '' };
     } else if (lower.includes('bhagavad') || lower.includes('gita')) {
-      newAct.bhagavadGitaClass = { attended: true };
+      let t = workCompleted;
+      if (!t || t.toLowerCase() === 'attended') {
+        const match = workStarted.match(/\(([^)]+)\)/);
+        if (match) t = match[1].trim();
+      }
+      newAct.bhagavadGitaClass = { attended: true, timeSpan: t && t.toLowerCase() !== 'attended' ? t : '' };
     } else if (lower.includes('ekadashi')) {
       newAct.ekadashiFasting = { fastingType: 'Fasting' };
     }

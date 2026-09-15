@@ -58,6 +58,10 @@ export class ClassAttendanceDto {
   @IsBoolean()
   @IsOptional()
   attended?: boolean;
+
+  @IsString()
+  @IsOptional()
+  timeSpan?: string;
 }
 
 export class EkadashiFastingDto {

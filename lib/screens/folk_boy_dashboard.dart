@@ -137,12 +137,99 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
 
   void _handlePaymentSuccess(PaymentSuccessResponse response) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Payment Successful! Payment ID: ${response.paymentId}'),
-        backgroundColor: Colors.green,
-        duration: const Duration(seconds: 5),
-      ),
+    _showDonationThankYouDialog(response.paymentId);
+  }
+
+  void _showDonationThankYouDialog(String? paymentId) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 26),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFFF7ED),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.volunteer_activism_rounded,
+                    color: Color(0xFFEA580C),
+                    size: 38,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Hare Krishna! 🙏',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0F172A),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Thanks For Donation',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFEA580C),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Your generous contribution supports Vedic wisdom and community programs. May Lord Krishna bless you!',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey.shade600,
+                    height: 1.4,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                if (paymentId != null && paymentId.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'Payment ID: $paymentId',
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF475569)),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: 130,
+                  height: 40,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F172A),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    child: const Text(
+                      'OK',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -399,13 +486,14 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         if (activities.containsKey('onlineSession') && activities['onlineSession'] is Map) {
           final o = activities['onlineSession'] as Map;
           if (o['attended'] == true) {
-            final timeSpan = o['timeSpan'] ?? 'Attended';
+            final timeSpan = (o['timeSpan'] ?? o['time'] ?? o['duration'] ?? '').toString();
+            final displaySpan = timeSpan.isNotEmpty && timeSpan.toLowerCase() != 'attended' ? timeSpan : 'Attended';
             result.add({
               'id': u['_id'] ?? u['id'],
               'date': date,
               'category': 'folk_sadhna',
-              'work_started': 'Online Session ($timeSpan)',
-              'work_completed': timeSpan,
+              'work_started': displaySpan != 'Attended' ? 'Online Session ($displaySpan)' : 'Online Session',
+              'work_completed': displaySpan,
               'is_completed': true,
               'points': 5,
             });
@@ -463,12 +551,14 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         if (activities.containsKey('srimadBhagavatamClass') && activities['srimadBhagavatamClass'] is Map) {
           final sb = activities['srimadBhagavatamClass'] as Map;
           if (sb['attended'] == true) {
+            final timeSpan = (sb['timeSpan'] ?? sb['time'] ?? sb['duration'] ?? '').toString();
+            final displaySpan = timeSpan.isNotEmpty && timeSpan.toLowerCase() != 'attended' ? timeSpan : 'Attended';
             result.add({
               'id': u['_id'] ?? u['id'],
               'date': date,
               'category': 'folk_sadhna',
-              'work_started': 'Srimad Bhagavatam Class',
-              'work_completed': 'Attended',
+              'work_started': displaySpan != 'Attended' ? 'Srimad Bhagavatam Class ($displaySpan)' : 'Srimad Bhagavatam Class',
+              'work_completed': displaySpan,
               'is_completed': true,
               'points': 5,
             });
@@ -478,12 +568,14 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         if (activities.containsKey('bhagavadGitaClass') && activities['bhagavadGitaClass'] is Map) {
           final bg = activities['bhagavadGitaClass'] as Map;
           if (bg['attended'] == true) {
+            final timeSpan = (bg['timeSpan'] ?? bg['time'] ?? bg['duration'] ?? '').toString();
+            final displaySpan = timeSpan.isNotEmpty && timeSpan.toLowerCase() != 'attended' ? timeSpan : 'Attended';
             result.add({
               'id': u['_id'] ?? u['id'],
               'date': date,
               'category': 'folk_sadhna',
-              'work_started': 'Bhagavad Gita Class',
-              'work_completed': 'Attended',
+              'work_started': displaySpan != 'Attended' ? 'Bhagavad Gita Class ($displaySpan)' : 'Bhagavad Gita Class',
+              'work_completed': displaySpan,
               'is_completed': true,
               'points': 5,
             });
@@ -1860,33 +1952,85 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     }
   }
 
-  String _getSadhanaValueText(String activity, String workStarted) {
+  String _formatTimeSpanWithDuration(TimeOfDay start, TimeOfDay end) {
+    final now = DateTime.now();
+    final dtStart = DateTime(now.year, now.month, now.day, start.hour, start.minute);
+    var dtEnd = DateTime(now.year, now.month, now.day, end.hour, end.minute);
+    if (dtEnd.isBefore(dtStart)) {
+      dtEnd = dtEnd.add(const Duration(days: 1));
+    }
+    final startStr = DateFormat('hh:mm a').format(dtStart);
+    final endStr = DateFormat('hh:mm a').format(dtEnd);
+    final durationMins = dtEnd.difference(dtStart).inMinutes;
+
+    if (durationMins > 0) {
+      String durationText;
+      if (durationMins % 60 == 0) {
+        final hrs = durationMins ~/ 60;
+        durationText = '$hrs hr${hrs > 1 ? "s" : ""}';
+      } else if (durationMins >= 60) {
+        final hrs = durationMins ~/ 60;
+        final mins = durationMins % 60;
+        durationText = '$hrs hr $mins mins';
+      } else {
+        durationText = '$durationMins mins';
+      }
+      return '$startStr to $endStr ($durationText)';
+    }
+    return '$startStr to $endStr';
+  }
+
+  String _getSadhanaValueText(String activity, String workStarted, [String workCompleted = '']) {
     final String ws = workStarted;
+    final String wc = workCompleted;
+
     if (activity == 'Chanting') {
       if (ws.contains('-')) return ws.split('-').skip(1).join('-').trim();
+      if (wc.isNotEmpty) return wc;
       return 'Completed';
     } else if (activity == 'Book Reading' || activity == 'Service') {
       if (ws.contains('-')) return ws.split('-').skip(1).join('-').trim();
+      if (wc.isNotEmpty) return wc;
       return 'Completed';
     } else if (activity == 'Mangla Arti') {
-      if (ws.contains('(')) return ws.substring(ws.indexOf('(') + 1, ws.indexOf(')')).trim();
+      if (ws.contains('(')) {
+        final firstParen = ws.indexOf('(');
+        final lastParen = ws.lastIndexOf(')');
+        if (lastParen > firstParen) return ws.substring(firstParen + 1, lastParen).trim();
+      }
+      if (wc.isNotEmpty) return wc;
       return 'Attended';
     } else if (activity == 'Online Session' || activity == 'Srimad Bhagavatam Class' || activity == 'Bhagavad Gita Class') {
-      if (ws.contains('(')) return ws.substring(ws.indexOf('(') + 1, ws.indexOf(')')).trim();
+      if (wc.isNotEmpty && wc.toLowerCase() != 'attended' && wc.toLowerCase() != 'completed') {
+        return wc;
+      }
+      if (ws.contains('(')) {
+        final firstParen = ws.indexOf('(');
+        final lastParen = ws.lastIndexOf(')');
+        if (lastParen > firstParen) {
+          final extracted = ws.substring(firstParen + 1, lastParen).trim();
+          if (extracted.toLowerCase() != 'attended') return extracted;
+        }
+      }
+      if (wc.isNotEmpty) return wc;
       return 'Attended';
     } else if (activity == 'Morning') {
       if (ws.contains('Wake-up:')) return ws.split('Wake-up:')[1].replaceAll(')', '').trim();
+      if (wc.isNotEmpty) return wc;
       return 'Completed';
     } else if (activity == 'Sleep') {
       if (ws.contains('Time:')) return ws.split('Time:')[1].replaceAll(')', '').trim();
+      if (wc.isNotEmpty) return wc;
       return 'Completed';
     } else if (activity == 'Ekadashi Fasting' || activity == 'Ekadashi') {
       if (ws.contains(':')) return ws.split(':')[1].trim();
+      if (wc.isNotEmpty) return wc;
       return 'Fasting';
     } else if (activity == 'Temple Visit') {
+      if (wc.isNotEmpty) return wc;
       return 'Visited';
     }
-    return ws == activity ? 'Completed' : ws;
+    return wc.isNotEmpty ? wc : (ws == activity ? 'Completed' : ws);
   }
 
   Widget _buildHistoryTab() {
@@ -2087,7 +2231,8 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                             final record = _getSadhanaRecordForActivityAndDate(key, dateStr);
                             final isLogged = record != null;
                             final String workStarted = record != null ? (record['work_started'] ?? '') : '';
-                            final String valText = isLogged ? _getSadhanaValueText(key, workStarted) : 'Not Logged';
+                            final String workCompleted = record != null ? (record['work_completed'] ?? '') : '';
+                            final String valText = isLogged ? _getSadhanaValueText(key, workStarted, workCompleted) : 'Not Logged';
                             final id = record != null ? (record['id'] ?? record['_id']) : null;
                             final isLast = idx == standardActivities.length - 1;
 
@@ -2523,243 +2668,253 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                left: 20,
-                right: 20,
-                top: 20,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.85,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(24),
+                  topRight: Radius.circular(24),
+                ),
               ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: Colors.grey[300],
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 20,
+                  right: 20,
+                  top: 16,
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+                ),
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 36,
+                          height: 4,
                           decoration: BoxDecoration(
-                            color: const Color(0xFFFFF7ED),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(
-                            Icons.volunteer_activism_rounded,
-                            color: Color(0xFFEA580C),
-                            size: 24,
+                            color: const Color(0xFFE2E8F0),
+                            borderRadius: BorderRadius.circular(2),
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        const Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Make a Seva Donation',
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF7ED),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(
+                              Icons.volunteer_activism_rounded,
+                              color: Color(0xFFEA580C),
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Make a Seva Donation',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF0F172A),
+                                ),
+                              ),
+                              Text(
+                                'Support Vedic Wisdom & Community Programs',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      const Text(
+                        'Select Seva Category',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF334155),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: selectedCategory,
+                            isExpanded: true,
+                            icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                            items: sevaCategories.map((cat) {
+                              return DropdownMenuItem(
+                                value: cat,
+                                child: Text(cat, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF0F172A))),
+                              );
+                            }).toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setModalState(() {
+                                  selectedCategory = val;
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      const Text(
+                        'Choose Amount (₹)',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF334155),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: presetAmounts.map((amt) {
+                          final bool isSelected = selectedPreset == amt;
+                          return ChoiceChip(
+                            label: Text(
+                              '₹$amt',
                               style: TextStyle(
-                                fontSize: 18,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFF0F172A),
+                                fontSize: 13,
+                                color: isSelected ? Colors.white : const Color(0xFF334155),
                               ),
                             ),
-                            Text(
-                              'Support Vedic Wisdom & Community Programs',
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                color: Color(0xFF64748B),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      'Select Seva Category',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF334155),
+                            selected: isSelected,
+                            selectedColor: const Color(0xFFEA580C),
+                            backgroundColor: const Color(0xFFF1F5F9),
+                            onSelected: (bool selected) {
+                              if (selected) {
+                                setModalState(() {
+                                  selectedPreset = amt;
+                                  customAmountController.text = amt.toString();
+                                });
+                              }
+                            },
+                          );
+                        }).toList(),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: selectedCategory,
-                          isExpanded: true,
-                          icon: const Icon(Icons.keyboard_arrow_down_rounded),
-                          items: sevaCategories.map((cat) {
-                            return DropdownMenuItem(
-                              value: cat,
-                              child: Text(cat, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF0F172A))),
-                            );
-                          }).toList(),
-                          onChanged: (val) {
-                            if (val != null) {
-                              setModalState(() {
-                                selectedCategory = val;
-                              });
-                            }
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    const Text(
-                      'Choose Amount (₹)',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF334155),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: presetAmounts.map((amt) {
-                        final bool isSelected = selectedPreset == amt;
-                        return ChoiceChip(
-                          label: Text(
-                            '₹$amt',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                              color: isSelected ? Colors.white : const Color(0xFF334155),
-                            ),
-                          ),
-                          selected: isSelected,
-                          selectedColor: const Color(0xFFEA580C),
-                          backgroundColor: const Color(0xFFF1F5F9),
-                          onSelected: (bool selected) {
-                            if (selected) {
-                              setModalState(() {
-                                selectedPreset = amt;
-                                customAmountController.text = amt.toString();
-                              });
-                            }
-                          },
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: customAmountController,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                        labelText: 'Enter Custom Amount (₹)',
-                        prefixText: '₹ ',
-                        filled: true,
-                        fillColor: const Color(0xFFF8FAFC),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFEA580C), width: 1.5),
-                        ),
-                      ),
-                      onChanged: (val) {
-                        final parsed = int.tryParse(val);
-                        if (parsed != null && presetAmounts.contains(parsed)) {
-                          setModalState(() {
-                            selectedPreset = parsed;
-                          });
-                        } else {
-                          setModalState(() {
-                            selectedPreset = 0;
-                          });
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: remarksController,
-                      decoration: InputDecoration(
-                        labelText: 'Optional Remarks / Prayer',
-                        hintText: 'e.g. For peace, family well-being',
-                        filled: true,
-                        fillColor: const Color(0xFFF8FAFC),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFEA580C), width: 1.5),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 22),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          final double? finalAmt = double.tryParse(customAmountController.text.trim());
-                          if (finalAmt == null || finalAmt <= 0) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Please enter a valid donation amount'),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                            return;
-                          }
-                          Navigator.pop(ctx);
-                          _openRazorpayDonationCheckout(finalAmt, selectedCategory, remarksController.text.trim());
-                        },
-                        icon: const Icon(Icons.payment_rounded, color: Colors.white),
-                        label: const Text(
-                          'Proceed to Pay via Razorpay',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFEA580C),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: customAmountController,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          labelText: 'Enter Custom Amount (₹)',
+                          prefixText: '₹ ',
+                          filled: true,
+                          fillColor: const Color(0xFFF8FAFC),
+                          border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Color(0xFFEA580C), width: 1.5),
+                          ),
+                        ),
+                        onChanged: (val) {
+                          final parsed = int.tryParse(val);
+                          if (parsed != null && presetAmounts.contains(parsed)) {
+                            setModalState(() {
+                              selectedPreset = parsed;
+                            });
+                          } else {
+                            setModalState(() {
+                              selectedPreset = 0;
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: remarksController,
+                        decoration: InputDecoration(
+                          labelText: 'Optional Remarks / Prayer',
+                          hintText: 'e.g. For peace, family well-being',
+                          filled: true,
+                          fillColor: const Color(0xFFF8FAFC),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Color(0xFFEA580C), width: 1.5),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 22),
+                      Center(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            final double? finalAmt = double.tryParse(customAmountController.text.trim());
+                            if (finalAmt == null || finalAmt <= 0) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Please enter a valid donation amount'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                              return;
+                            }
+                            Navigator.pop(ctx);
+                            _openRazorpayDonationCheckout(finalAmt, selectedCategory, remarksController.text.trim());
+                          },
+                          icon: const Icon(Icons.payment_rounded, color: Colors.white, size: 18),
+                          label: const Text(
+                            'Proceed to Pay via Razorpay',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFEA580C),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 36),
+                    ],
+                  ),
                 ),
               ),
             );
@@ -4755,52 +4910,8 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       });
 
       final String ws = match['work_started'].toString();
-      if (activity == 'Chanting') {
-        if (ws.contains('-')) {
-          return ws.split('-').skip(1).join('-').trim();
-        }
-        return 'Done';
-      } else if (activity == 'Book Reading') {
-        if (ws.contains('-')) {
-          return ws.split('-').skip(1).join('-').trim();
-        }
-        return 'Done';
-      } else if (activity == 'Service') {
-        if (ws.contains('-')) {
-          return ws.split('-').skip(1).join('-').trim();
-        }
-        return 'Done';
-      } else if (activity == 'Mangla Arti') {
-        if (ws.contains('(')) {
-          return ws.substring(ws.indexOf('(') + 1, ws.indexOf(')')).trim();
-        }
-        return 'Attended';
-      } else if (activity == 'Online Session' ||
-                 activity == 'Srimad Bhagavatam Class' ||
-                 activity == 'Bhagavad Gita Class') {
-        if (ws.contains('(')) {
-          return ws.substring(ws.indexOf('(') + 1, ws.indexOf(')')).trim();
-        }
-        return 'Attended';
-      } else if (activity == 'Morning') {
-        if (ws.contains('Wake-up:')) {
-          return ws.split('Wake-up:')[1].replaceAll(')', '').trim();
-        }
-        return 'Done';
-      } else if (activity == 'Sleep') {
-        if (ws.contains('Time:')) {
-          return ws.split('Time:')[1].replaceAll(')', '').trim();
-        }
-        return 'Done';
-      } else if (activity == 'Ekadashi Fasting' || activity == 'Ekadashi') {
-        if (ws.contains(':')) {
-          return ws.split(':')[1].trim();
-        }
-        return 'Done';
-      } else if (activity == 'Temple Visit') {
-        return 'Visited';
-      }
-      return ws == activity ? 'Done' : ws;
+      final String wc = (match['work_completed'] ?? '').toString();
+      return _getSadhanaValueText(activity, ws, wc);
     } catch (_) {
       return null;
     }
@@ -4908,30 +5019,33 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       label = 'Service - ${_serviceNameController.text} (${_serviceMinutesController.text} Mins)';
       points = 5;
     } else if (activity == 'Mangla Arti') {
-      final timeStr = '${_manglaStartTime.hour.toString().padLeft(2, '0')}:${_manglaStartTime.minute.toString().padLeft(2, '0')}';
+      final now = DateTime.now();
+      final dt = DateTime(now.year, now.month, now.day, _manglaStartTime.hour, _manglaStartTime.minute);
+      final timeStr = DateFormat('hh:mm a').format(dt);
       label = 'Mangla Arti ($timeStr)';
       points = 10;
     } else if (activity == 'Online Session') {
-      final startStr = '${_onlineStartTime.hour.toString().padLeft(2, '0')}:${_onlineStartTime.minute.toString().padLeft(2, '0')}';
-      final endStr = '${_onlineEndTime.hour.toString().padLeft(2, '0')}:${_onlineEndTime.minute.toString().padLeft(2, '0')}';
-      label = 'Online Session ($startStr to $endStr)';
+      final spanText = _formatTimeSpanWithDuration(_onlineStartTime, _onlineEndTime);
+      label = 'Online Session ($spanText)';
       points = 5;
     } else if (activity == 'Srimad Bhagavatam Class') {
-      final startStr = '${_sbStartTime.hour.toString().padLeft(2, '0')}:${_sbStartTime.minute.toString().padLeft(2, '0')}';
-      final endStr = '${_sbEndTime.hour.toString().padLeft(2, '0')}:${_sbEndTime.minute.toString().padLeft(2, '0')}';
-      label = 'Srimad Bhagavatam Class ($startStr to $endStr)';
+      final spanText = _formatTimeSpanWithDuration(_sbStartTime, _sbEndTime);
+      label = 'Srimad Bhagavatam Class ($spanText)';
       points = 5;
     } else if (activity == 'Bhagavad Gita Class') {
-      final startStr = '${_bgStartTime.hour.toString().padLeft(2, '0')}:${_bgStartTime.minute.toString().padLeft(2, '0')}';
-      final endStr = '${_bgEndTime.hour.toString().padLeft(2, '0')}:${_bgEndTime.minute.toString().padLeft(2, '0')}';
-      label = 'Bhagavad Gita Class ($startStr to $endStr)';
+      final spanText = _formatTimeSpanWithDuration(_bgStartTime, _bgEndTime);
+      label = 'Bhagavad Gita Class ($spanText)';
       points = 5;
     } else if (activity == 'Morning') {
-      final timeStr = _wakeUpTime.format(context);
+      final now = DateTime.now();
+      final dt = DateTime(now.year, now.month, now.day, _wakeUpTime.hour, _wakeUpTime.minute);
+      final timeStr = DateFormat('hh:mm a').format(dt);
       label = 'Morning (Wake-up: $timeStr)';
       points = 5;
     } else if (activity == 'Sleep') {
-      final timeStr = _sleepTime.format(context);
+      final now = DateTime.now();
+      final dt = DateTime(now.year, now.month, now.day, _sleepTime.hour, _sleepTime.minute);
+      final timeStr = DateFormat('hh:mm a').format(dt);
       label = 'Sleep (Time: $timeStr)';
       points = 5;
     } else {
@@ -4958,7 +5072,27 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     }
 
     try {
-      final isMangla = activity == 'Mangla Arti';
+      String workCompletedVal = DateFormat('hh:mm a').format(DateTime.now());
+      if (activity == 'Morning') {
+        final now = DateTime.now();
+        final dt = DateTime(now.year, now.month, now.day, _wakeUpTime.hour, _wakeUpTime.minute);
+        workCompletedVal = DateFormat('hh:mm a').format(dt);
+      } else if (activity == 'Sleep') {
+        final now = DateTime.now();
+        final dt = DateTime(now.year, now.month, now.day, _sleepTime.hour, _sleepTime.minute);
+        workCompletedVal = DateFormat('hh:mm a').format(dt);
+      } else if (activity == 'Mangla Arti') {
+        final now = DateTime.now();
+        final dt = DateTime(now.year, now.month, now.day, _manglaStartTime.hour, _manglaStartTime.minute);
+        workCompletedVal = DateFormat('hh:mm a').format(dt);
+      } else if (activity == 'Online Session') {
+        workCompletedVal = _formatTimeSpanWithDuration(_onlineStartTime, _onlineEndTime);
+      } else if (activity == 'Srimad Bhagavatam Class') {
+        workCompletedVal = _formatTimeSpanWithDuration(_sbStartTime, _sbEndTime);
+      } else if (activity == 'Bhagavad Gita Class') {
+        workCompletedVal = _formatTimeSpanWithDuration(_bgStartTime, _bgEndTime);
+      }
+
       final updateData = {
         'worker_id': _profile!['id'] ?? _profile!['_id'],
         'worker_name': _profile!['name'],
@@ -4966,8 +5100,8 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         'category': 'folk_sadhna',
         'work_started': label,
         'description': 'Log date: $targetDate\nCategory: $activity',
-        'work_completed': isMangla ? null : DateFormat('hh:mm a').format(DateTime.now()),
-        'is_completed': isMangla ? false : true,
+        'work_completed': workCompletedVal,
+        'is_completed': true,
         'date': targetDate,
         'points': points,
       };
@@ -5009,16 +5143,16 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
               'dateString': targetDate,
               'timezoneOffsetMinutes': DateTime.now().timeZoneOffset.inMinutes,
               'activities': {
-                if (activity == 'Morning' || activity == 'Morning Wake-Up') 'wakeUpTime': DateFormat('hh:mm a').format(DateTime.now()),
-                if (activity == 'Sleep' || activity == 'Sleep Time') 'sleepTime': DateFormat('hh:mm a').format(DateTime.now()),
-                if (activity == 'Mangla Arti') 'manglaArti': {'attended': true},
+                if (activity == 'Morning' || activity == 'Morning Wake-Up') 'wakeUpTime': workCompletedVal,
+                if (activity == 'Sleep' || activity == 'Sleep Time') 'sleepTime': workCompletedVal,
+                if (activity == 'Mangla Arti') 'manglaArti': {'attended': true, 'time': workCompletedVal},
                 if (activity == 'Chanting') 'chanting': {'rounds': 16},
-                if (activity == 'Online Session') 'onlineSession': {'attended': true},
+                if (activity == 'Online Session') 'onlineSession': {'attended': true, 'timeSpan': workCompletedVal},
                 if (activity == 'Book Reading') 'bookReading': {'bookName': _bookController.text.trim().isEmpty ? 'Book' : _bookController.text.trim()},
                 if (activity == 'Service') 'service': {'serviceName': _serviceNameController.text.trim().isEmpty ? 'Service' : _serviceNameController.text.trim()},
                 if (activity == 'Temple Visit') 'templeVisit': {'visited': true},
-                if (activity == 'Srimad Bhagavatam Class') 'srimadBhagavatamClass': {'attended': true},
-                if (activity == 'Bhagavad Gita Class') 'bhagavadGitaClass': {'attended': true},
+                if (activity == 'Srimad Bhagavatam Class') 'srimadBhagavatamClass': {'attended': true, 'timeSpan': workCompletedVal},
+                if (activity == 'Bhagavad Gita Class') 'bhagavadGitaClass': {'attended': true, 'timeSpan': workCompletedVal},
                 if (activity == 'Ekadashi Fasting') 'ekadashiFasting': {'fastingType': 'Fasting'},
               },
             });
@@ -5516,15 +5650,40 @@ class _SadhanaLogSheetState extends State<_SadhanaLogSheet> {
       label = 'Service - ${_serviceNameController.text} (${_serviceMinutesController.text} Mins)';
       points = 5;
     } else if (_selectedSubOption == 'Mangla Arti') {
-      final timeStr = '${_startTime.hour.toString().padLeft(2, '0')}:${_startTime.minute.toString().padLeft(2, '0')}';
-      label = 'Mangla Arti ($timeStr to ';
+      final now = DateTime.now();
+      final dt = DateTime(now.year, now.month, now.day, _startTime.hour, _startTime.minute);
+      final timeStr = DateFormat('hh:mm a').format(dt);
+      label = 'Mangla Arti ($timeStr)';
       points = 10;
     } else if (_selectedSubOption == 'Online Session' ||
                _selectedSubOption == 'Srimad Bhagavatam Class' ||
                _selectedSubOption == 'Bhagavad Gita Class') {
-      final startStr = '${_classStartTime.hour.toString().padLeft(2, '0')}:${_classStartTime.minute.toString().padLeft(2, '0')}';
-      final endStr = '${_classEndTime.hour.toString().padLeft(2, '0')}:${_classEndTime.minute.toString().padLeft(2, '0')}';
-      label = '$_selectedSubOption ($startStr to $endStr)';
+      final now = DateTime.now();
+      final dtStart = DateTime(now.year, now.month, now.day, _classStartTime.hour, _classStartTime.minute);
+      var dtEnd = DateTime(now.year, now.month, now.day, _classEndTime.hour, _classEndTime.minute);
+      if (dtEnd.isBefore(dtStart)) {
+        dtEnd = dtEnd.add(const Duration(days: 1));
+      }
+      final startStr = DateFormat('hh:mm a').format(dtStart);
+      final endStr = DateFormat('hh:mm a').format(dtEnd);
+      final durationMins = dtEnd.difference(dtStart).inMinutes;
+
+      String durationText = '';
+      if (durationMins > 0) {
+        if (durationMins % 60 == 0) {
+          final hrs = durationMins ~/ 60;
+          durationText = '$hrs hr${hrs > 1 ? "s" : ""}';
+        } else if (durationMins >= 60) {
+          final hrs = durationMins ~/ 60;
+          final mins = durationMins % 60;
+          durationText = '$hrs hr $mins mins';
+        } else {
+          durationText = '$durationMins mins';
+        }
+      }
+
+      final spanText = durationText.isNotEmpty ? '$startStr to $endStr ($durationText)' : '$startStr to $endStr';
+      label = '$_selectedSubOption ($spanText)';
       points = 5;
     } else if (_selectedSubOption == 'Ekadashi Fasting') {
       final notes = _ekadashiNotesController.text.trim();
@@ -5555,14 +5714,49 @@ class _SadhanaLogSheetState extends State<_SadhanaLogSheet> {
 
     try {
       final isMangla = _selectedSubOption == 'Mangla Arti';
+      String workCompletedVal = DateFormat('hh:mm a').format(DateTime.now());
+      if (isMangla) {
+        final now = DateTime.now();
+        final dt = DateTime(now.year, now.month, now.day, _startTime.hour, _startTime.minute);
+        workCompletedVal = DateFormat('hh:mm a').format(dt);
+      } else if (_selectedSubOption == 'Online Session' ||
+                 _selectedSubOption == 'Srimad Bhagavatam Class' ||
+                 _selectedSubOption == 'Bhagavad Gita Class') {
+        final now = DateTime.now();
+        final dtStart = DateTime(now.year, now.month, now.day, _classStartTime.hour, _classStartTime.minute);
+        var dtEnd = DateTime(now.year, now.month, now.day, _classEndTime.hour, _classEndTime.minute);
+        if (dtEnd.isBefore(dtStart)) {
+          dtEnd = dtEnd.add(const Duration(days: 1));
+        }
+        final startStr = DateFormat('hh:mm a').format(dtStart);
+        final endStr = DateFormat('hh:mm a').format(dtEnd);
+        final durationMins = dtEnd.difference(dtStart).inMinutes;
+
+        String durationText = '';
+        if (durationMins > 0) {
+          if (durationMins % 60 == 0) {
+            final hrs = durationMins ~/ 60;
+            durationText = '$hrs hr${hrs > 1 ? "s" : ""}';
+          } else if (durationMins >= 60) {
+            final hrs = durationMins ~/ 60;
+            final mins = durationMins % 60;
+            durationText = '$hrs hr $mins mins';
+          } else {
+            durationText = '$durationMins mins';
+          }
+        }
+
+        workCompletedVal = durationText.isNotEmpty ? '$startStr to $endStr ($durationText)' : '$startStr to $endStr';
+      }
+
       final updateData = {
         'worker_id': widget.profileId,
         'worker_name': widget.profileName,
         'preacher_name': widget.preacherName,
         'work_started': label,
         'description': label,
-        'is_completed': isMangla ? false : true,
-        'work_completed': isMangla ? null : DateFormat('hh:mm a').format(DateTime.now()),
+        'is_completed': true,
+        'work_completed': workCompletedVal,
         'category': 'folk_sadhna',
         'date': targetDate,
         'points': points,
