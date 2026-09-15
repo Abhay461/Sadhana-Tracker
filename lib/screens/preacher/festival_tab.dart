@@ -14,7 +14,6 @@ class FestivalTab extends StatefulWidget {
 
 class _FestivalTabState extends State<FestivalTab> {
   final _titleController = TextEditingController();
-  final _descController = TextEditingController();
   DateTime _selectedDate = DateTime.now();
 
   File? _pickedImage;
@@ -33,7 +32,6 @@ class _FestivalTabState extends State<FestivalTab> {
   @override
   void dispose() {
     _titleController.dispose();
-    _descController.dispose();
     super.dispose();
   }
 
@@ -85,14 +83,12 @@ class _FestivalTabState extends State<FestivalTab> {
 
       await ApiService.post('/festivals', {
         'title': title,
-        'description': _descController.text.trim(),
         'imageUrl': imageUrl,
         'dateString': dateStr,
         'isActive': true,
       });
 
       _titleController.clear();
-      _descController.clear();
       setState(() {
         _pickedImage = null;
         _isUploading = false;
@@ -164,16 +160,6 @@ class _FestivalTabState extends State<FestivalTab> {
                     decoration: InputDecoration(
                       labelText: 'Festival Title *',
                       hintText: 'e.g. Sri Krishna Janmashtami',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _descController,
-                    decoration: InputDecoration(
-                      labelText: 'Short Description / Note (Optional)',
-                      hintText: 'e.g. Fasting till midnight, Grand Abhishekam',
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                     ),

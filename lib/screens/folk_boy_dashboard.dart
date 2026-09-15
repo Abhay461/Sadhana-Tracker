@@ -1772,6 +1772,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         await _fetchAnnouncements();
         await _fetchDailyDarshan();
         await _fetchDailyQuote();
+        await _fetchTodayFestival();
       },
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
@@ -1779,6 +1780,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            _buildTodayFestivalCard(),
             _buildInlineSadhanaCard(),
             const SizedBox(height: 20),
             _buildDailyDarshanCard(),
@@ -8186,6 +8188,110 @@ class _DailyDarshanCarouselWidgetState extends State<_DailyDarshanCarouselWidget
           ),
         );
       },
+    );
+  }
+
+  Widget _buildTodayFestivalCard() {
+    if (_todayFestival == null) return const SizedBox.shrink();
+
+    final title = _todayFestival!['title'] as String? ?? 'Today\'s Festival';
+    final imageUrl = _todayFestival!['imageUrl'] as String? ?? '';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFFCD34D), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFD97706).withOpacity(0.12),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (imageUrl.isNotEmpty)
+              Stack(
+                children: [
+                  Image.network(
+                    imageUrl,
+                    width: double.infinity,
+                    height: 180,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      height: 120,
+                      color: const Color(0xFFFEF3C7),
+                      child: const Center(
+                        child: Icon(Icons.festival_rounded, size: 48, color: Color(0xFFD97706)),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 12,
+                    left: 12,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD97706),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: const [
+                          BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2)),
+                        ],
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.stars_rounded, color: Colors.white, size: 14),
+                          SizedBox(width: 4),
+                          Text(
+                            "TODAY'S FESTIVAL",
+                            style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.extrabold, letterSpacing: 0.5),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            else
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                  ),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.stars_rounded, color: Colors.white, size: 18),
+                    SizedBox(width: 6),
+                    Text(
+                      "TODAY'S FESTIVAL",
+                      style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.all(14.0),
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

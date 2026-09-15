@@ -10,10 +10,21 @@ export class FestivalsService {
     @InjectModel(Festival.name) private readonly festivalModel: Model<FestivalDocument>,
   ) {}
 
+  private async cleanExpiredFestivals() {
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const res = await this.festivalModel.deleteMany({ dateString: { $lt: todayStr } }).exec();
+      if (res.deletedCount && res.deletedCount > 0) {
+        console.log(`Cleaned up ${res.deletedCount} expired festival(s) from database.`);
+      }
+    } catch (err) {
+      console.error('Error cleaning expired festivals:', err);
+    }
+  }
+
   async createFestival(user: any, dto: CreateFestivalDto) {
     const data: Record<string, any> = {
       title: dto.title,
-      description: dto.description || '',
       imageUrl: dto.imageUrl || '',
       dateString: dto.dateString,
       isActive: dto.isActive !== undefined ? dto.isActive : true,
@@ -27,9 +38,9 @@ export class FestivalsService {
   }
 
   async getTodayFestival() {
+    await this.cleanExpiredFestivals();
     const todayStr = new Date().toISOString().split('T')[0];
     
-    // Find active festival matching today's dateString exactly
     const festival = await this.festivalModel
       .findOne({ dateString: todayStr, isActive: true })
       .sort({ createdAt: -1 })
@@ -39,17 +50,18 @@ export class FestivalsService {
   }
 
   async getAllFestivals() {
+    await this.cleanExpiredFestivals();
     return this.festivalModel
       .find({ isActive: true })
-      .sort({ dateString: -1, createdAt: -1 })
+      .sort({ dateString: 1, createdAt: -1 })
       .exec();
   }
 
   async deleteFestival(id: string) {
-    const res = await this.festivalModel.findByIdAndUpdate(id, { isActive: false }, { new: true }).exec();
+    const res = await this.festivalModel.findByIdAndDelete(id).exec();
     if (!res) {
       throw new NotFoundException(`Festival with ID ${id} not found`);
     }
-    return { success: true, message: 'Festival deleted successfully' };
+    return { success: true, message: 'Festival deleted successfully from database' };
   }
 }
