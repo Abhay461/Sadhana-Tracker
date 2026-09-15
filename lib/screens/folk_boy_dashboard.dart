@@ -3198,147 +3198,121 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
           
           const SizedBox(height: 16),
 
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                InkWell(
-                  onTap: () {
-                    setState(() {
-                      _showPersonalInfoCard = !_showPersonalInfoCard;
-                    });
-                  },
-                  borderRadius: BorderRadius.circular(16),
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Row(
-                      children: [
-                        const CircleAvatar(
-                          backgroundColor: Color(0xFFEEF2F6),
-                          child: Icon(Icons.person_outline, color: Color(0xFF3F1200)),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Personal Information',
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black87),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                _showPersonalInfoCard ? 'Tap to hide profile details' : 'Tap to view profile details',
-                                style: const TextStyle(fontSize: 12, color: Colors.grey),
-                              ),
-                            ],
-                          ),
-                        ),
-                        InkWell(
-                          onTap: () {
-                            setState(() {
-                              _showPersonalInfoCard = !_showPersonalInfoCard;
-                            });
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF1F5F9),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  _showPersonalInfoCard ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                                  size: 16,
-                                  color: const Color(0xFF3F1200),
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  _showPersonalInfoCard ? 'Hide Details' : 'View Details',
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF3F1200)),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        IconButton(
-                          icon: const Icon(Icons.edit_outlined, color: Color(0xFF3F1200), size: 20),
-                          tooltip: 'Edit Personal Information',
-                          onPressed: _showEditProfileDialog,
-                        ),
-                      ],
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              InkWell(
+                onTap: () {
+                  setState(() {
+                    _showPersonalInfoCard = !_showPersonalInfoCard;
+                  });
+                },
+                child: Row(
+                  children: [
+                    const CircleAvatar(
+                      backgroundColor: Color(0xFFEEF2F6),
+                      child: Icon(Icons.person_outline, color: Color(0xFF3F1200)),
                     ),
-                  ),
-                ),
-                if (_showPersonalInfoCard) ...[
-                  const Divider(height: 1, color: Color(0xFFE2E8F0)),
-                  Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(child: _buildProfileInfoRow(Icons.person_outline, 'Full Name', _profile?['name'] ?? '')),
-                            const SizedBox(width: 12),
-                            Expanded(child: _buildProfileInfoRow(Icons.psychology_outlined, 'Preacher', _preacher?['name'] ?? 'Preacher')),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        Row(
-                          children: [
-                            Expanded(child: _buildProfileInfoRow(Icons.phone_android_outlined, 'WhatsApp Number', displayWhatsapp.isNotEmpty ? displayWhatsapp : '-')),
-                            const SizedBox(width: 12),
-                            Expanded(child: _buildProfileInfoRow(Icons.cake_outlined, 'Date of Birth', displayDob.isNotEmpty ? displayDob : '-')),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        Row(
-                          children: [
-                            Expanded(child: _buildProfileInfoRow(Icons.calendar_month_outlined, 'Joining Date', displayJoin.isNotEmpty ? displayJoin : '-')),
-                            const SizedBox(width: 12),
-                            Expanded(child: _buildProfileInfoRow(Icons.email_outlined, 'Email Address', _profile?['email'] ?? '-')),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        Row(
-                          children: [
-                            Expanded(child: _buildProfileInfoRow(Icons.work_outline, 'Occupation', displayOcc.isNotEmpty ? displayOcc : '-')),
-                            const SizedBox(width: 12),
-                            Expanded(child: _buildProfileInfoRow(Icons.location_city_outlined, 'City / Hometown', displayCity.isNotEmpty ? displayCity : '-')),
-                          ],
-                        ),
-                        if (displayClg.isNotEmpty && displayClg != 'N/A') ...[
-                          const SizedBox(height: 14),
-                          Row(
-                            children: [
-                              Expanded(child: _buildProfileInfoRow(Icons.school_outlined, 'College / University', displayClg)),
-                              const SizedBox(width: 12),
-                              Expanded(child: _buildProfileInfoRow(Icons.menu_book_outlined, 'Course & Year', displayCrs.isNotEmpty ? displayCrs : '-')),
-                            ],
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Personal Information',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black87),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _showPersonalInfoCard ? 'Tap to hide profile details' : 'Tap to view profile details',
+                            style: const TextStyle(fontSize: 12, color: Colors.grey),
                           ),
                         ],
-                      ],
+                      ),
                     ),
+                    InkWell(
+                      onTap: () {
+                        setState(() {
+                          _showPersonalInfoCard = !_showPersonalInfoCard;
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _showPersonalInfoCard ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                              size: 16,
+                              color: const Color(0xFF3F1200),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _showPersonalInfoCard ? 'Hide Details' : 'View Details',
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF3F1200)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined, color: Color(0xFF3F1200), size: 20),
+                      tooltip: 'Edit Personal Information',
+                      onPressed: _showEditProfileDialog,
+                    ),
+                  ],
+                ),
+              ),
+              if (_showPersonalInfoCard) ...[
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(child: _buildProfileInfoRow(Icons.person_outline, 'Full Name', _profile?['name'] ?? '')),
+                    const SizedBox(width: 12),
+                    Expanded(child: _buildProfileInfoRow(Icons.psychology_outlined, 'Preacher', _preacher?['name'] ?? 'Preacher')),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(child: _buildProfileInfoRow(Icons.phone_android_outlined, 'WhatsApp Number', displayWhatsapp.isNotEmpty ? displayWhatsapp : '-')),
+                    const SizedBox(width: 12),
+                    Expanded(child: _buildProfileInfoRow(Icons.cake_outlined, 'Date of Birth', displayDob.isNotEmpty ? displayDob : '-')),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(child: _buildProfileInfoRow(Icons.calendar_month_outlined, 'Joining Date', displayJoin.isNotEmpty ? displayJoin : '-')),
+                    const SizedBox(width: 12),
+                    Expanded(child: _buildProfileInfoRow(Icons.email_outlined, 'Email Address', _profile?['email'] ?? '-')),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(child: _buildProfileInfoRow(Icons.work_outline, 'Occupation', displayOcc.isNotEmpty ? displayOcc : '-')),
+                    const SizedBox(width: 12),
+                    Expanded(child: _buildProfileInfoRow(Icons.location_city_outlined, 'City / Hometown', displayCity.isNotEmpty ? displayCity : '-')),
+                  ],
+                ),
+                if (displayClg.isNotEmpty && displayClg != 'N/A') ...[
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(child: _buildProfileInfoRow(Icons.school_outlined, 'College / University', displayClg)),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildProfileInfoRow(Icons.menu_book_outlined, 'Course & Year', displayCrs.isNotEmpty ? displayCrs : '-')),
+                    ],
                   ),
                 ],
               ],
-            ),
+            ],
           ),
 
           const SizedBox(height: 20),
