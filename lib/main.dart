@@ -7,6 +7,7 @@ import 'screens/login_screen.dart';
 import 'screens/signup_screen.dart';
 import 'screens/home_wrapper.dart';
 import 'screens/folk_boy_dashboard.dart';
+import 'screens/preacher_dashboard.dart';
 import 'screens/reset_password_screen.dart';
 
 import 'utils/notification_helper.dart';
