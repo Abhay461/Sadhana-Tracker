@@ -1202,7 +1202,7 @@
       container.innerHTML = preachersList.map(p => {
         const students = p.students || [];
         const studentsRowsHtml = students.length === 0
-          ? `<tr><td colspan="6" style="padding: 16px; text-align: center; color: var(--text-muted); font-size: 13px;">No students assigned to this preacher yet.</td></tr>`
+          ? `<tr><td colspan="10" style="padding: 16px; text-align: center; color: var(--text-muted); font-size: 13px;">No students assigned to this preacher yet.</td></tr>`
           : students.map((s, idx) => {
               let dobStr = s.dob ? new Date(s.dob).toISOString().split('T')[0] : 'Not specified';
               let joinStr = (s.joiningDate || s.joining_date) ? new Date(s.joiningDate || s.joining_date).toISOString().split('T')[0] : 'Not specified';
@@ -1217,12 +1217,12 @@
                 const parts = rawPhone.split('|');
                 phoneStr = parts[0].trim();
                 parts.forEach(part => {
-                  if (part.indexOf('DOB:') !== -1 && dobStr === 'Not specified') dobStr = part.replace('DOB:', '').trim();
-                  if (part.indexOf('JOIN:') !== -1 && joinStr === 'Not specified') joinStr = part.replace('JOIN:', '').trim();
-                  if (part.indexOf('OCC:') !== -1 && occStr === 'Not specified') occStr = part.replace('OCC:', '').trim();
-                  if (part.indexOf('CLG:') !== -1 && clgStr === 'Not specified') clgStr = part.replace('CLG:', '').trim();
-                  if (part.indexOf('CRS:') !== -1 && crsStr === 'Not specified') crsStr = part.replace('CRS:', '').trim();
-                  if (part.indexOf('CITY:') !== -1 && cityStr === 'Not specified') cityStr = part.replace('CITY:', '').trim();
+                  if (part.indexOf('DOB:') !== -1 && (dobStr === 'Not specified' || dobStr === 'N/A' || !dobStr)) dobStr = part.replace('DOB:', '').trim();
+                  if (part.indexOf('JOIN:') !== -1 && (joinStr === 'Not specified' || joinStr === 'N/A' || !joinStr)) joinStr = part.replace('JOIN:', '').trim();
+                  if (part.indexOf('OCC:') !== -1 && (occStr === 'Not specified' || occStr === 'N/A' || !occStr)) occStr = part.replace('OCC:', '').trim();
+                  if (part.indexOf('CLG:') !== -1 && (clgStr === 'Not specified' || clgStr === 'N/A' || !clgStr)) clgStr = part.replace('CLG:', '').trim();
+                  if (part.indexOf('CRS:') !== -1 && (crsStr === 'Not specified' || crsStr === 'N/A' || !crsStr)) crsStr = part.replace('CRS:', '').trim();
+                  if (part.indexOf('CITY:') !== -1 && (cityStr === 'Not specified' || cityStr === 'N/A' || !cityStr)) cityStr = part.replace('CITY:', '').trim();
                 });
               }
 
@@ -1330,12 +1330,12 @@
               const parts = rawPhone.split('|');
               phoneStr = parts[0].trim();
               parts.forEach(part => {
-                if (part.indexOf('DOB:') !== -1 && dobStr === 'Not specified') dobStr = part.replace('DOB:', '').trim();
-                if (part.indexOf('JOIN:') !== -1 && joinStr === 'Not specified') joinStr = part.replace('JOIN:', '').trim();
-                if (part.indexOf('OCC:') !== -1 && occStr === 'Not specified') occStr = part.replace('OCC:', '').trim();
-                if (part.indexOf('CLG:') !== -1 && clgStr === 'Not specified') clgStr = part.replace('CLG:', '').trim();
-                if (part.indexOf('CRS:') !== -1 && crsStr === 'Not specified') crsStr = part.replace('CRS:', '').trim();
-                if (part.indexOf('CITY:') !== -1 && cityStr === 'Not specified') cityStr = part.replace('CITY:', '').trim();
+                if (part.indexOf('DOB:') !== -1 && (dobStr === 'Not specified' || dobStr === 'N/A' || !dobStr)) dobStr = part.replace('DOB:', '').trim();
+                if (part.indexOf('JOIN:') !== -1 && (joinStr === 'Not specified' || joinStr === 'N/A' || !joinStr)) joinStr = part.replace('JOIN:', '').trim();
+                if (part.indexOf('OCC:') !== -1 && (occStr === 'Not specified' || occStr === 'N/A' || !occStr)) occStr = part.replace('OCC:', '').trim();
+                if (part.indexOf('CLG:') !== -1 && (clgStr === 'Not specified' || clgStr === 'N/A' || !clgStr)) clgStr = part.replace('CLG:', '').trim();
+                if (part.indexOf('CRS:') !== -1 && (crsStr === 'Not specified' || crsStr === 'N/A' || !crsStr)) crsStr = part.replace('CRS:', '').trim();
+                if (part.indexOf('CITY:') !== -1 && (cityStr === 'Not specified' || cityStr === 'N/A' || !cityStr)) cityStr = part.replace('CITY:', '').trim();
               });
             }
 

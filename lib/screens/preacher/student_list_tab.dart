@@ -155,11 +155,75 @@ class _StudentListTabState extends State<StudentListTab> {
     );
   }
 
+  Map<String, String> _getBoyDetails(Map<String, dynamic> boy) {
+    String phone = (boy['whatsapp_number'] ?? boy['phoneNumber'] ?? '').toString();
+    String email = (boy['email'] ?? '').toString();
+    String dob = boy['dob'] != null ? DateFormat('dd/MM/yyyy').format(DateTime.parse(boy['dob'].toString())) : '';
+    String join = (boy['joiningDate'] ?? boy['joining_date']) != null
+        ? DateFormat('dd/MM/yyyy').format(DateTime.parse((boy['joiningDate'] ?? boy['joining_date']).toString()))
+        : '';
+    String occ = (boy['occupation'] ?? '').toString();
+    String clg = (boy['college'] ?? '').toString();
+    String crs = (boy['courseYear'] ?? '').toString();
+    String city = (boy['city'] ?? '').toString();
+
+    if (phone.contains('|')) {
+      final parts = phone.split('|');
+      phone = parts[0].trim();
+      for (var part in parts) {
+        final p = part.trim();
+        if (p.startsWith('DOB:') && dob.isEmpty) dob = p.replaceFirst('DOB:', '').trim();
+        if (p.startsWith('JOIN:') && join.isEmpty) join = p.replaceFirst('JOIN:', '').trim();
+        if (p.startsWith('OCC:') && occ.isEmpty) occ = p.replaceFirst('OCC:', '').trim();
+        if (p.startsWith('CLG:') && clg.isEmpty) clg = p.replaceFirst('CLG:', '').trim();
+        if (p.startsWith('CRS:') && crs.isEmpty) crs = p.replaceFirst('CRS:', '').trim();
+        if (p.startsWith('CITY:') && city.isEmpty) city = p.replaceFirst('CITY:', '').trim();
+      }
+    }
+
+    return {
+      'phone': phone.isEmpty ? 'Not specified' : phone,
+      'email': email.isEmpty ? 'Not specified' : email,
+      'dob': (dob.isEmpty || dob == 'N/A') ? 'Not specified' : dob,
+      'join': (join.isEmpty || join == 'N/A') ? 'Not specified' : join,
+      'occ': (occ.isEmpty || occ == 'N/A') ? 'Not specified' : occ,
+      'clg': (clg.isEmpty || clg == 'N/A') ? 'Not specified' : clg,
+      'crs': (crs.isEmpty || crs == 'N/A') ? 'Not specified' : crs,
+      'city': (city.isEmpty || city == 'N/A') ? 'Not specified' : city,
+    };
+  }
+
+  Widget _buildDetailRow(IconData icon, String label, String value, Color color) {
+    if (value == 'Not specified' || value.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 3.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 5),
+          Text(
+            '$label: ',
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey[600]),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBoyDetailView() {
     final boyId = _selectedBoy!['id'].toString();
     final boyUpdates = (widget.allUpdates[boyId] ?? [])
         .where((u) => u['category'] != 'screen_time')
         .toList();
+    final details = _getBoyDetails(_selectedBoy!);
 
     return Column(
       children: [
@@ -170,6 +234,7 @@ class _StudentListTabState extends State<StudentListTab> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   CircleAvatar(
                     radius: 28,
@@ -178,58 +243,23 @@ class _StudentListTabState extends State<StudentListTab> {
                         ? Text(_selectedBoy!['name'][0].toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20))
                         : null,
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(_selectedBoy!['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        Text(
-                          (() {
-                            final raw = _selectedBoy!['whatsapp_number'] ?? 'No whatsapp';
-                            return raw.split(' | ').first.trim();
-                          })(),
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey),
-                        ),
-                        (() {
-                          final raw = _selectedBoy!['whatsapp_number'] ?? '';
-                          String dob = '';
-                          String join = '';
-                          if (raw.contains('| DOB:')) {
-                            dob = raw.split('| DOB:')[1].split('|').first.trim();
-                          }
-                          if (raw.contains('| JOIN:')) {
-                            join = raw.split('| JOIN:')[1].split('|').first.trim();
-                          }
-                          if (dob.isEmpty && join.isEmpty) return const SizedBox.shrink();
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 4.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (dob.isNotEmpty && dob != 'N/A')
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 2),
-                                    child: Row(
-                                      children: [
-                                        const Icon(Icons.cake, size: 10, color: Colors.pinkAccent),
-                                        const SizedBox(width: 4),
-                                        Text('DOB: $dob', style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: Colors.grey)),
-                                      ],
-                                    ),
-                                  ),
-                                if (join.isNotEmpty)
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.calendar_today, size: 10, color: Colors.blueAccent),
-                                      const SizedBox(width: 4),
-                                      Text('Joined: $join', style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: Colors.grey)),
-                                    ],
-                                  ),
-                              ],
-                            ),
-                          );
-                        })(),
+                        const SizedBox(height: 2),
+                        _buildDetailRow(Icons.phone_android, 'WhatsApp', details['phone']!, const Color(0xFF25D366)),
+                        _buildDetailRow(Icons.email_outlined, 'Email', details['email']!, const Color(0xFF6366F1)),
+                        _buildDetailRow(Icons.work_outline, 'Occupation', details['occ']!, const Color(0xFFD97706)),
+                        if (details['clg'] != 'Not specified')
+                          _buildDetailRow(Icons.school_outlined, 'College', details['clg']!, const Color(0xFF0284C7)),
+                        if (details['crs'] != 'Not specified')
+                          _buildDetailRow(Icons.menu_book_outlined, 'Course & Year', details['crs']!, const Color(0xFF7C3AED)),
+                        _buildDetailRow(Icons.location_city_outlined, 'City', details['city']!, const Color(0xFF059669)),
+                        _buildDetailRow(Icons.cake_outlined, 'DOB', details['dob']!, const Color(0xFFEC4899)),
+                        _buildDetailRow(Icons.calendar_today_outlined, 'Joined', details['join']!, const Color(0xFF3B82F6)),
                       ],
                     ),
                   ),
