@@ -42,6 +42,10 @@ export class UsersService {
       updateData.joining_date = new Date(jDate);
     }
     if (dto.preacherId) updateData.preacherId = dto.preacherId;
+    if (dto.occupation) updateData.occupation = dto.occupation;
+    if (dto.college) updateData.college = dto.college;
+    if (dto.courseYear) updateData.courseYear = dto.courseYear;
+    if (dto.city) updateData.city = dto.city;
 
     const user = await this.userModel.findByIdAndUpdate(userId, { $set: updateData }, { new: true }).populate('preacherId', 'name email photoUrl phoneNumber whatsapp_number');
     if (!user) {

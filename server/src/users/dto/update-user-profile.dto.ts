@@ -51,4 +51,24 @@ export class UpdateUserProfileDto {
   @IsOptional()
   @IsString()
   preacherId?: string;
+
+  @ApiProperty({ description: 'Occupation / Status', required: false })
+  @IsOptional()
+  @IsString()
+  occupation?: string;
+
+  @ApiProperty({ description: 'College / University Name', required: false })
+  @IsOptional()
+  @IsString()
+  college?: string;
+
+  @ApiProperty({ description: 'Course & Year', required: false })
+  @IsOptional()
+  @IsString()
+  courseYear?: string;
+
+  @ApiProperty({ description: 'City / Native Hometown', required: false })
+  @IsOptional()
+  @IsString()
+  city?: string;
 }

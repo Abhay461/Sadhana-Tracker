@@ -22,6 +22,10 @@ class _SignupScreenState extends State<SignupScreen> {
   final _whatsappController = TextEditingController();
   final _dobController = TextEditingController();
   final _joiningDateController = TextEditingController();
+  final _occupationController = TextEditingController();
+  final _collegeController = TextEditingController();
+  final _courseYearController = TextEditingController();
+  final _cityController = TextEditingController();
 
   String _role = 'folk_boy'; // Default role
   bool _isLoading = false;
@@ -57,6 +61,10 @@ class _SignupScreenState extends State<SignupScreen> {
     _whatsappController.dispose();
     _dobController.dispose();
     _joiningDateController.dispose();
+    _occupationController.dispose();
+    _collegeController.dispose();
+    _courseYearController.dispose();
+    _cityController.dispose();
     _otpController.dispose();
     super.dispose();
   }
@@ -340,7 +348,12 @@ class _SignupScreenState extends State<SignupScreen> {
         final String rawWhatsapp = _whatsappController.text.trim();
         final String dobStr = _selectedDob != null ? DateFormat('yyyy-MM-dd').format(_selectedDob!) : 'N/A';
         final String joinStr = _selectedJoiningDate != null ? DateFormat('yyyy-MM-dd').format(_selectedJoiningDate!) : 'N/A';
-        final String formattedWhatsappWithDates = '$rawWhatsapp | DOB:$dobStr | JOIN:$joinStr';
+        final String occStr = _occupationController.text.trim().isNotEmpty ? _occupationController.text.trim() : 'N/A';
+        final String clgStr = _collegeController.text.trim().isNotEmpty ? _collegeController.text.trim() : 'N/A';
+        final String crsStr = _courseYearController.text.trim().isNotEmpty ? _courseYearController.text.trim() : 'N/A';
+        final String cityStr = _cityController.text.trim().isNotEmpty ? _cityController.text.trim() : 'N/A';
+
+        final String formattedWhatsappWithDates = '$rawWhatsapp | DOB:$dobStr | JOIN:$joinStr | OCC:$occStr | CLG:$clgStr | CRS:$crsStr | CITY:$cityStr';
 
         await ApiService.post('/auth/sync', {
           'name': _nameController.text.trim(),
@@ -917,6 +930,62 @@ class _SignupScreenState extends State<SignupScreen> {
             return null;
           },
         ),
+        const SizedBox(height: 12),
+
+        // 4. Occupation / Status Field
+        _buildSimpleTextField(
+          controller: _occupationController,
+          label: 'Occupation / Status',
+          hintText: 'e.g. Student / Working / Job',
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Please enter your Occupation / Status';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 12),
+
+        // 5. College / University Name Field
+        _buildSimpleTextField(
+          controller: _collegeController,
+          label: 'College / University Name',
+          hintText: 'e.g. GLA University / Mathura College',
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Please enter your College / University name';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 12),
+
+        // 6. Course & Year Field
+        _buildSimpleTextField(
+          controller: _courseYearController,
+          label: 'Course & Year',
+          hintText: 'e.g. B.Tech 3rd Year / BCA 2nd Year',
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Please enter your Course & Year';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 12),
+
+        // 7. City / Native Hometown Field
+        _buildSimpleTextField(
+          controller: _cityController,
+          label: 'City / Native Hometown',
+          hintText: 'e.g. Mathura / Vrindavan / Agra / Delhi',
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Please enter your City / Hometown';
+            }
+            return null;
+          },
+        ),
         const SizedBox(height: 16),
 
         // Error Banner
@@ -1023,6 +1092,22 @@ class _SignupScreenState extends State<SignupScreen> {
                           }
                           if (_selectedJoiningDate == null) {
                             setState(() => _errorMessage = 'Please select your FOLK Joining Date');
+                            return;
+                          }
+                          if (_occupationController.text.trim().isEmpty) {
+                            setState(() => _errorMessage = 'Please enter your Occupation / Status');
+                            return;
+                          }
+                          if (_collegeController.text.trim().isEmpty) {
+                            setState(() => _errorMessage = 'Please enter your College / University Name');
+                            return;
+                          }
+                          if (_courseYearController.text.trim().isEmpty) {
+                            setState(() => _errorMessage = 'Please enter your Course & Year');
+                            return;
+                          }
+                          if (_cityController.text.trim().isEmpty) {
+                            setState(() => _errorMessage = 'Please enter your City / Native Hometown');
                             return;
                           }
                           setState(() {

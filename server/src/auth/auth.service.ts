@@ -131,6 +131,10 @@ export class AuthService {
         let whatsappNumber = phoneToStore;
         let extractedDob: Date | null = null;
         let extractedJoiningDate: Date | null = null;
+        let extractedOccupation: string | null = null;
+        let extractedCollege: string | null = null;
+        let extractedCourseYear: string | null = null;
+        let extractedCity: string | null = null;
 
         if (phoneToStore && phoneToStore.includes('|')) {
           const parts = phoneToStore.split('|');
@@ -150,6 +154,22 @@ export class AuthService {
                 if (!isNaN(parsed.getTime())) extractedJoiningDate = parsed;
               }
             }
+            if (part.includes('OCC:')) {
+              const val = part.replace('OCC:', '').trim();
+              if (val && val !== 'N/A') extractedOccupation = val;
+            }
+            if (part.includes('CLG:')) {
+              const val = part.replace('CLG:', '').trim();
+              if (val && val !== 'N/A') extractedCollege = val;
+            }
+            if (part.includes('CRS:')) {
+              const val = part.replace('CRS:', '').trim();
+              if (val && val !== 'N/A') extractedCourseYear = val;
+            }
+            if (part.includes('CITY:')) {
+              const val = part.replace('CITY:', '').trim();
+              if (val && val !== 'N/A') extractedCity = val;
+            }
           }
         }
 
@@ -160,6 +180,10 @@ export class AuthService {
           dob: extractedDob,
           joiningDate: extractedJoiningDate,
           joining_date: extractedJoiningDate,
+          occupation: extractedOccupation,
+          college: extractedCollege,
+          courseYear: extractedCourseYear,
+          city: extractedCity,
           name: dto.name,
           email: email ? email.toLowerCase().trim() : null,
           role: assignedRole,

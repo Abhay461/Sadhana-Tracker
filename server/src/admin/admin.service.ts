@@ -152,7 +152,7 @@ export class AdminService {
 
   async getAllPreachers() {
     const preachers = await this.userModel.find({ role: 'preacher' }).sort({ name: 1 });
-    const students = await this.userModel.find({ preacherId: { $ne: null } }).select('name email phoneNumber whatsapp_number dob joiningDate joining_date role status preacherId photoUrl');
+    const students = await this.userModel.find({ preacherId: { $ne: null } }).select('name email phoneNumber whatsapp_number dob joiningDate joining_date role status preacherId photoUrl occupation college courseYear city');
 
     const grouped: Record<string, any[]> = {};
     for (const student of students) {

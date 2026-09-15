@@ -1208,6 +1208,10 @@
               let joinStr = (s.joiningDate || s.joining_date) ? new Date(s.joiningDate || s.joining_date).toISOString().split('T')[0] : 'Not specified';
               let rawPhone = s.whatsapp_number || s.phoneNumber || 'Not specified';
               let phoneStr = rawPhone;
+              let occStr = s.occupation || 'Not specified';
+              let clgStr = s.college || 'Not specified';
+              let crsStr = s.courseYear || 'Not specified';
+              let cityStr = s.city || 'Not specified';
 
               if (rawPhone.indexOf('|') !== -1) {
                 const parts = rawPhone.split('|');
@@ -1215,6 +1219,10 @@
                 parts.forEach(part => {
                   if (part.indexOf('DOB:') !== -1 && dobStr === 'Not specified') dobStr = part.replace('DOB:', '').trim();
                   if (part.indexOf('JOIN:') !== -1 && joinStr === 'Not specified') joinStr = part.replace('JOIN:', '').trim();
+                  if (part.indexOf('OCC:') !== -1 && occStr === 'Not specified') occStr = part.replace('OCC:', '').trim();
+                  if (part.indexOf('CLG:') !== -1 && clgStr === 'Not specified') clgStr = part.replace('CLG:', '').trim();
+                  if (part.indexOf('CRS:') !== -1 && crsStr === 'Not specified') crsStr = part.replace('CRS:', '').trim();
+                  if (part.indexOf('CITY:') !== -1 && cityStr === 'Not specified') cityStr = part.replace('CITY:', '').trim();
                 });
               }
 
@@ -1223,6 +1231,10 @@
                   <td style="padding: 12px; font-weight: 600; color: #64748B;">${idx + 1}</td>
                   <td style="padding: 12px; font-weight: 700; color: var(--text-main);">${s.name || 'Unnamed Student'}</td>
                   <td style="padding: 12px; font-weight: 600; color: #2563EB;"><i class="ri-whatsapp-line" style="color: #25D366;"></i> ${phoneStr}</td>
+                  <td style="padding: 12px; color: #475569;">${occStr}</td>
+                  <td style="padding: 12px; color: #475569;">${clgStr}</td>
+                  <td style="padding: 12px; color: #475569;">${crsStr}</td>
+                  <td style="padding: 12px; color: #475569;">${cityStr}</td>
                   <td style="padding: 12px; color: #475569;">${dobStr}</td>
                   <td style="padding: 12px; color: #475569;">${s.email || '-'}</td>
                   <td style="padding: 12px; color: #475569;">${joinStr}</td>
@@ -1265,6 +1277,10 @@
                     <th style="padding: 10px 12px;">#</th>
                     <th style="padding: 10px 12px;">Student Name</th>
                     <th style="padding: 10px 12px;">Mobile / WhatsApp</th>
+                    <th style="padding: 10px 12px;">Occupation</th>
+                    <th style="padding: 10px 12px;">College</th>
+                    <th style="padding: 10px 12px;">Course & Year</th>
+                    <th style="padding: 10px 12px;">City</th>
                     <th style="padding: 10px 12px;">Date of Birth (DOB)</th>
                     <th style="padding: 10px 12px;">Email Address</th>
                     <th style="padding: 10px 12px;">Joining Date</th>
@@ -1305,6 +1321,10 @@
             let joinStr = (s.joiningDate || s.joining_date) ? new Date(s.joiningDate || s.joining_date).toISOString().split('T')[0] : 'Not specified';
             let rawPhone = s.whatsapp_number || s.phoneNumber || 'Not specified';
             let phoneStr = rawPhone;
+            let occStr = s.occupation || 'Not specified';
+            let clgStr = s.college || 'Not specified';
+            let crsStr = s.courseYear || 'Not specified';
+            let cityStr = s.city || 'Not specified';
 
             if (rawPhone.indexOf('|') !== -1) {
               const parts = rawPhone.split('|');
@@ -1312,6 +1332,10 @@
               parts.forEach(part => {
                 if (part.indexOf('DOB:') !== -1 && dobStr === 'Not specified') dobStr = part.replace('DOB:', '').trim();
                 if (part.indexOf('JOIN:') !== -1 && joinStr === 'Not specified') joinStr = part.replace('JOIN:', '').trim();
+                if (part.indexOf('OCC:') !== -1 && occStr === 'Not specified') occStr = part.replace('OCC:', '').trim();
+                if (part.indexOf('CLG:') !== -1 && clgStr === 'Not specified') clgStr = part.replace('CLG:', '').trim();
+                if (part.indexOf('CRS:') !== -1 && crsStr === 'Not specified') crsStr = part.replace('CRS:', '').trim();
+                if (part.indexOf('CITY:') !== -1 && cityStr === 'Not specified') cityStr = part.replace('CITY:', '').trim();
               });
             }
 
@@ -1323,6 +1347,10 @@
               'Student S.No': idx + 1,
               'Student Name': s.name || 'Unnamed',
               'WhatsApp / Mobile': phoneStr,
+              'Occupation / Status': occStr,
+              'College / University': clgStr,
+              'Course & Year': crsStr,
+              'City / Hometown': cityStr,
               'Date of Birth (DOB)': dobStr,
               'Email Address': s.email || 'Not specified',
               'Joining Date': joinStr,
@@ -1339,6 +1367,10 @@
             'Student S.No': '-',
             'Student Name': '(No Students Assigned)',
             'WhatsApp / Mobile': '-',
+            'Occupation / Status': '-',
+            'College / University': '-',
+            'Course & Year': '-',
+            'City / Hometown': '-',
             'Date of Birth (DOB)': '-',
             'Email Address': '-',
             'Joining Date': '-',

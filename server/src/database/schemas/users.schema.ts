@@ -54,6 +54,18 @@ export class User {
   @Prop({ type: Date, default: null })
   joining_date: Date;
 
+  @Prop({ type: String, default: null, trim: true })
+  occupation: string;
+
+  @Prop({ type: String, default: null, trim: true })
+  college: string;
+
+  @Prop({ type: String, default: null, trim: true })
+  courseYear: string;
+
+  @Prop({ type: String, default: null, trim: true })
+  city: string;
+
   @Prop({ type: Boolean, default: false, index: true })
   isBlocked: boolean;
 
