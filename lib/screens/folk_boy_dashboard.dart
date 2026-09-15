@@ -310,8 +310,10 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
 
   static String _getOptimizedFestivalImageUrl(String url) {
     if (url.isEmpty) return '';
-    if (url.contains('cloudinary.com') && url.contains('/upload/') && !url.contains('/q_auto')) {
-      return url.replaceFirst('/upload/', '/upload/w_250,h_250,c_fill,q_auto:eco,f_auto/');
+    if (url.contains('cloudinary.com') && url.contains('/upload/')) {
+      if (!url.contains('/q_auto')) {
+        return url.replaceFirst('/upload/', '/upload/w_500,c_limit,q_auto:eco,f_auto/');
+      }
     }
     return url;
   }
@@ -1802,33 +1804,24 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
           Row(
             children: [
               if (imageUrl.isNotEmpty)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxHeight: 85,
+                    maxWidth: 90,
+                  ),
                   child: Image.network(
                     imageUrl,
-                    height: 64,
-                    width: 64,
-                    fit: BoxFit.cover,
+                    fit: BoxFit.contain,
                     gaplessPlayback: true,
-                    cacheWidth: 250,
-                    cacheHeight: 250,
                     loadingBuilder: (context, child, loadingProgress) {
                       if (loadingProgress == null) return child;
-                      return Container(
-                        width: 64,
-                        height: 64,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFEF3C7),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Center(
-                          child: SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Color(0xFFD97706),
-                            ),
+                      return const SizedBox(
+                        width: 50,
+                        height: 50,
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Color(0xFFD97706),
                           ),
                         ),
                       );
