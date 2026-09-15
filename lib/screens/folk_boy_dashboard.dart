@@ -1657,133 +1657,140 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
             _buildDailyDarshanCard(),
             _buildYouTubeVideoBanners(),
             _buildDailyQuoteCard(),
-            if (_announcements.isNotEmpty) ...[
-              SizedBox(
-                height: 180,
-                child: PageView.builder(
-                  controller: _pageController,
-                  onPageChanged: (index) {
-                    setState(() {
-                      _currentAnnouncementIndex = index;
-                    });
-                  },
-                  itemCount: _announcements.length,
-                  itemBuilder: (context, index) {
-                    final ann = _announcements[index];
-                    final String title = (ann['title'] ?? '').toString();
-                    final String time = (ann['time'] ?? '').toString();
-                    final String banner = (ann['banner'] ?? '').toString();
-                    final String link = (ann['link'] ?? '').toString();
-                    final String type = (ann['type'] ?? 'announcement').toString();
-
-                    return GestureDetector(
-                      onTap: () {
-                        if (link.isNotEmpty) {
-                          if (type == 'session') {
-                            _showSessionJoinDialog(title, link);
-                          } else if (type == 'trip') {
-                            _showTripJoinDialog(title, link);
-                          } else if (type == 'event') {
-                            _showEventJoinDialog(title, link);
-                          } else {
-                            launchUrl(Uri.parse(link), mode: LaunchMode.externalApplication);
-                          }
-                        }
+            () {
+              final generalAnnouncements = _announcements.where((a) => a['type'] != 'youtube').toList();
+              if (generalAnnouncements.isEmpty) return const SizedBox.shrink();
+              return Column(
+                children: [
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    height: 180,
+                    child: PageView.builder(
+                      controller: _pageController,
+                      onPageChanged: (index) {
+                        setState(() {
+                          _currentAnnouncementIndex = index;
+                        });
                       },
-                      child: Card(
-                        clipBehavior: Clip.antiAlias,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        child: Stack(
-                          children: [
-                            if (banner.isNotEmpty) ...[
-                              Image.network(
-                                banner,
-                                width: double.infinity,
-                                height: double.infinity,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) => Container(
-                                  color: const Color(0xFF3F1200),
-                                  child: const Center(child: Icon(Icons.image_not_supported, color: Colors.white38, size: 40)),
-                                ),
-                              ),
-                              Container(
-                                decoration: const BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                    colors: [Colors.black12, Colors.black87],
+                      itemCount: generalAnnouncements.length,
+                      itemBuilder: (context, index) {
+                        final ann = generalAnnouncements[index];
+                        final String title = (ann['title'] ?? '').toString();
+                        final String time = (ann['time'] ?? '').toString();
+                        final String banner = (ann['banner'] ?? '').toString();
+                        final String link = (ann['link'] ?? '').toString();
+                        final String type = (ann['type'] ?? 'announcement').toString();
+
+                        return GestureDetector(
+                          onTap: () {
+                            if (link.isNotEmpty) {
+                              if (type == 'session') {
+                                _showSessionJoinDialog(title, link);
+                              } else if (type == 'trip') {
+                                _showTripJoinDialog(title, link);
+                              } else if (type == 'event') {
+                                _showEventJoinDialog(title, link);
+                              } else {
+                                launchUrl(Uri.parse(link), mode: LaunchMode.externalApplication);
+                              }
+                            }
+                          },
+                          child: Card(
+                            clipBehavior: Clip.antiAlias,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            child: Stack(
+                              children: [
+                                if (banner.isNotEmpty) ...[
+                                  Image.network(
+                                    banner,
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) => Container(
+                                      color: const Color(0xFF3F1200),
+                                      child: const Center(child: Icon(Icons.image_not_supported, color: Colors.white38, size: 40)),
+                                    ),
                                   ),
-                                ),
-                              ),
-                            ] else ...[
-                              Container(
-                                decoration: const BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                    colors: [Color(0xFF3F1200), Color(0xFF1B0B00)],
-                                  ),
-                                ),
-                              ),
-                            ],
-                            Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.redAccent,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      type.toUpperCase(),
-                                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                    decoration: const BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: [Colors.black12, Colors.black87],
+                                      ),
                                     ),
                                   ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    title,
-                                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  if (time.isNotEmpty) ...[
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      time,
-                                      style: TextStyle(color: Colors.white.withAlpha(204), fontSize: 12),
+                                ] else ...[
+                                  Container(
+                                    decoration: const BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                        colors: [Color(0xFF3F1200), Color(0xFF1B0B00)],
+                                      ),
                                     ),
-                                  ]
+                                  ),
                                 ],
-                              ),
+                                Padding(
+                                  padding: const EdgeInsets.all(16.0),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.redAccent,
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          type.toUpperCase(),
+                                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        title,
+                                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      if (time.isNotEmpty) ...[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          time,
+                                          style: TextStyle(color: Colors.white.withAlpha(204), fontSize: 12),
+                                        ),
+                                      ]
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(_announcements.length, (index) {
-                  return Container(
-                    width: index == _currentAnnouncementIndex ? 16 : 6,
-                    height: 6,
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                    decoration: BoxDecoration(
-                      color: index == _currentAnnouncementIndex ? const Color(0xFF0F172A) : Colors.grey[300],
-                      borderRadius: BorderRadius.circular(3),
+                          ),
+                        );
+                      },
                     ),
-                  );
-                }),
-              ),
-              const SizedBox(height: 20),
-            ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(generalAnnouncements.length, (index) {
+                      return Container(
+                        width: index == _currentAnnouncementIndex ? 16 : 6,
+                        height: 6,
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        decoration: BoxDecoration(
+                          color: index == _currentAnnouncementIndex ? const Color(0xFF0F172A) : Colors.grey[300],
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 20),
+                ],
+              );
+            }(),
 
             if (_isDayLockedByPreacher) ...[
               Container(
@@ -2172,111 +2179,42 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Donation & Seva Contribution Banner Card
-          Container(
-            margin: const EdgeInsets.only(bottom: 16),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF7C2D12), Color(0xFFC2410C), Color(0xFFEA580C)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFFEA580C).withValues(alpha: 0.3),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.volunteer_activism_rounded, color: Colors.white, size: 28),
-                ),
-                const SizedBox(width: 14),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Support Spiritual Seva',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                      ),
-                      SizedBox(height: 2),
-                      Text(
-                        'Contribute for Annadaan, Temple Seva & Youth Programs',
-                        style: TextStyle(fontSize: 11.5, color: Colors.white70),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: _showDonationDialog,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: const Color(0xFFC2410C),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    elevation: 0,
-                  ),
-                  child: const Text(
-                    'Donate Now',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
-                  ),
-                ),
-              ],
-            ),
+          _buildServiceListItem(
+            title: 'Sadhana & Activity History',
+            icon: Icons.history_rounded,
+            onTap: () => setState(() => _servicesSubTab = 1),
           ),
-          Column(
-            children: [
-              _buildServiceListItem(
-                title: 'Donate & Support (Seva)',
-                icon: Icons.volunteer_activism_outlined,
-                onTap: _showDonationDialog,
-              ),
-              _buildServiceListItem(
-                title: 'Sadhana & Activity History',
-                icon: Icons.history_rounded,
-                onTap: () => setState(() => _servicesSubTab = 1),
-              ),
-              _buildServiceListItem(
-                title: 'Accommodation Booking',
-                icon: Icons.hotel_outlined,
-                onTap: _handleAccommodationBooking,
-              ),
-              _buildServiceListItem(
-                title: 'Residency Admission Form',
-                icon: Icons.apartment_outlined,
-                onTap: _handleResidencyAdmission,
-              ),
-              _buildServiceListItem(
-                title: 'Preacher Appointment',
-                icon: Icons.chat_bubble_outline,
-                onTap: _handlePreacherAppointmentBooking,
-              ),
-              _buildServiceListItem(
-                title: 'Payment Details',
-                icon: Icons.account_balance_wallet_outlined,
-                onTap: _handlePaymentReminder,
-                badgeCount: _updates.where((u) => u['category'] == 'payment' && u['is_completed'] == false && u['work_completed'] != 'SUBMITTED' && u['work_completed'] != 'WAITING_APPROVAL').length,
-              ),
-              _buildServiceListItem(
-                title: 'Contact Preacher',
-                icon: Icons.message_outlined,
-                onTap: _contactPreacher,
-              ),
-            ],
+          _buildServiceListItem(
+            title: 'Donate & Support (Seva)',
+            icon: Icons.volunteer_activism_outlined,
+            onTap: _showDonationDialog,
+          ),
+          _buildServiceListItem(
+            title: 'Accommodation Booking',
+            icon: Icons.hotel_outlined,
+            onTap: _handleAccommodationBooking,
+          ),
+          _buildServiceListItem(
+            title: 'Residency Admission Form',
+            icon: Icons.apartment_outlined,
+            onTap: _handleResidencyAdmission,
+          ),
+          _buildServiceListItem(
+            title: 'Preacher Appointment',
+            icon: Icons.chat_bubble_outline,
+            onTap: _handlePreacherAppointmentBooking,
+          ),
+          _buildServiceListItem(
+            title: 'Payment Details',
+            icon: Icons.account_balance_wallet_outlined,
+            onTap: _handlePaymentReminder,
+            badgeCount: _updates.where((u) => u['category'] == 'payment' && u['is_completed'] == false && u['work_completed'] != 'SUBMITTED' && u['work_completed'] != 'WAITING_APPROVAL').length,
+          ),
+          _buildServiceListItem(
+            title: 'Contact Preacher',
+            icon: Icons.message_outlined,
+            onTap: _contactPreacher,
           ),
         ],
       ),
@@ -2284,33 +2222,6 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   }
 
   Widget _buildEventsTab() {
-    final List<Map<String, dynamic>> defaultEvents = [
-      {
-        'title': 'Sri Krishna Janmashtami Festival & Abhishek',
-        'type': 'Festival',
-        'date': 'Coming Soon',
-        'venue': 'Vrindavan Chandrodaya Mandir',
-        'image': 'https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=600&q=80',
-        'description': 'Grand celebration with Kirtan, Abhishek, and Prasadam distribution.',
-      },
-      {
-        'title': 'Govardhan Parikrama & Yatra Retreat',
-        'type': 'Yatra',
-        'date': 'Upcoming Weekend',
-        'venue': 'Govardhan Dham',
-        'image': 'https://images.unsplash.com/photo-1609137144813-7d9921338f24?auto=format&fit=crop&w=600&q=80',
-        'description': 'Spiritual retreat with ecstatic Kirtan, Parikrama, and Preacher lectures.',
-      },
-      {
-        'title': 'Youth Awakening Workshop & Meditation',
-        'type': 'Workshop',
-        'date': 'Every Sunday 5:00 PM',
-        'venue': 'FOLK Youth Hall',
-        'image': 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=600&q=80',
-        'description': 'Interactive sessions on mind management, meditation, and leadership.',
-      },
-    ];
-
     final eventList = _announcements.where((a) => a['type'] == 'event' || a['type'] == 'trip').toList();
 
     return SingleChildScrollView(
@@ -2332,7 +2243,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  '${eventList.length + defaultEvents.length} Active',
+                  '${eventList.length} Active',
                   style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF4F46E5)),
                 ),
               ),
@@ -2340,175 +2251,106 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
           ),
           const SizedBox(height: 14),
 
-          ...eventList.map((ann) {
-            return Card(
-              margin: const EdgeInsets.only(bottom: 14),
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: const BorderSide(color: Color(0xFFE2E8F0)),
+          if (eventList.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 40),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    Icon(Icons.event_busy_rounded, size: 48, color: Color(0xFF94A3B8)),
+                    SizedBox(height: 12),
+                    Text(
+                      'No upcoming events right now',
+                      style: TextStyle(fontSize: 14, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
               ),
-              clipBehavior: Clip.antiAlias,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if ((ann['banner'] as String? ?? '').isNotEmpty)
-                    AspectRatio(
-                      aspectRatio: 16 / 9,
-                      child: Image.network(
-                        ann['banner'],
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        cacheWidth: 600,
-                        errorBuilder: (_, __, ___) => Container(color: const Color(0xFF3F1200)),
+            )
+          else
+            ...eventList.map((ann) {
+              return Card(
+                margin: const EdgeInsets.only(bottom: 14),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if ((ann['banner'] as String? ?? '').isNotEmpty)
+                      AspectRatio(
+                        aspectRatio: 16 / 9,
+                        child: Image.network(
+                          ann['banner'],
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          cacheWidth: 600,
+                          errorBuilder: (_, __, ___) => Container(color: const Color(0xFF3F1200)),
+                        ),
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.all(14.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFDCFCE7),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  ann['type'].toString().toUpperCase(),
+                                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
+                                ),
+                              ),
+                              const Spacer(),
+                              if ((ann['time'] as String? ?? '').isNotEmpty)
+                                Text(
+                                  ann['time'],
+                                  style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            ann['title'] ?? '',
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                final link = ann['link'] as String? ?? '';
+                                if (link.isNotEmpty) {
+                                  launchUrl(Uri.parse(link), mode: LaunchMode.externalApplication);
+                                } else {
+                                  _showEventJoinDialog(ann['title'] ?? 'Event', link);
+                                }
+                              },
+                              icon: const Icon(Icons.event_available_rounded, size: 18),
+                              label: const Text('Register / View Event'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF3F1200),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  Padding(
-                    padding: const EdgeInsets.all(14.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFDCFCE7),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                ann['type'].toString().toUpperCase(),
-                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
-                              ),
-                            ),
-                            const Spacer(),
-                            if ((ann['time'] as String? ?? '').isNotEmpty)
-                              Text(
-                                ann['time'],
-                                style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          ann['title'] ?? '',
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
-                        ),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: () {
-                              final link = ann['link'] as String? ?? '';
-                              if (link.isNotEmpty) {
-                                launchUrl(Uri.parse(link), mode: LaunchMode.externalApplication);
-                              } else {
-                                _showEventJoinDialog(ann['title'] ?? 'Event', link);
-                              }
-                            },
-                            icon: const Icon(Icons.event_available_rounded, size: 18),
-                            label: const Text('Register / View Event'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF3F1200),
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
-
-          ...defaultEvents.map((evt) {
-            return Card(
-              margin: const EdgeInsets.only(bottom: 14),
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: const BorderSide(color: Color(0xFFE2E8F0)),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  AspectRatio(
-                    aspectRatio: 16 / 9,
-                    child: Image.network(
-                      evt['image'],
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      cacheWidth: 600,
-                      errorBuilder: (_, __, ___) => Container(color: const Color(0xFF3F1200)),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(14.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFEF3C7),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                evt['type'].toString().toUpperCase(),
-                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFD97706)),
-                              ),
-                            ),
-                            const Spacer(),
-                            Row(
-                              children: [
-                                const Icon(Icons.calendar_month, size: 13, color: Color(0xFF64748B)),
-                                const SizedBox(width: 4),
-                                Text(
-                                  evt['date'],
-                                  style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w600),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          evt['title'],
-                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          evt['description'],
-                          style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                        ),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: () {
-                              _showEventJoinDialog(evt['title'], '');
-                            },
-                            icon: const Icon(Icons.check_circle_outline, size: 18),
-                            label: const Text('Join Event'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF3F1200),
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
+                  ],
+                ),
+              );
+            }),
         ],
       ),
     );

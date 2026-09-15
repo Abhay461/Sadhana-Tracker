@@ -793,6 +793,38 @@
     </div>
   </div>
 
+  <!-- Modal: Preacher Created Success Card -->
+  <div class="modal-overlay" id="preacherSuccessModal">
+    <div class="modal-box" style="text-align: center; max-width: 440px;">
+      <div style="width: 60px; height: 60px; background: rgba(34, 197, 94, 0.12); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; color: #16a34a; font-size: 32px;">
+        <i class="ri-checkbox-circle-fill"></i>
+      </div>
+      <h2 style="font-size: 20px; font-weight: 800; color: var(--text-main); margin-bottom: 6px;">Preacher Account Created!</h2>
+      <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 20px;">The preacher can now log into the mobile app using these credentials.</p>
+      
+      <div style="background: rgba(15, 23, 42, 0.03); border: 1px solid var(--border-color); border-radius: 14px; padding: 16px; text-align: left; margin-bottom: 20px;">
+        <div style="margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 12px; color: var(--text-muted); font-weight: 600;">Name:</span>
+          <span id="scName" style="font-size: 13px; font-weight: 700; color: var(--text-main);"></span>
+        </div>
+        <div style="margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 12px; color: var(--text-muted); font-weight: 600;">User ID (Email):</span>
+          <span id="scEmail" style="font-size: 13px; font-weight: 700; color: var(--primary);"></span>
+        </div>
+        <div style="margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 12px; color: var(--text-muted); font-weight: 600;">Password:</span>
+          <span id="scPassword" style="font-size: 13px; font-weight: 700; color: #e11d48; font-family: monospace;"></span>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 12px; color: var(--text-muted); font-weight: 600;">Preacher Code:</span>
+          <span id="scCode" style="font-size: 13px; font-weight: 800; background: rgba(11, 114, 231, 0.15); color: var(--primary); padding: 4px 10px; border-radius: 8px;"></span>
+        </div>
+      </div>
+      
+      <button class="btn btn-primary" style="width: 100%; font-size: 14px; font-weight: 700; padding: 12px;" onclick="closePreacherSuccessModal()">Done & Close</button>
+    </div>
+  </div>
+
   <!-- Toast Notification -->
   <div id="toast">Operation completed successfully!</div>
 
@@ -1171,9 +1203,9 @@
     async function submitNewPreacher(e) {
       e.preventDefault();
       const payload = {
-        name: document.getElementById('pName').value,
-        email: document.getElementById('pEmail').value,
-        phoneNumber: document.getElementById('pPhone').value,
+        name: document.getElementById('pName').value.trim(),
+        email: document.getElementById('pEmail').value.trim(),
+        phoneNumber: document.getElementById('pPhone').value.trim().replace(/\s+/g, ''),
         password: document.getElementById('pPassword').value,
       };
 
@@ -1190,15 +1222,25 @@
         if (res.ok && preacherData) {
           const code = preacherData.preacherCode || preacherData.code || 'CREATED';
           showToast(`Preacher Account Created! Code: ${code}`);
-          alert(`🎉 Preacher Account Successfully Created!\n\nName: ${payload.name}\nUser ID (Email): ${payload.email}\nPassword: ${payload.password}\nPreacher Code: ${code}\n\nThe preacher can now log into the mobile app!`);
+          
+          document.getElementById('scName').textContent = payload.name;
+          document.getElementById('scEmail').textContent = payload.email;
+          document.getElementById('scPassword').textContent = payload.password;
+          document.getElementById('scCode').textContent = code;
+          
           closeAddPreacherModal();
           loadPreachers();
+          document.getElementById('preacherSuccessModal').classList.add('active');
         } else {
           showToast(data.message || 'Failed to create preacher account', true);
         }
       } catch (err) {
         showToast('Error creating preacher: ' + err.message, true);
       }
+    }
+
+    function closePreacherSuccessModal() {
+      document.getElementById('preacherSuccessModal').classList.remove('active');
     }
 
     function toggleAnnCategory() {

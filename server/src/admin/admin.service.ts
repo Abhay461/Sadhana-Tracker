@@ -35,21 +35,22 @@ export class AdminService {
 
   private normalizePhone(rawPhone: string): string {
     try {
-      let formatted = rawPhone.trim();
-      if (!formatted.startsWith('+')) {
-        if (/^\d{10}$/.test(formatted)) {
-          formatted = `+91${formatted}`;
+      let cleaned = rawPhone.trim().replace(/[\s\-\(\)]/g, '');
+      if (!cleaned.startsWith('+')) {
+        const digitsOnly = cleaned.replace(/\D/g, '');
+        if (digitsOnly.length === 10) {
+          cleaned = `+91${digitsOnly}`;
         } else {
-          formatted = `+${formatted}`;
+          cleaned = `+${digitsOnly}`;
         }
       }
-      const parsed = this.phoneUtil.parseAndKeepRawInput(formatted, 'IN');
+      const parsed = this.phoneUtil.parseAndKeepRawInput(cleaned, 'IN');
       if (this.phoneUtil.isValidNumber(parsed)) {
         return this.phoneUtil.format(parsed, PhoneNumberFormat.E164);
       }
-      return formatted;
+      return cleaned;
     } catch (_) {
-      return rawPhone.trim();
+      return rawPhone.trim().replace(/\s+/g, '');
     }
   }
 
