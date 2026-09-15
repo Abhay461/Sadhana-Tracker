@@ -128,9 +128,38 @@ export class AuthService {
 
         const phoneToStore = normalizedPhone || (dto.phoneNumber ? dto.phoneNumber.trim() : null) || `TEMP_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
 
+        let whatsappNumber = phoneToStore;
+        let extractedDob: Date | null = null;
+        let extractedJoiningDate: Date | null = null;
+
+        if (phoneToStore && phoneToStore.includes('|')) {
+          const parts = phoneToStore.split('|');
+          whatsappNumber = parts[0].trim();
+          for (const part of parts) {
+            if (part.includes('DOB:')) {
+              const dobVal = part.replace('DOB:', '').trim();
+              if (dobVal && dobVal !== 'N/A') {
+                const parsed = new Date(dobVal);
+                if (!isNaN(parsed.getTime())) extractedDob = parsed;
+              }
+            }
+            if (part.includes('JOIN:')) {
+              const joinVal = part.replace('JOIN:', '').trim();
+              if (joinVal && joinVal !== 'N/A') {
+                const parsed = new Date(joinVal);
+                if (!isNaN(parsed.getTime())) extractedJoiningDate = parsed;
+              }
+            }
+          }
+        }
+
         user = await this.userModel.create({
           firebaseUid,
           phoneNumber: phoneToStore,
+          whatsapp_number: whatsappNumber,
+          dob: extractedDob,
+          joiningDate: extractedJoiningDate,
+          joining_date: extractedJoiningDate,
           name: dto.name,
           email: email ? email.toLowerCase().trim() : null,
           role: assignedRole,
