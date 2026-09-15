@@ -3129,14 +3129,28 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     String displayDob = formatDate(_profile?['dob']);
     String displayJoin = formatDate(_profile?['joiningDate'] ?? _profile?['joining_date']);
 
+    String displayOcc = (_profile?['occupation'] ?? '').toString().trim();
+    String displayClg = (_profile?['college'] ?? '').toString().trim();
+    String displayCrs = (_profile?['courseYear'] ?? '').toString().trim();
+    String displayCity = (_profile?['city'] ?? '').toString().trim();
+
     if (rawWhatsapp.contains('|')) {
       final parts = rawWhatsapp.split('|');
       displayWhatsapp = parts[0].trim();
       for (var part in parts) {
-        if (part.contains('DOB:') && displayDob.isEmpty) {
-          displayDob = formatDate(part.replaceAll('DOB:', '').trim());
-        } else if (part.contains('JOIN:') && displayJoin.isEmpty) {
-          displayJoin = formatDate(part.replaceAll('JOIN:', '').trim());
+        final p = part.trim();
+        if (p.contains('DOB:') && (displayDob.isEmpty || displayDob == 'N/A')) {
+          displayDob = formatDate(p.replaceAll('DOB:', '').trim());
+        } else if (p.contains('JOIN:') && (displayJoin.isEmpty || displayJoin == 'N/A')) {
+          displayJoin = formatDate(p.replaceAll('JOIN:', '').trim());
+        } else if (p.contains('OCC:') && (displayOcc.isEmpty || displayOcc == 'N/A')) {
+          displayOcc = p.replaceAll('OCC:', '').trim();
+        } else if (p.contains('CLG:') && (displayClg.isEmpty || displayClg == 'N/A')) {
+          displayClg = p.replaceAll('CLG:', '').trim();
+        } else if (p.contains('CRS:') && (displayCrs.isEmpty || displayCrs == 'N/A')) {
+          displayCrs = p.replaceAll('CRS:', '').trim();
+        } else if (p.contains('CITY:') && (displayCity.isEmpty || displayCity == 'N/A')) {
+          displayCity = p.replaceAll('CITY:', '').trim();
         }
       }
     } else {
@@ -3227,19 +3241,37 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
               const SizedBox(height: 14),
               Row(
                 children: [
-                  Expanded(child: _buildProfileInfoRow(Icons.phone_android_outlined, 'WhatsApp Number', displayWhatsapp)),
+                  Expanded(child: _buildProfileInfoRow(Icons.phone_android_outlined, 'WhatsApp Number', displayWhatsapp.isNotEmpty ? displayWhatsapp : '-')),
                   const SizedBox(width: 12),
-                  Expanded(child: _buildProfileInfoRow(Icons.cake_outlined, 'Date of Birth', displayDob)),
+                  Expanded(child: _buildProfileInfoRow(Icons.cake_outlined, 'Date of Birth', displayDob.isNotEmpty ? displayDob : '-')),
                 ],
               ),
               const SizedBox(height: 14),
               Row(
                 children: [
-                  Expanded(child: _buildProfileInfoRow(Icons.calendar_month_outlined, 'Joining Date', displayJoin)),
+                  Expanded(child: _buildProfileInfoRow(Icons.calendar_month_outlined, 'Joining Date', displayJoin.isNotEmpty ? displayJoin : '-')),
                   const SizedBox(width: 12),
-                  Expanded(child: _buildProfileInfoRow(Icons.email_outlined, 'Email Address', _profile?['email'] ?? '')),
+                  Expanded(child: _buildProfileInfoRow(Icons.email_outlined, 'Email Address', _profile?['email'] ?? '-')),
                 ],
               ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(child: _buildProfileInfoRow(Icons.work_outline, 'Occupation', displayOcc.isNotEmpty ? displayOcc : '-')),
+                  const SizedBox(width: 12),
+                  Expanded(child: _buildProfileInfoRow(Icons.location_city_outlined, 'City / Hometown', displayCity.isNotEmpty ? displayCity : '-')),
+                ],
+              ),
+              if (displayClg.isNotEmpty && displayClg != 'N/A') ...[
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(child: _buildProfileInfoRow(Icons.school_outlined, 'College / University', displayClg)),
+                    const SizedBox(width: 12),
+                    Expanded(child: _buildProfileInfoRow(Icons.menu_book_outlined, 'Course & Year', displayCrs.isNotEmpty ? displayCrs : '-')),
+                  ],
+                ),
+              ],
             ],
           ),
 
@@ -3443,14 +3475,28 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     String displayDob = formatDate(_profile?['dob']);
     String displayJoin = formatDate(_profile?['joiningDate'] ?? _profile?['joining_date']);
 
+    String displayOcc = (_profile?['occupation'] ?? '').toString().trim();
+    String displayClg = (_profile?['college'] ?? '').toString().trim();
+    String displayCrs = (_profile?['courseYear'] ?? '').toString().trim();
+    String displayCity = (_profile?['city'] ?? '').toString().trim();
+
     if (rawWhatsapp.contains('|')) {
       final parts = rawWhatsapp.split('|');
       displayWhatsapp = parts[0].trim();
       for (var part in parts) {
-        if (part.contains('DOB:') && displayDob.isEmpty) {
-          displayDob = formatDate(part.replaceAll('DOB:', '').trim());
-        } else if (part.contains('JOIN:') && displayJoin.isEmpty) {
-          displayJoin = formatDate(part.replaceAll('JOIN:', '').trim());
+        final p = part.trim();
+        if (p.contains('DOB:') && (displayDob.isEmpty || displayDob == 'N/A')) {
+          displayDob = formatDate(p.replaceAll('DOB:', '').trim());
+        } else if (p.contains('JOIN:') && (displayJoin.isEmpty || displayJoin == 'N/A')) {
+          displayJoin = formatDate(p.replaceAll('JOIN:', '').trim());
+        } else if (p.contains('OCC:') && (displayOcc.isEmpty || displayOcc == 'N/A')) {
+          displayOcc = p.replaceAll('OCC:', '').trim();
+        } else if (p.contains('CLG:') && (displayClg.isEmpty || displayClg == 'N/A')) {
+          displayClg = p.replaceAll('CLG:', '').trim();
+        } else if (p.contains('CRS:') && (displayCrs.isEmpty || displayCrs == 'N/A')) {
+          displayCrs = p.replaceAll('CRS:', '').trim();
+        } else if (p.contains('CITY:') && (displayCity.isEmpty || displayCity == 'N/A')) {
+          displayCity = p.replaceAll('CITY:', '').trim();
         }
       }
     } else {
@@ -3462,6 +3508,10 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     final emailController = TextEditingController(text: _profile?['email'] ?? '');
     final dobController = TextEditingController(text: displayDob);
     final joinController = TextEditingController(text: displayJoin);
+    final occupationController = TextEditingController(text: displayOcc.isNotEmpty ? displayOcc : 'Student');
+    final collegeController = TextEditingController(text: displayClg);
+    final courseYearController = TextEditingController(text: displayCrs);
+    final cityController = TextEditingController(text: displayCity);
 
     bool isSaving = false;
 
@@ -3502,6 +3552,42 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                       decoration: const InputDecoration(
                         labelText: 'Email Address',
                         prefixIcon: Icon(Icons.email_outlined),
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: occupationController,
+                      decoration: const InputDecoration(
+                        labelText: 'Occupation / Status',
+                        prefixIcon: Icon(Icons.work_outline),
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: collegeController,
+                      decoration: const InputDecoration(
+                        labelText: 'College / University Name',
+                        prefixIcon: Icon(Icons.school_outlined),
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: courseYearController,
+                      decoration: const InputDecoration(
+                        labelText: 'Course & Year',
+                        prefixIcon: Icon(Icons.menu_book_outlined),
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: cityController,
+                      decoration: const InputDecoration(
+                        labelText: 'City / Native Hometown',
+                        prefixIcon: Icon(Icons.location_city_outlined),
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -3574,6 +3660,10 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                           final email = emailController.text.trim();
                           final dob = dobController.text.trim();
                           final join = joinController.text.trim();
+                          final occ = occupationController.text.trim();
+                          final clg = collegeController.text.trim();
+                          final crs = courseYearController.text.trim();
+                          final city = cityController.text.trim();
 
                           if (name.isEmpty) {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -3590,6 +3680,10 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                             List<String> extraParts = [];
                             if (dob.isNotEmpty) extraParts.add('DOB: $dob');
                             if (join.isNotEmpty) extraParts.add('JOIN: $join');
+                            if (occ.isNotEmpty) extraParts.add('OCC: $occ');
+                            if (clg.isNotEmpty) extraParts.add('CLG: $clg');
+                            if (crs.isNotEmpty) extraParts.add('CRS: $crs');
+                            if (city.isNotEmpty) extraParts.add('CITY: $city');
                             if (extraParts.isNotEmpty) {
                               formattedWhatsapp = '$whatsapp | ${extraParts.join(' | ')}';
                             }
@@ -3602,6 +3696,10 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                               'dob': dob.isNotEmpty ? dob : null,
                               'joiningDate': join.isNotEmpty ? join : null,
                               'joining_date': join.isNotEmpty ? join : null,
+                              'occupation': occ,
+                              'college': clg,
+                              'courseYear': crs,
+                              'city': city,
                             });
 
                             nav.pop();
