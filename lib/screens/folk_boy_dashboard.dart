@@ -4004,32 +4004,32 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: const Text('Message Preacher', style: TextStyle(fontWeight: FontWeight.bold)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        contentPadding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             CircleAvatar(
-              radius: 36,
+              radius: 32,
               backgroundImage: preacherPhoto != null ? NetworkImage(preacherPhoto) : null,
               backgroundColor: const Color(0xFFF1F5F9),
               child: preacherPhoto == null
                   ? Text(
                       preacherName[0].toUpperCase(),
-                      style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF3F1200)),
+                      style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Color(0xFF3F1200)),
                     )
                   : null,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             Text(
               preacherName,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF3F1200)),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0F172A)),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             const Text(
-              'For approvals, questions, or guidance, you can send a message to your preacher directly on WhatsApp.',
-              style: TextStyle(fontSize: 13, color: Colors.grey, height: 1.3),
+              'Send a direct message to your preacher on WhatsApp',
+              style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
               textAlign: TextAlign.center,
             ),
           ],
@@ -4037,9 +4037,9 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('CANCEL', style: TextStyle(color: Colors.grey)),
+            child: const Text('CANCEL', style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w600)),
           ),
-          ElevatedButton(
+          ElevatedButton.icon(
             onPressed: () async {
               Navigator.pop(context);
               if (preacherWhatsapp.isEmpty) {
@@ -4052,8 +4052,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
               if (cleanPhone.length == 10) {
                 cleanPhone = '91$cleanPhone';
               }
-              final message = 'Hare Krishna, Preacher! I am $studentName. I have a query/request regarding...';
-              final whatsappUrl = 'https://wa.me/$cleanPhone?text=${Uri.encodeComponent(message)}';
+              final whatsappUrl = 'https://wa.me/$cleanPhone';
               final uri = Uri.parse(whatsappUrl);
               try {
                 if (await canLaunchUrl(uri)) {
@@ -4069,12 +4068,14 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                 debugPrint('WhatsApp launch error: $e');
               }
             },
+            icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
+            label: const Text('WHATSAPP', style: TextStyle(fontWeight: FontWeight.bold)),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF25D366),
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
-            child: const Text('WHATSAPP', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -6714,50 +6715,52 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
           children: [
             const SizedBox(height: 12),
             Container(
-              width: 50,
-              height: 5,
+              width: 36,
+              height: 4,
               decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(10),
+                color: const Color(0xFFE2E8F0),
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
             const SizedBox(height: 16),
             const Text(
               'Preacher Appointment',
               style: TextStyle(
-                fontSize: 20,
+                fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF1E293B),
+                color: Color(0xFF0F172A),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
-                color: const Color(0xFFEEF2F6),
-                borderRadius: BorderRadius.circular(16),
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: TabBar(
-                padding: const EdgeInsets.all(4),
+                padding: EdgeInsets.zero,
                 indicatorSize: TabBarIndicatorSize.tab,
+                dividerColor: Colors.transparent,
                 indicator: BoxDecoration(
-                  color: const Color(0xFF1D4ED8),
-                  borderRadius: BorderRadius.circular(12),
+                  color: const Color(0xFF0F172A),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 labelColor: Colors.white,
                 unselectedLabelColor: const Color(0xFF64748B),
-                labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                 tabs: const [
-                  Tab(text: 'MY APPOINTMENTS'),
-                  Tab(text: 'BOOK NEW'),
+                  Tab(text: 'Book New'),
+                  Tab(text: 'My Appointments'),
                 ],
               ),
             ),
             Expanded(
               child: TabBarView(
                 children: [
-                  _buildAppointmentsTab(),
                   _buildRequestTab(),
+                  _buildAppointmentsTab(),
                 ],
               ),
             ),
@@ -6939,36 +6942,37 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
         children: [
           if (activePreacher != null) ...[
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: const Color(0xFFEFF6FF),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFDBEAFE)),
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
               ),
               child: Row(
                 children: [
                   CircleAvatar(
-                    radius: 24,
+                    radius: 22,
                     backgroundImage: activePreacher['photo_url'] != null
                         ? NetworkImage(activePreacher['photo_url'])
                         : null,
+                    backgroundColor: const Color(0xFFE2E8F0),
                     child: activePreacher['photo_url'] == null
-                        ? Text((activePreacher['name'] ?? 'P')[0].toUpperCase(), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold))
+                        ? Text((activePreacher['name'] ?? 'P')[0].toUpperCase(), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)))
                         : null,
                   ),
-                  const SizedBox(width: 14),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
                           'BOOKING WITH PREACHER',
-                          style: TextStyle(fontSize: 9, color: Color(0xFF1D4ED8), fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                          style: TextStyle(fontSize: 10, color: Color(0xFF64748B), fontWeight: FontWeight.bold, letterSpacing: 0.5),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 2),
                         Text(
                           activePreacher['name'] ?? 'Preacher',
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E3A8A)),
+                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
                         ),
                       ],
                     ),
@@ -6982,20 +6986,20 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey[300]!),
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<Map<String, dynamic>>(
                   isExpanded: true,
-                  hint: const Text('Choose your preacher...', style: TextStyle(fontSize: 14)),
+                  hint: const Text('Choose your preacher...', style: TextStyle(fontSize: 14, color: Color(0xFF64748B))),
                   value: _selectedPreacherFromList,
                   items: _availablePreachers.map((p) {
                     final itemMap = Map<String, dynamic>.from(p as Map);
                     return DropdownMenuItem<Map<String, dynamic>>(
                       value: itemMap,
-                      child: Text(itemMap['name'] ?? 'Preacher', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      child: Text(itemMap['name'] ?? 'Preacher', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF0F172A))),
                     );
                   }).toList(),
                   onChanged: (val) {
@@ -7007,26 +7011,26 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
               ),
             ),
           ],
-          const SizedBox(height: 20),
-          const Text('Appointment Details', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey, fontSize: 12)),
-          const SizedBox(height: 12),
+          const SizedBox(height: 18),
+          const Text('Appointment Details', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF64748B), fontSize: 12)),
+          const SizedBox(height: 10),
           
           InkWell(
             onTap: _selectDate,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(10),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey[300]!),
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.calendar_today, size: 20, color: Color(0xFF1D4ED8)),
+                      const Icon(Icons.calendar_today_rounded, size: 18, color: Color(0xFF0F172A)),
                       const SizedBox(width: 12),
                       Text(
                         _appointmentDate == null
@@ -7035,34 +7039,34 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: _appointmentDate == null ? FontWeight.normal : FontWeight.bold,
-                          color: _appointmentDate == null ? Colors.grey[600] : const Color(0xFF1E293B),
+                          color: _appointmentDate == null ? const Color(0xFF64748B) : const Color(0xFF0F172A),
                         ),
                       ),
                     ],
                   ),
-                  const Icon(Icons.arrow_drop_down, color: Colors.grey),
+                  const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF64748B)),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
 
           InkWell(
             onTap: _selectTime,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(10),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey[300]!),
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.access_time, size: 20, color: Color(0xFF1D4ED8)),
+                      const Icon(Icons.access_time_rounded, size: 18, color: Color(0xFF0F172A)),
                       const SizedBox(width: 12),
                       Text(
                         _appointmentTime == null
@@ -7071,27 +7075,41 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: _appointmentTime == null ? FontWeight.normal : FontWeight.bold,
-                          color: _appointmentTime == null ? Colors.grey[600] : const Color(0xFF1E293B),
+                          color: _appointmentTime == null ? const Color(0xFF64748B) : const Color(0xFF0F172A),
                         ),
                       ),
                     ],
                   ),
-                  const Icon(Icons.arrow_drop_down, color: Colors.grey),
+                  const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF64748B)),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
 
           TextFormField(
             controller: _purposeController,
             maxLines: 3,
+            style: const TextStyle(fontSize: 14, color: Color(0xFF0F172A)),
             decoration: InputDecoration(
-              labelText: 'Purpose / Topic of Discussion',
+              hintText: 'Purpose / Topic of Discussion',
+              hintStyle: const TextStyle(fontSize: 14, color: Color(0xFF94A3B8)),
               alignLabelWithHint: true,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              fillColor: Colors.white,
               filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              contentPadding: const EdgeInsets.all(14),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: Color(0xFF0F172A), width: 1.5),
+              ),
             ),
             validator: (val) {
               if (val == null || val.trim().isEmpty) {
@@ -7100,19 +7118,25 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
               return null;
             },
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
 
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1D4ED8),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          SizedBox(
+            height: 48,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0F172A),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: _isLoading ? null : _submitBooking,
+              child: _isLoading
+                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
+                  : const Text(
+                      'Submit Appointment Request',
+                      style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, fontSize: 14, color: Colors.white),
+                    ),
             ),
-            onPressed: _isLoading ? null : _submitBooking,
-            child: _isLoading
-                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Text('SUBMIT APPOINTMENT REQUEST', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5)),
           ),
         ],
       ),
