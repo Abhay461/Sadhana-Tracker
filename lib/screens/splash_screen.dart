@@ -41,7 +41,8 @@ class _SplashScreenState extends State<SplashScreen> {
 
   void _navigateToRole(String role, Map<String, dynamic>? profileData) {
     if (!mounted) return;
-    if (role == 'preacher') {
+    final cleanRole = role.toLowerCase().replaceAll('pending_', '');
+    if (cleanRole == 'preacher' || cleanRole == 'admin') {
       Navigator.pushReplacementNamed(context, '/preacher', arguments: profileData);
     } else {
       Navigator.pushReplacementNamed(context, '/folk-boy', arguments: profileData);
@@ -62,13 +63,12 @@ class _SplashScreenState extends State<SplashScreen> {
     try {
       final response = await ApiService.get('/users/me').timeout(const Duration(seconds: 12));
       final profileData = response is Map ? Map<String, dynamic>.from(response) : null;
-      final rawRole = profileData?['role'] ?? 'folk_boy';
-      final role = rawRole.toString().replaceAll('pending_', '');
+      final rawRole = (profileData?['role'] ?? 'folk_boy').toString().toLowerCase();
 
-      _navigateToRole(role, profileData);
+      _navigateToRole(rawRole, profileData);
     } catch (e) {
       debugPrint('SPLASH API Error: $e');
-      _navigateToRole('folk_boy', null);
+      if (mounted) Navigator.pushReplacementNamed(context, '/login');
     }
   }
 

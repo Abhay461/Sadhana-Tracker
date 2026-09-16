@@ -87,14 +87,14 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           } catch (_) {}
         }
 
-        final rawRole = profileData?['role'] ?? 'folk_boy';
-        final role = rawRole.toString().replaceAll('pending_', '');
+        final rawRole = (profileData?['role'] ?? 'folk_boy').toString().toLowerCase();
+        final role = rawRole.replaceAll('pending_', '');
 
         if (mounted) {
           NotificationHelper.loginUser(credential.user!.uid).catchError((_) {});
 
           // DIRECT Seamless Navigation - No 2nd Loading Page!
-          if (role == 'preacher') {
+          if (role == 'preacher' || role == 'admin') {
             Navigator.pushReplacementNamed(context, '/preacher', arguments: profileData);
           } else {
             Navigator.pushReplacementNamed(context, '/folk-boy', arguments: profileData);

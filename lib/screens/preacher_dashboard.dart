@@ -91,8 +91,9 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
         profileData = await ApiService.get('/users/me');
       }
 
-      final role = (profileData is Map ? profileData['role'] : null) as String?;
-      if (role != 'preacher') {
+      final role = ((profileData is Map ? profileData['role'] : null) as String? ?? '').toLowerCase();
+      if (role != 'preacher' && role != 'admin') {
+        debugPrint('PreacherDashboard: User role is "$role" (not preacher/admin). Redirecting to home...');
         if (mounted) {
           Navigator.pushReplacementNamed(context, '/home');
         }

@@ -62,7 +62,11 @@ export class AuthService {
       // 2. Secondary Lookup: Search by verified phoneNumber or email for legacy linking
       const queryOr: any[] = [];
       if (normalizedPhone) queryOr.push({ phoneNumber: normalizedPhone });
-      if (email) queryOr.push({ email: email.toLowerCase().trim() });
+      if (email) {
+        const cleanEmail = email.toLowerCase().trim();
+        queryOr.push({ email: cleanEmail });
+        queryOr.push({ email: new RegExp('^' + cleanEmail.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&') + '$', 'i') });
+      }
 
       user = await this.userModel.findOne({ $or: queryOr });
 
