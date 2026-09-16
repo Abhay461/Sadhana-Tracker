@@ -188,10 +188,11 @@ class ApiService {
     String targetEndpoint = endpoint;
     Map<String, dynamic> targetBody;
 
-    if (endpoint == '/sadhana' || endpoint == '/sadhana/student-update' || endpoint == '/sadhana/updates') {
+    if (endpoint == '/sadhana' && (body['category'] == null || body['category'] == 'folk_sadhna')) {
       targetEndpoint = '/sadhana';
       targetBody = _buildCleanSadhanaDto(body);
     } else {
+      targetEndpoint = endpoint;
       targetBody = Map<String, dynamic>.from(body);
     }
 

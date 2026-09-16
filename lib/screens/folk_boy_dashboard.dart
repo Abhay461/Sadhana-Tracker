@@ -6754,20 +6754,25 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
       final bookingStr = 'Appointment: $dateStr @ $timeStr';
       final purpose = _purposeController.text.trim();
 
+      final preacherId = (activePreacher['id'] ?? activePreacher['_id'] ?? activePreacher['user_id'] ?? activePreacher['userId'])?.toString();
       final updateData = {
         'worker_id': widget.profile['id'] ?? widget.profile['_id'],
         'worker_name': widget.profile['name'],
+        'preacher_id': preacherId,
         'preacher_name': activePreacher['name'] ?? 'Preacher',
         'category': 'preacher_appointment',
         'work_started': bookingStr,
         'description': 'Preacher: ${activePreacher['name']}\nDate: $dateStr\nTime: $timeStr\nPurpose: $purpose',
-        'work_completed': '',
+        'work_completed': 'PENDING',
         'is_completed': false,
         'date': DateFormat('yyyy-MM-dd').format(DateTime.now()),
+        'preferredDate': dateStr,
+        'preferredTime': timeStr,
+        'reason': purpose,
         'points': 0,
       };
 
-      await ApiService.post('/sadhana', updateData);
+      await ApiService.post('/sadhana/student-update', updateData);
       NotificationHelper.sendUpdateNotification(updateData).catchError((_) {});
 
       if (mounted) {
@@ -6786,7 +6791,7 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
       debugPrint('Error booking appointment: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Booking request failed: $e')),
+          SnackBar(content: Text('Booking request failed: ${e.toString().replaceAll('ApiException', '').replaceAll(RegExp(r'\[\d+\]:'), '').trim()}')),
         );
       }
     } finally {

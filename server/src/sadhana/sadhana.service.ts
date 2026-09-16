@@ -6,6 +6,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { SadhanaEntry, SadhanaEntryDocument } from '../database/schemas/sadhana-entries.schema';
 import { User, UserDocument } from '../database/schemas/users.schema';
+import { Appointment, AppointmentDocument } from '../database/schemas/appointments.schema';
 import { LogSadhanaDto } from './dto/log-sadhana.dto';
 import { LockDayDto } from './dto/lock-day.dto';
 
@@ -14,6 +15,7 @@ export class SadhanaService {
   constructor(
     @InjectModel(SadhanaEntry.name) private readonly sadhanaModel: Model<SadhanaEntryDocument>,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+    @InjectModel(Appointment.name) private readonly appointmentModel: Model<AppointmentDocument>,
   ) {}
 
   private calculatePoints(activities: any): number {
@@ -107,7 +109,47 @@ export class SadhanaService {
     const category = body.category || 'folk_sadhna';
     const workStarted = body.work_started || body.workStarted || '';
     const workCompleted = body.work_completed || body.workCompleted || '';
-    const points = body.points || 5;
+    const points = body.points || 0;
+
+    if (category === 'preacher_appointment') {
+      const preacherId = body.preacher_id || body.preacherId;
+      const preferredDate = body.preferredDate || body.date || dateString;
+      const preferredTime = body.preferredTime || '10:00 AM';
+      const reason = body.reason || body.description || 'Preacher Appointment';
+
+      let appt: any = null;
+      if (preacherId) {
+        try {
+          appt = await this.appointmentModel.create({
+            userId,
+            preacherId,
+            preferredDate,
+            preferredTime,
+            reason,
+            status: 'PENDING',
+          });
+        } catch (e) {
+          console.error('Error creating appointment document:', e);
+        }
+      }
+
+      const apptId = appt ? appt._id.toString() : Date.now().toString();
+      return {
+        _id: apptId,
+        id: apptId,
+        worker_id: userId,
+        worker_name: body.worker_name || 'Member',
+        preacher_name: body.preacher_name || 'Preacher',
+        category: 'preacher_appointment',
+        work_started: workStarted || `Appointment: ${preferredDate} @ ${preferredTime}`,
+        description: body.description || `Preacher: ${body.preacher_name}\nDate: ${preferredDate}\nTime: ${preferredTime}\nPurpose: ${reason}`,
+        work_completed: 'PENDING',
+        is_completed: false,
+        date: dateString,
+        points: 0,
+        created_at: appt ? (appt.createdAt ? appt.createdAt.toISOString() : new Date().toISOString()) : new Date().toISOString(),
+      };
+    }
 
     const newAct: any = {};
     const lower = (workStarted + ' ' + (body.description || '')).toLowerCase();
@@ -250,12 +292,10 @@ export class SadhanaService {
         .limit(500)
         .lean();
 
-      // Fallback: If no student entries were found with specific preacherId filter, return recent sadhana entries across all students
       if (entries.length === 0) {
         entries = await this.sadhanaModel.find({}).sort({ logicalDate: -1, createdAt: -1 }).limit(500).lean();
       }
     } else {
-      // Student / Folk boy / Member view
       entries = await this.sadhanaModel
         .find({
           $or: [
@@ -268,11 +308,50 @@ export class SadhanaService {
         .lean();
     }
 
+    // Fetch appointments from MongoDB appointments collection
+    const userAppointments = await this.appointmentModel
+      .find({
+        $or: [
+          { userId: userIdStr },
+          { preacherId: userIdStr },
+          ...(currentUser?._id ? [{ userId: currentUser._id }, { preacherId: currentUser._id }] : []),
+        ],
+      })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const apptUserIds = [...new Set(userAppointments.map((a) => a.userId?.toString()).filter(Boolean))];
+    const apptUsers = await this.userModel.find({ _id: { $in: apptUserIds } }).select('_id name email').lean();
+    const apptUserMap = new Map(apptUsers.map((u) => [u._id.toString(), u]));
+
+    const mappedAppointments = userAppointments.map((a) => {
+      const uId = a.userId ? a.userId.toString() : '';
+      const uObj = apptUserMap.get(uId);
+      const studentName = uObj ? uObj.name : 'Student';
+      const status = a.status || 'PENDING';
+      return {
+        _id: a._id.toString(),
+        id: a._id.toString(),
+        worker_id: uId,
+        worker_name: studentName,
+        student_name: studentName,
+        name: studentName,
+        category: 'preacher_appointment',
+        work_started: `Appointment: ${a.preferredDate} @ ${a.preferredTime}`,
+        description: a.reason ? `Date: ${a.preferredDate}\nTime: ${a.preferredTime}\nPurpose: ${a.reason}` : '',
+        work_completed: status,
+        is_completed: status === 'APPROVED' || status === 'REJECTED',
+        date: a.preferredDate,
+        points: 0,
+        created_at: (a as any).createdAt ? new Date((a as any).createdAt).toISOString() : new Date().toISOString(),
+      };
+    });
+
     const targetUserIds = [...new Set(entries.map((e) => (e.userId ? e.userId.toString() : '')).filter(Boolean))];
     const users = await this.userModel.find({ _id: { $in: targetUserIds } }).select('_id name email').lean();
     const userMap = new Map(users.map((u) => [u._id.toString(), u]));
 
-    return entries.map((e) => {
+    const mappedSadhana = entries.map((e) => {
       const uId = e.userId ? e.userId.toString() : '';
       const uObj = userMap.get(uId);
       const studentName = uObj ? uObj.name : (e.userName || 'Student');
@@ -291,6 +370,8 @@ export class SadhanaService {
         created_at: e.logicalDate ? new Date(e.logicalDate).toISOString() : new Date().toISOString(),
       };
     });
+
+    return [...mappedAppointments, ...mappedSadhana];
   }
 
   async updateStudentUpdate(id: string, body: any) {

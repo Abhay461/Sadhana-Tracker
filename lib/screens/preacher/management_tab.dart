@@ -1441,6 +1441,9 @@ class _ManagementTabState extends State<ManagementTab> {
         ),
         Container(
           margin: const EdgeInsets.only(bottom: 12),
+          constraints: BoxConstraints(
+            maxHeight: studentsToDisplay.length > 6 ? 288.0 : double.infinity,
+          ),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
@@ -1454,9 +1457,11 @@ class _ManagementTabState extends State<ManagementTab> {
             ],
           ),
           clipBehavior: Clip.antiAlias,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
               // 1. FROZEN LEFT COLUMN ('Name') - STAYS FIXED HORIZONTALLY
               Container(
                 width: 100,
@@ -1646,8 +1651,9 @@ class _ManagementTabState extends State<ManagementTab> {
             ],
           ),
         ),
-      ],
-    );
+      ),
+    ],
+  );
   }
 
   @override
