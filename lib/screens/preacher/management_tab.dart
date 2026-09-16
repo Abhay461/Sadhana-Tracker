@@ -711,12 +711,153 @@ class _ManagementTabState extends State<ManagementTab> {
       return 'Filled';
     }
 
+    Map<String, String> extractActivitiesFromLog(Map<String, dynamic> u) {
+      final Map<String, String> result = {};
+
+      final dynamic rawActivities = u['activities'];
+      if (rawActivities is Map) {
+        final acts = Map<String, dynamic>.from(rawActivities);
+
+        if (acts['wakeUpTime'] != null && acts['wakeUpTime'].toString().isNotEmpty) {
+          result['morning wake-up'] = acts['wakeUpTime'].toString();
+        }
+        if (acts['sleepTime'] != null && acts['sleepTime'].toString().isNotEmpty) {
+          result['sleep time'] = acts['sleepTime'].toString();
+        }
+        if (acts['manglaArti'] != null) {
+          final m = acts['manglaArti'];
+          if (m is Map && (m['attended'] == true || m['time'] != null)) {
+            result['mangla arti'] = (m['time'] ?? 'Attended').toString();
+          } else if (m == true) {
+            result['mangla arti'] = 'Attended';
+          }
+        }
+        if (acts['chanting'] != null) {
+          final c = acts['chanting'];
+          if (c is Map && c['rounds'] != null) {
+            result['chanting'] = '${c['rounds']} Rounds';
+          } else if (c is num) {
+            result['chanting'] = '$c Rounds';
+          }
+        }
+        if (acts['onlineSession'] != null) {
+          final o = acts['onlineSession'];
+          if (o is Map && (o['attended'] == true || o['timeSpan'] != null)) {
+            result['online session'] = (o['timeSpan'] ?? 'Attended').toString();
+          } else if (o == true) {
+            result['online session'] = 'Attended';
+          }
+        }
+        if (acts['bookReading'] != null) {
+          final b = acts['bookReading'];
+          if (b is Map) {
+            final name = (b['bookName'] ?? '').toString();
+            final detail = (b['pagesOrMinutes'] ?? b['duration'] ?? '').toString();
+            final combined = [name, detail].where((s) => s.isNotEmpty).join(' - ');
+            result['book reading'] = combined.isNotEmpty ? combined : 'Completed';
+          } else if (b is String && b.isNotEmpty) {
+            result['book reading'] = b;
+          }
+        }
+        if (acts['service'] != null) {
+          final s = acts['service'];
+          if (s is Map) {
+            final name = (s['serviceName'] ?? '').toString();
+            final dur = (s['durationMinutes'] ?? s['duration'] ?? '').toString();
+            final durStr = dur.isNotEmpty ? '$dur mins' : '';
+            final combined = [name, durStr].where((x) => x.isNotEmpty).join(' - ');
+            result['service'] = combined.isNotEmpty ? combined : 'Completed';
+          } else if (s is String && s.isNotEmpty) {
+            result['service'] = s;
+          }
+        }
+        if (acts['templeVisit'] != null) {
+          final t = acts['templeVisit'];
+          if (t is Map && t['visited'] == true) {
+            result['temple visit'] = 'Visited';
+          } else if (t == true) {
+            result['temple visit'] = 'Visited';
+          }
+        }
+        if (acts['srimadBhagavatamClass'] != null) {
+          final sb = acts['srimadBhagavatamClass'];
+          if (sb is Map && (sb['attended'] == true || sb['timeSpan'] != null)) {
+            result['srimad bhagavatam class'] = (sb['timeSpan'] ?? 'Attended').toString();
+          } else if (sb == true) {
+            result['srimad bhagavatam class'] = 'Attended';
+          }
+        }
+        if (acts['bhagavadGitaClass'] != null) {
+          final bg = acts['bhagavadGitaClass'];
+          if (bg is Map && (bg['attended'] == true || bg['timeSpan'] != null)) {
+            result['bhagavad gita class'] = (bg['timeSpan'] ?? 'Attended').toString();
+          } else if (bg == true) {
+            result['bhagavad gita class'] = 'Attended';
+          }
+        }
+        if (acts['ekadashiFasting'] != null) {
+          final e = acts['ekadashiFasting'];
+          if (e is Map && e['fastingType'] != null) {
+            result['ekadashi fasting'] = e['fastingType'].toString();
+          } else if (e is String && e.isNotEmpty) {
+            result['ekadashi fasting'] = e;
+          }
+        }
+      }
+
+      final key = getMatchedKey(u);
+      if (key != null) {
+        result[key] = getDetailText(u);
+      } else {
+        final act = (u['work_started'] ?? u['activity'] ?? u['title'] ?? '').toString().trim().toLowerCase();
+        if (act.isNotEmpty) {
+          result[act] = getDetailText(u);
+        }
+      }
+
+      return result;
+    }
+
+    bool isSameStudent(Map<String, dynamic> student, Map<String, dynamic> u) {
+      final sId = (student['id'] ?? student['_id'] ?? student['userId'] ?? student['user_id'] ?? (student['user'] is Map ? student['user']['_id'] ?? student['user']['id'] : null) ?? '').toString();
+      final sName = (student['name'] ?? student['student_name'] ?? student['studentName'] ?? student['userName'] ?? (student['user'] is Map ? student['user']['name'] : null) ?? '').toString().trim().toLowerCase();
+
+      final uId = (u['worker_id'] ?? u['workerId'] ?? u['user_id'] ?? u['userId'] ?? u['student_id'] ?? u['studentId'] ?? u['createdBy'] ?? u['created_by'] ?? (u['user'] is Map ? u['user']['_id'] ?? u['user']['id'] : u['user']) ?? '').toString();
+      final uName = (u['worker_name'] ?? u['workerName'] ?? u['name'] ?? u['student_name'] ?? u['studentName'] ?? u['userName'] ?? u['user_name'] ?? (u['user'] is Map ? u['user']['name'] : null) ?? '').toString().trim().toLowerCase();
+
+      if (sId.isNotEmpty && uId.isNotEmpty && sId == uId) return true;
+      if (sName.isNotEmpty && uName.isNotEmpty) {
+        if (sName == uName) return true;
+        if (sName.length >= 3 && uName.length >= 3 && (sName.contains(uName) || uName.contains(sName))) return true;
+      }
+      return false;
+    }
+
+    bool matchesLogDate(Map<String, dynamic> u) {
+      final d = (u['dateString'] ?? u['date'] ?? u['created_at'] ?? u['createdAt'] ?? u['timestamp'] ?? '').toString().trim();
+      if (d.isEmpty) return false;
+
+      final targetDashAlt = DateFormat('dd-MM-yyyy').format(curDate);
+      if (d.contains(targetDateStr) || d.contains(targetDateAlt) || d.contains(targetDashAlt)) {
+        return true;
+      }
+
+      try {
+        final parsed = DateTime.tryParse(d);
+        if (parsed != null) {
+          final local = parsed.toLocal();
+          if (local.year == curDate.year && local.month == curDate.month && local.day == curDate.day) {
+            return true;
+          }
+        }
+      } catch (_) {}
+
+      return false;
+    }
+
     // IF A SPECIFIC STUDENT IS SELECTED -> SHOW SINGLE STUDENT DETAIL TABLE
     if (studentName != null) {
-      final dateFilteredLogs = sadhanaLogs.where((u) {
-        final uDate = (u['date'] ?? u['created_at'] ?? '').toString();
-        return uDate.contains(targetDateStr) || uDate.contains(targetDateAlt);
-      }).toList();
+      final dateFilteredLogs = sadhanaLogs.where((u) => matchesLogDate(u)).toList();
 
       final Map<String, Map<String, dynamic>> filledLogsMap = {};
       for (var u in dateFilteredLogs) {
@@ -1181,17 +1322,14 @@ class _ManagementTabState extends State<ManagementTab> {
                       ...studentsToDisplay.asMap().entries.map((entry) {
                         final index = entry.key;
                         final student = entry.value;
-                        final studentId = (student['id'] ?? student['_id'] ?? '').toString();
-                        final studentNameStr = (student['name'] ?? '').toString().toLowerCase();
+                        final studentId = (student['id'] ?? student['_id'] ?? student['userId'] ?? student['user_id'] ?? (student['user'] is Map ? student['user']['_id'] ?? student['user']['id'] : null) ?? '').toString();
+                        final studentNameStr = (student['name'] ?? student['student_name'] ?? student['studentName'] ?? student['userName'] ?? (student['user'] is Map ? student['user']['name'] : null) ?? '').toString().trim().toLowerCase();
 
                         final List<dynamic> candidateLogs = [
                           ...?(widget.allUpdates[studentId]),
                           ...?(widget.allUpdates[studentNameStr]),
-                          ...sadhanaLogs.where((u) {
-                            final uId = (u['worker_id'] ?? u['workerId'] ?? u['user_id'] ?? '').toString();
-                            final uName = (u['worker_name'] ?? u['workerName'] ?? u['name'] ?? '').toString().toLowerCase();
-                            return uId == studentId || (studentNameStr.isNotEmpty && uName == studentNameStr);
-                          }),
+                          ...sadhanaLogs.where((u) => isSameStudent(student, u)),
+                          ...widget.allUpdates.values.expand((x) => x).where((u) => isSameStudent(student, u)),
                         ];
 
                         final Map<String, dynamic> uniqueBoyLogsMap = {};
@@ -1200,23 +1338,27 @@ class _ManagementTabState extends State<ManagementTab> {
                           uniqueBoyLogsMap[uIdKey] = u;
                         }
 
-                        final boyLogs = uniqueBoyLogsMap.values.where((u) {
-                          final uDate = (u['date'] ?? u['created_at'] ?? '').toString();
-                          return uDate.contains(targetDateStr) || uDate.contains(targetDateAlt);
-                        }).toList();
+                        final boyLogs = uniqueBoyLogsMap.values.where((u) => matchesLogDate(u)).toList();
 
                         final Map<String, String> filledMap = {};
                         for (var u in boyLogs) {
-                          final key = getMatchedKey(u);
-                          if (key != null) {
-                            filledMap[key] = getDetailText(u);
-                          } else {
-                            final act = (u['work_started'] ?? u['activity'] ?? u['title'] ?? '').toString().trim().toLowerCase();
-                            if (act.isNotEmpty) {
-                              filledMap[act] = getDetailText(u);
-                            }
+                          final extracted = extractActivitiesFromLog(u);
+                          filledMap.addAll(extracted);
+                        }
+
+                        final Map<String, String> renderedBadges = {};
+                        for (var act in standardActivities) {
+                          final key = act['key']!;
+                          if (filledMap.containsKey(key)) {
+                            renderedBadges[act['title']!] = filledMap[key]!;
                           }
                         }
+
+                        debugPrint('=== DEBUG PREACHER DASHBOARD MATRIX MATCH ===');
+                        debugPrint('Student: ${student['name'] ?? studentNameStr} (ID: $studentId)');
+                        debugPrint('  → Matched Sadhana Records (${boyLogs.length}): $boyLogs');
+                        debugPrint('  → Extracted Activities: $filledMap');
+                        debugPrint('  → Rendered Green Badges: $renderedBadges');
 
                         final isEven = index % 2 == 0;
                         final rowColor = isEven ? Colors.white : const Color(0xFFFAFAFA);

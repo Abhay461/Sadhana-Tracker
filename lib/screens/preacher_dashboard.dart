@@ -123,15 +123,32 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
       if (mounted) setState(() => _isLoadingBoys = true);
       final data = await ApiService.get('/preacher/students');
 
+      debugPrint('=== DEBUG PREACHER DASHBOARD: /preacher/students ===');
+      debugPrint('Runtime type of students response: ${data.runtimeType}');
+      if (data is Map) {
+        debugPrint('Map keys in students response: ${data.keys.toList()}');
+      }
+
+      List<dynamic> extractedStudents = [];
+      if (data is List) {
+        extractedStudents = List.from(data);
+      } else if (data is Map) {
+        for (var k in ['students', 'data', 'items', 'users', 'boys', 'records', 'results']) {
+          if (data[k] is List) {
+            extractedStudents = List.from(data[k]);
+            break;
+          }
+        }
+      }
+
+      debugPrint('Fetched _folkBoys count: ${extractedStudents.length}');
+      for (var b in extractedStudents) {
+        debugPrint('  Student record: $b');
+      }
+
       if (mounted) {
         setState(() {
-          if (data is List) {
-            _folkBoys = data;
-          } else if (data is Map && data['students'] is List) {
-            _folkBoys = List.from(data['students']);
-          } else {
-            _folkBoys = [];
-          }
+          _folkBoys = extractedStudents;
           _isLoadingBoys = false;
         });
       }
@@ -159,21 +176,376 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
     }
   }
 
+  List<dynamic> _normalizeSadhanaItems(List<dynamic> rawList) {
+    final List<dynamic> result = [];
+    for (var u in rawList) {
+      if (u is! Map) continue;
+      final itemMap = Map<String, dynamic>.from(u);
+
+      final workerId = (itemMap['worker_id'] ??
+              itemMap['workerId'] ??
+              itemMap['user_id'] ??
+              itemMap['userId'] ??
+              itemMap['student_id'] ??
+              itemMap['studentId'] ??
+              itemMap['createdBy'] ??
+              itemMap['created_by'] ??
+              (itemMap['user'] is Map ? itemMap['user']['_id'] ?? itemMap['user']['id'] : itemMap['user']) ??
+              '')
+          .toString();
+
+      final workerName = (itemMap['worker_name'] ??
+              itemMap['workerName'] ??
+              itemMap['name'] ??
+              itemMap['student_name'] ??
+              itemMap['studentName'] ??
+              itemMap['userName'] ??
+              itemMap['user_name'] ??
+              (itemMap['user'] is Map ? itemMap['user']['name'] : null) ??
+              '')
+          .toString();
+
+      final date = (itemMap['dateString'] ?? itemMap['date'] ?? itemMap['created_at'] ?? itemMap['createdAt'] ?? '').toString();
+
+      itemMap['worker_id'] = workerId;
+      itemMap['worker_name'] = workerName;
+      itemMap['date'] = date;
+      result.add(itemMap);
+
+      final dynamic rawActs = itemMap['activities'];
+      if (rawActs is Map) {
+        final activities = Map<String, dynamic>.from(rawActs);
+
+        if (activities['wakeUpTime'] != null && activities['wakeUpTime'].toString().isNotEmpty) {
+          final t = activities['wakeUpTime'].toString();
+          result.add({
+            'id': itemMap['id'] ?? itemMap['_id'],
+            'worker_id': workerId,
+            'worker_name': workerName,
+            'date': date,
+            'category': 'folk_sadhna',
+            'work_started': 'Morning Wake-Up ($t)',
+            'work_completed': t,
+            'is_completed': true,
+            'activities': rawActs,
+          });
+        }
+
+        if (activities['sleepTime'] != null && activities['sleepTime'].toString().isNotEmpty) {
+          final t = activities['sleepTime'].toString();
+          result.add({
+            'id': itemMap['id'] ?? itemMap['_id'],
+            'worker_id': workerId,
+            'worker_name': workerName,
+            'date': date,
+            'category': 'folk_sadhna',
+            'work_started': 'Sleep Time ($t)',
+            'work_completed': t,
+            'is_completed': true,
+            'activities': rawActs,
+          });
+        }
+
+        if (activities['manglaArti'] != null) {
+          final m = activities['manglaArti'];
+          if (m is Map && (m['attended'] == true || m['time'] != null)) {
+            final t = (m['time'] ?? 'Attended').toString();
+            result.add({
+              'id': itemMap['id'] ?? itemMap['_id'],
+              'worker_id': workerId,
+              'worker_name': workerName,
+              'date': date,
+              'category': 'folk_sadhna',
+              'work_started': 'Mangla Arti ($t)',
+              'work_completed': t,
+              'is_completed': true,
+              'activities': rawActs,
+            });
+          } else if (m == true) {
+            result.add({
+              'id': itemMap['id'] ?? itemMap['_id'],
+              'worker_id': workerId,
+              'worker_name': workerName,
+              'date': date,
+              'category': 'folk_sadhna',
+              'work_started': 'Mangla Arti (Attended)',
+              'work_completed': 'Attended',
+              'is_completed': true,
+              'activities': rawActs,
+            });
+          }
+        }
+
+        if (activities['chanting'] != null) {
+          final c = activities['chanting'];
+          if (c is Map && c['rounds'] != null) {
+            final r = c['rounds'];
+            result.add({
+              'id': itemMap['id'] ?? itemMap['_id'],
+              'worker_id': workerId,
+              'worker_name': workerName,
+              'date': date,
+              'category': 'folk_sadhna',
+              'work_started': 'Chanting ($r Rounds)',
+              'work_completed': '$r Rounds',
+              'is_completed': true,
+              'activities': rawActs,
+            });
+          } else if (c is num) {
+            result.add({
+              'id': itemMap['id'] ?? itemMap['_id'],
+              'worker_id': workerId,
+              'worker_name': workerName,
+              'date': date,
+              'category': 'folk_sadhna',
+              'work_started': 'Chanting ($c Rounds)',
+              'work_completed': '$c Rounds',
+              'is_completed': true,
+              'activities': rawActs,
+            });
+          }
+        }
+
+        if (activities['onlineSession'] != null) {
+          final o = activities['onlineSession'];
+          if (o is Map && (o['attended'] == true || o['timeSpan'] != null)) {
+            final t = (o['timeSpan'] ?? 'Attended').toString();
+            result.add({
+              'id': itemMap['id'] ?? itemMap['_id'],
+              'worker_id': workerId,
+              'worker_name': workerName,
+              'date': date,
+              'category': 'folk_sadhna',
+              'work_started': 'Online Session ($t)',
+              'work_completed': t,
+              'is_completed': true,
+              'activities': rawActs,
+            });
+          } else if (o == true) {
+            result.add({
+              'id': itemMap['id'] ?? itemMap['_id'],
+              'worker_id': workerId,
+              'worker_name': workerName,
+              'date': date,
+              'category': 'folk_sadhna',
+              'work_started': 'Online Session (Attended)',
+              'work_completed': 'Attended',
+              'is_completed': true,
+              'activities': rawActs,
+            });
+          }
+        }
+
+        if (activities['bookReading'] != null) {
+          final b = activities['bookReading'];
+          if (b is Map) {
+            final name = (b['bookName'] ?? '').toString();
+            final detail = (b['pagesOrMinutes'] ?? b['duration'] ?? '').toString();
+            final combined = [name, detail].where((s) => s.isNotEmpty).join(' - ');
+            result.add({
+              'id': itemMap['id'] ?? itemMap['_id'],
+              'worker_id': workerId,
+              'worker_name': workerName,
+              'date': date,
+              'category': 'folk_sadhna',
+              'work_started': 'Book Reading: ${combined.isNotEmpty ? combined : "Completed"}',
+              'work_completed': combined.isNotEmpty ? combined : 'Completed',
+              'is_completed': true,
+              'activities': rawActs,
+            });
+          } else if (b is String && b.isNotEmpty) {
+            result.add({
+              'id': itemMap['id'] ?? itemMap['_id'],
+              'worker_id': workerId,
+              'worker_name': workerName,
+              'date': date,
+              'category': 'folk_sadhna',
+              'work_started': 'Book Reading: $b',
+              'work_completed': b,
+              'is_completed': true,
+              'activities': rawActs,
+            });
+          }
+        }
+
+        if (activities['service'] != null) {
+          final s = activities['service'];
+          if (s is Map) {
+            final name = (s['serviceName'] ?? '').toString();
+            final dur = (s['durationMinutes'] ?? s['duration'] ?? '').toString();
+            final durStr = dur.isNotEmpty ? '$dur mins' : '';
+            final combined = [name, durStr].where((x) => x.isNotEmpty).join(' - ');
+            result.add({
+              'id': itemMap['id'] ?? itemMap['_id'],
+              'worker_id': workerId,
+              'worker_name': workerName,
+              'date': date,
+              'category': 'folk_sadhna',
+              'work_started': 'Service: ${combined.isNotEmpty ? combined : "Completed"}',
+              'work_completed': combined.isNotEmpty ? combined : 'Completed',
+              'is_completed': true,
+              'activities': rawActs,
+            });
+          } else if (s is String && s.isNotEmpty) {
+            result.add({
+              'id': itemMap['id'] ?? itemMap['_id'],
+              'worker_id': workerId,
+              'worker_name': workerName,
+              'date': date,
+              'category': 'folk_sadhna',
+              'work_started': 'Service: $s',
+              'work_completed': s,
+              'is_completed': true,
+              'activities': rawActs,
+            });
+          }
+        }
+
+        if (activities['templeVisit'] != null) {
+          final t = activities['templeVisit'];
+          if ((t is Map && t['visited'] == true) || t == true) {
+            result.add({
+              'id': itemMap['id'] ?? itemMap['_id'],
+              'worker_id': workerId,
+              'worker_name': workerName,
+              'date': date,
+              'category': 'folk_sadhna',
+              'work_started': 'Temple Visit',
+              'work_completed': 'Visited',
+              'is_completed': true,
+              'activities': rawActs,
+            });
+          }
+        }
+
+        if (activities['srimadBhagavatamClass'] != null) {
+          final sb = activities['srimadBhagavatamClass'];
+          if (sb is Map && (sb['attended'] == true || sb['timeSpan'] != null)) {
+            final t = (sb['timeSpan'] ?? 'Attended').toString();
+            result.add({
+              'id': itemMap['id'] ?? itemMap['_id'],
+              'worker_id': workerId,
+              'worker_name': workerName,
+              'date': date,
+              'category': 'folk_sadhna',
+              'work_started': 'Srimad Bhagavatam Class ($t)',
+              'work_completed': t,
+              'is_completed': true,
+              'activities': rawActs,
+            });
+          } else if (sb == true) {
+            result.add({
+              'id': itemMap['id'] ?? itemMap['_id'],
+              'worker_id': workerId,
+              'worker_name': workerName,
+              'date': date,
+              'category': 'folk_sadhna',
+              'work_started': 'Srimad Bhagavatam Class (Attended)',
+              'work_completed': 'Attended',
+              'is_completed': true,
+              'activities': rawActs,
+            });
+          }
+        }
+
+        if (activities['bhagavadGitaClass'] != null) {
+          final bg = activities['bhagavadGitaClass'];
+          if (bg is Map && (bg['attended'] == true || bg['timeSpan'] != null)) {
+            final t = (bg['timeSpan'] ?? 'Attended').toString();
+            result.add({
+              'id': itemMap['id'] ?? itemMap['_id'],
+              'worker_id': workerId,
+              'worker_name': workerName,
+              'date': date,
+              'category': 'folk_sadhna',
+              'work_started': 'Bhagavad Gita Class ($t)',
+              'work_completed': t,
+              'is_completed': true,
+              'activities': rawActs,
+            });
+          } else if (bg == true) {
+            result.add({
+              'id': itemMap['id'] ?? itemMap['_id'],
+              'worker_id': workerId,
+              'worker_name': workerName,
+              'date': date,
+              'category': 'folk_sadhna',
+              'work_started': 'Bhagavad Gita Class (Attended)',
+              'work_completed': 'Attended',
+              'is_completed': true,
+              'activities': rawActs,
+            });
+          }
+        }
+
+        if (activities['ekadashiFasting'] != null) {
+          final e = activities['ekadashiFasting'];
+          if (e is Map && e['fastingType'] != null) {
+            final f = e['fastingType'].toString();
+            result.add({
+              'id': itemMap['id'] ?? itemMap['_id'],
+              'worker_id': workerId,
+              'worker_name': workerName,
+              'date': date,
+              'category': 'folk_sadhna',
+              'work_started': 'Ekadashi Fasting ($f)',
+              'work_completed': f,
+              'is_completed': true,
+              'activities': rawActs,
+            });
+          } else if (e is String && e.isNotEmpty) {
+            result.add({
+              'id': itemMap['id'] ?? itemMap['_id'],
+              'worker_id': workerId,
+              'worker_name': workerName,
+              'date': date,
+              'category': 'folk_sadhna',
+              'work_started': 'Ekadashi Fasting ($e)',
+              'work_completed': e,
+              'is_completed': true,
+              'activities': rawActs,
+            });
+          }
+        }
+      }
+    }
+    return result;
+  }
+
   Future<void> _fetchAllUpdates() async {
     await _fetchTripAndEventBookings();
     try {
       dynamic updatesData = await ApiService.get('/sadhana/updates');
-      List<dynamic> processedUpdates = [];
 
-      if (updatesData is List) {
-        processedUpdates = List.from(updatesData);
-      } else if (updatesData is Map && updatesData['items'] is List) {
-        processedUpdates = List.from(updatesData['items']);
-      } else if (updatesData is Map && updatesData['updates'] is List) {
-        processedUpdates = List.from(updatesData['updates']);
-      } else if (updatesData is Map && updatesData['data'] is List) {
-        processedUpdates = List.from(updatesData['data']);
+      debugPrint('=== DEBUG PREACHER DASHBOARD: /sadhana/updates RESPONSE ===');
+      debugPrint('Runtime type of updatesData: ${updatesData.runtimeType}');
+      if (updatesData is Map) {
+        debugPrint('Map keys in updatesData: ${updatesData.keys.toList()}');
       }
+
+      List<dynamic> extractList(dynamic data) {
+        if (data is List) return List.from(data);
+        if (data is Map) {
+          for (var key in ['items', 'updates', 'data', 'records', 'results', 'sadhana', 'history', 'logs', 'sadhanaUpdates']) {
+            final val = data[key];
+            if (val is List) return List.from(val);
+            if (val is Map) {
+              final nested = extractList(val);
+              if (nested.isNotEmpty) return nested;
+            }
+          }
+        }
+        return [];
+      }
+
+      List<dynamic> rawUpdates = extractList(updatesData);
+      debugPrint('Total raw updates extracted: ${rawUpdates.length}');
+      if (rawUpdates.isNotEmpty) {
+        debugPrint('Sample raw update record #0: ${rawUpdates.first}');
+      }
+
+      final List<dynamic> processedUpdates = _normalizeSadhanaItems(rawUpdates);
+      debugPrint('Total processed updates count: ${processedUpdates.length}');
 
       // Process signals in-memory
       final approvalSignals = processedUpdates.where((u) => u['category'] == 'accommodation_approval_signal').toList();
@@ -249,20 +621,22 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
 
       final Map<String, List<dynamic>> grouped = {};
       for (var u in processedUpdates) {
-        final workerId = (u['worker_id'] ?? u['workerId'] ?? u['user_id'] ?? u['userId'] ?? '').toString();
-        final workerName = (u['worker_name'] ?? u['workerName'] ?? u['name'] ?? '').toString().toLowerCase();
+        final workerId = (u['worker_id'] ?? u['workerId'] ?? u['user_id'] ?? u['userId'] ?? u['student_id'] ?? u['studentId'] ?? u['createdBy'] ?? u['created_by'] ?? (u['user'] is Map ? u['user']['_id'] ?? u['user']['id'] : u['user']) ?? '').toString();
+        final workerName = (u['worker_name'] ?? u['workerName'] ?? u['name'] ?? u['student_name'] ?? u['studentName'] ?? u['userName'] ?? u['user_name'] ?? (u['user'] is Map ? u['user']['name'] : null) ?? '').toString().trim().toLowerCase();
 
-        if (workerId.isNotEmpty) {
-          if (!grouped.containsKey(workerId)) {
-            grouped[workerId] = [];
-          }
-          grouped[workerId]!.add(u);
+        void addGroup(String k) {
+          if (k.isEmpty) return;
+          if (!grouped.containsKey(k)) grouped[k] = [];
+          grouped[k]!.add(u);
         }
-        if (workerName.isNotEmpty) {
-          if (!grouped.containsKey(workerName)) {
-            grouped[workerName] = [];
-          }
-          grouped[workerName]!.add(u);
+
+        addGroup(workerId);
+        addGroup(workerName);
+        if (u['user'] is Map) {
+          final uObjId = (u['user']['_id'] ?? u['user']['id'] ?? '').toString();
+          final uObjName = (u['user']['name'] ?? '').toString().trim().toLowerCase();
+          addGroup(uObjId);
+          addGroup(uObjName);
         }
       }
 
@@ -272,7 +646,7 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
         });
       }
     } catch (e) {
-      debugPrint('Error fetching updates: $e');
+      debugPrint('Error fetching all updates: $e');
     }
   }
 

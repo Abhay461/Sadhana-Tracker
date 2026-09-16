@@ -49,7 +49,7 @@ export class SadhanaController {
   @Get('updates')
   @ApiOperation({ summary: 'Get student sadhana update logs' })
   async getUpdates(@CurrentUser() user: any) {
-    return this.sadhanaService.getUpdates(user._id);
+    return this.sadhanaService.getUpdates(user);
   }
 
   @Patch('updates/:id')

@@ -5,6 +5,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { SadhanaEntry, SadhanaEntryDocument } from '../database/schemas/sadhana-entries.schema';
+import { User, UserDocument } from '../database/schemas/users.schema';
 import { LogSadhanaDto } from './dto/log-sadhana.dto';
 import { LockDayDto } from './dto/lock-day.dto';
 
@@ -12,6 +13,7 @@ import { LockDayDto } from './dto/lock-day.dto';
 export class SadhanaService {
   constructor(
     @InjectModel(SadhanaEntry.name) private readonly sadhanaModel: Model<SadhanaEntryDocument>,
+    @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
   ) {}
 
   private calculatePoints(activities: any): number {
@@ -198,19 +200,97 @@ export class SadhanaService {
     };
   }
 
-  async getUpdates(userId: string) {
-    const entries = await this.sadhanaModel.find({ userId }).sort({ logicalDate: -1 }).limit(60);
-    return entries.map((e) => ({
-      _id: e._id.toString(),
-      id: e._id.toString(),
-      worker_id: e.userId.toString(),
-      category: 'folk_sadhna',
-      date: e.dateString,
-      points: e.totalPoints,
-      activities: e.activities,
-      is_completed: true,
-      created_at: e.logicalDate ? e.logicalDate.toISOString() : new Date().toISOString(),
-    }));
+  async getUpdates(userOrUserId: any) {
+    let currentUser: any = null;
+    let userIdStr = '';
+
+    if (userOrUserId && typeof userOrUserId === 'object') {
+      currentUser = userOrUserId;
+      userIdStr = (userOrUserId._id || userOrUserId.id || '').toString();
+    } else if (userOrUserId && typeof userOrUserId === 'string') {
+      userIdStr = userOrUserId;
+      try {
+        currentUser = await this.userModel.findById(userIdStr).lean();
+      } catch (_) {}
+    }
+
+    if (!userIdStr && !currentUser) {
+      return [];
+    }
+
+    const role = (currentUser?.role || '').toLowerCase();
+    const isAdmin = role === 'admin' || currentUser?.isAdmin === true || currentUser?.is_admin === true;
+    const isPreacher = role === 'preacher' || isAdmin;
+
+    let entries: any[] = [];
+
+    if (isAdmin) {
+      entries = await this.sadhanaModel.find({}).sort({ logicalDate: -1, createdAt: -1 }).limit(500).lean();
+    } else if (isPreacher) {
+      const assignedStudents = await this.userModel
+        .find({
+          $or: [
+            { preacherId: userIdStr },
+            ...(currentUser?._id ? [{ preacherId: currentUser._id }] : []),
+          ],
+        })
+        .select('_id name')
+        .lean();
+
+      const studentIds: any[] = assignedStudents.map((s) => s._id.toString());
+      for (const s of assignedStudents) {
+        studentIds.push(s._id);
+      }
+      studentIds.push(userIdStr);
+      if (currentUser?._id) studentIds.push(currentUser._id);
+
+      entries = await this.sadhanaModel
+        .find({ userId: { $in: studentIds } })
+        .sort({ logicalDate: -1, createdAt: -1 })
+        .limit(500)
+        .lean();
+
+      // Fallback: If no student entries were found with specific preacherId filter, return recent sadhana entries across all students
+      if (entries.length === 0) {
+        entries = await this.sadhanaModel.find({}).sort({ logicalDate: -1, createdAt: -1 }).limit(500).lean();
+      }
+    } else {
+      // Student / Folk boy / Member view
+      entries = await this.sadhanaModel
+        .find({
+          $or: [
+            { userId: userIdStr },
+            ...(currentUser?._id ? [{ userId: currentUser._id }] : []),
+          ],
+        })
+        .sort({ logicalDate: -1, createdAt: -1 })
+        .limit(100)
+        .lean();
+    }
+
+    const targetUserIds = [...new Set(entries.map((e) => (e.userId ? e.userId.toString() : '')).filter(Boolean))];
+    const users = await this.userModel.find({ _id: { $in: targetUserIds } }).select('_id name email').lean();
+    const userMap = new Map(users.map((u) => [u._id.toString(), u]));
+
+    return entries.map((e) => {
+      const uId = e.userId ? e.userId.toString() : '';
+      const uObj = userMap.get(uId);
+      const studentName = uObj ? uObj.name : (e.userName || 'Student');
+      return {
+        _id: e._id ? e._id.toString() : '',
+        id: e._id ? e._id.toString() : '',
+        worker_id: uId,
+        worker_name: studentName,
+        student_name: studentName,
+        name: studentName,
+        category: 'folk_sadhna',
+        date: e.dateString,
+        points: e.totalPoints || 0,
+        activities: e.activities || {},
+        is_completed: true,
+        created_at: e.logicalDate ? new Date(e.logicalDate).toISOString() : new Date().toISOString(),
+      };
+    });
   }
 
   async updateStudentUpdate(id: string, body: any) {
