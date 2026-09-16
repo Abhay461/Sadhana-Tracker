@@ -90,6 +90,192 @@ class _ApprovalTabState extends State<ApprovalTab> {
     return desc.isNotEmpty ? desc : wrkStr;
   }
 
+  Future<Map<String, String>?> _showAppointmentApprovalDialog(BuildContext context, Map<String, dynamic> u) async {
+    final studentName = u['worker_name'] ?? u['student_name'] ?? 'Student';
+    final preferredDate = (u['preferredDate'] ?? u['date'] ?? '').toString();
+    final preferredTime = (u['preferredTime'] ?? '').toString();
+    
+    String reqDate = preferredDate;
+    String reqTime = preferredTime;
+    final desc = (u['description'] ?? '').toString();
+    for (var line in desc.split('\n')) {
+      if (line.startsWith('Date: ') && reqDate.isEmpty) {
+        reqDate = line.replaceAll('Date: ', '').trim();
+      } else if (line.startsWith('Time: ') && reqTime.isEmpty) {
+        reqTime = line.replaceAll('Time: ', '').trim();
+      }
+    }
+    if (reqDate.isEmpty) reqDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    if (reqTime.isEmpty) reqTime = '10:00 AM';
+
+    bool isAlternative = false;
+    DateTime altDate = DateTime.tryParse(reqDate) ?? DateTime.now().add(const Duration(days: 1));
+    TimeOfDay altTime = const TimeOfDay(hour: 10, minute: 0);
+
+    return showDialog<Map<String, String>>(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final formattedReqDate = DateFormat('dd MMM yyyy').format(DateTime.tryParse(reqDate) ?? altDate);
+            final formattedAltDate = DateFormat('dd MMM yyyy').format(altDate);
+            final formattedAltTime = altTime.format(context);
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Approve Appointment', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 4),
+                  Text('Student: $studentName', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Select Approval Date & Time:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const SizedBox(height: 12),
+                    
+                    // Option 1: Requested Date & Time
+                    InkWell(
+                      onTap: () => setDialogState(() => isAlternative = false),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: !isAlternative ? const Color(0xFFEFF6FF) : Colors.grey[50],
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: !isAlternative ? const Color(0xFF3B82F6) : Colors.grey[300]!, width: !isAlternative ? 1.5 : 1),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(!isAlternative ? Icons.radio_button_checked : Icons.radio_button_off, color: !isAlternative ? const Color(0xFF2563EB) : Colors.grey[400], size: 20),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('Requested Date & Time', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                  Text('$formattedReqDate at $reqTime', style: TextStyle(fontSize: 11, color: Colors.grey[700])),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Option 2: Alternative Date & Time
+                    InkWell(
+                      onTap: () => setDialogState(() => isAlternative = true),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isAlternative ? const Color(0xFFF0FDFA) : Colors.grey[50],
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: isAlternative ? const Color(0xFF0D9488) : Colors.grey[300]!, width: isAlternative ? 1.5 : 1),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(isAlternative ? Icons.radio_button_checked : Icons.radio_button_off, color: isAlternative ? const Color(0xFF0D9488) : Colors.grey[400], size: 20),
+                                const SizedBox(width: 10),
+                                const Expanded(
+                                  child: Text('Alternative Date & Time', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                ),
+                              ],
+                            ),
+                            if (isAlternative) ...[
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: OutlinedButton.icon(
+                                      style: OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      ),
+                                      icon: const Icon(Icons.calendar_month, size: 14),
+                                      label: Text(formattedAltDate, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                                      onPressed: () async {
+                                        final picked = await showDatePicker(
+                                          context: context,
+                                          initialDate: altDate,
+                                          firstDate: DateTime.now(),
+                                          lastDate: DateTime.now().add(const Duration(days: 90)),
+                                        );
+                                        if (picked != null) {
+                                          setDialogState(() => altDate = picked);
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: OutlinedButton.icon(
+                                      style: OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      ),
+                                      icon: const Icon(Icons.access_time, size: 14),
+                                      label: Text(formattedAltTime, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                                      onPressed: () async {
+                                        final picked = await showTimePicker(
+                                          context: context,
+                                          initialTime: altTime,
+                                        );
+                                        if (picked != null) {
+                                          setDialogState(() => altTime = picked);
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx, null),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0F766E),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () {
+                    final finalDate = isAlternative ? DateFormat('yyyy-MM-dd').format(altDate) : reqDate;
+                    final finalTime = isAlternative ? altTime.format(context) : reqTime;
+                    Navigator.pop(dialogCtx, {
+                      'approvedDate': finalDate,
+                      'approvedTime': finalTime,
+                    });
+                  },
+                  child: const Text('Approve', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final pendingUpdates = [];
@@ -553,11 +739,16 @@ class _ApprovalTabState extends State<ApprovalTab> {
                                 'work_completed': 'PAID',
                               });
                             } else if (category == 'preacher_appointment') {
-                              debugPrint('📌 [PREACHER APPROVE APPOINTMENT REQUEST]: ID=$updateId');
+                              final approvalData = await _showAppointmentApprovalDialog(context, Map<String, dynamic>.from(u));
+                              if (approvalData == null) return;
+
+                              debugPrint('📌 [PREACHER APPROVE APPOINTMENT REQUEST]: ID=$updateId, data=$approvalData');
                               final res = await ApiService.patch('/sadhana/updates/$updateId', {
                                 'status': 'APPROVED',
                                 'is_completed': true,
                                 'work_completed': 'APPROVED',
+                                'approvedDate': approvalData['approvedDate'],
+                                'approvedTime': approvalData['approvedTime'],
                               });
                               debugPrint('📌 [PREACHER APPROVE APPOINTMENT RESPONSE]: $res');
                             } else {

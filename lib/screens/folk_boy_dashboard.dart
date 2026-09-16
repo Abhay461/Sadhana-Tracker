@@ -6950,6 +6950,19 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
           }
         }
 
+        if (appt['finalDate'] != null && appt['finalDate'].toString().isNotEmpty) {
+          final rawFinalDate = appt['finalDate'].toString();
+          try {
+            final parsed = DateTime.parse(rawFinalDate);
+            dateText = DateFormat('dd MMM yyyy').format(parsed);
+          } catch (_) {
+            dateText = rawFinalDate;
+          }
+        }
+        if (appt['finalTime'] != null && appt['finalTime'].toString().isNotEmpty) {
+          timeText = appt['finalTime'].toString();
+        }
+
         return Card(
           elevation: 0,
           color: Colors.white,

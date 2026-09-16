@@ -20,6 +20,12 @@ export class Appointment {
   @Prop({ type: String, required: true })
   reason: string;
 
+  @Prop({ type: String, required: false })
+  approvedDate?: string;
+
+  @Prop({ type: String, required: false })
+  approvedTime?: string;
+
   @Prop({
     type: String,
     enum: ['PENDING', 'APPROVED', 'REJECTED'],

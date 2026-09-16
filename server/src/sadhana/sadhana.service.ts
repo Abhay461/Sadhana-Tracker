@@ -393,9 +393,12 @@ export class SadhanaService {
       const studentName = uObj ? uObj.name : 'Student';
       const status = (a.status || 'PENDING').toUpperCase();
       const apptId = a._id.toString();
+      const finalDate = a.approvedDate || a.preferredDate;
+      const finalTime = a.approvedTime || a.preferredTime;
       return {
         _id: apptId,
         id: apptId,
+        appointmentId: apptId,
         worker_id: uId,
         studentId: uId,
         preacherId: pId,
@@ -403,12 +406,18 @@ export class SadhanaService {
         student_name: studentName,
         name: studentName,
         category: 'preacher_appointment',
-        work_started: `Appointment: ${a.preferredDate} @ ${a.preferredTime}`,
-        description: a.reason ? `Date: ${a.preferredDate}\nTime: ${a.preferredTime}\nPurpose: ${a.reason}` : `Date: ${a.preferredDate}\nTime: ${a.preferredTime}`,
+        preferredDate: a.preferredDate,
+        preferredTime: a.preferredTime,
+        approvedDate: a.approvedDate || null,
+        approvedTime: a.approvedTime || null,
+        finalDate: finalDate,
+        finalTime: finalTime,
+        work_started: `Appointment: ${finalDate} @ ${finalTime}`,
+        description: a.reason ? `Date: ${finalDate}\nTime: ${finalTime}\nPurpose: ${a.reason}` : `Date: ${finalDate}\nTime: ${finalTime}`,
         work_completed: status,
         status: status,
         is_completed: status === 'APPROVED' || status === 'REJECTED',
-        date: a.preferredDate,
+        date: finalDate,
         points: 0,
         created_at: (a as any).createdAt ? new Date((a as any).createdAt).toISOString() : new Date().toISOString(),
       };
@@ -464,28 +473,44 @@ export class SadhanaService {
     }
 
     if (Types.ObjectId.isValid(id)) {
-      const updatedAppt = await this.appointmentModel.findByIdAndUpdate(
-        id,
-        { $set: { status } },
-        { new: true }
-      ).lean();
+      const existingAppt = await this.appointmentModel.findById(id);
+      if (existingAppt) {
+        existingAppt.status = status;
 
-      if (updatedAppt) {
-        console.log(`📌 [APPOINTMENT MONGO UPDATED SUCCESSFULLY]: ID=${id}, FinalStatus=${updatedAppt.status}`);
+        if (status === 'APPROVED') {
+          const appDate = body.approvedDate || body.preferredDate || existingAppt.preferredDate;
+          const appTime = body.approvedTime || body.preferredTime || existingAppt.preferredTime;
+          existingAppt.approvedDate = appDate;
+          existingAppt.approvedTime = appTime;
+        }
+
+        await existingAppt.save();
+        console.log(`📌 [APPOINTMENT MONGO UPDATED SUCCESSFULLY]: ID=${id}, FinalStatus=${existingAppt.status}, ApprovedDate=${existingAppt.approvedDate}, ApprovedTime=${existingAppt.approvedTime}`);
+
+        const updatedDoc = await this.appointmentModel.findById(id).lean();
+        const finalDate = updatedDoc.approvedDate || updatedDoc.preferredDate;
+        const finalTime = updatedDoc.approvedTime || updatedDoc.preferredTime;
+
         const response = {
-          _id: updatedAppt._id.toString(),
-          id: updatedAppt._id.toString(),
-          appointmentId: updatedAppt._id.toString(),
-          userId: updatedAppt.userId?.toString(),
-          worker_id: updatedAppt.userId?.toString(),
-          studentId: updatedAppt.userId?.toString(),
-          preacherId: updatedAppt.preacherId?.toString(),
-          preferredDate: updatedAppt.preferredDate,
-          preferredTime: updatedAppt.preferredTime,
-          reason: updatedAppt.reason,
-          status: updatedAppt.status,
-          work_completed: updatedAppt.status,
-          is_completed: updatedAppt.status === 'APPROVED' || updatedAppt.status === 'REJECTED',
+          _id: updatedDoc._id.toString(),
+          id: updatedDoc._id.toString(),
+          appointmentId: updatedDoc._id.toString(),
+          userId: updatedDoc.userId?.toString(),
+          worker_id: updatedDoc.userId?.toString(),
+          studentId: updatedDoc.userId?.toString(),
+          preacherId: updatedDoc.preacherId?.toString(),
+          preferredDate: updatedDoc.preferredDate,
+          preferredTime: updatedDoc.preferredTime,
+          approvedDate: updatedDoc.approvedDate || null,
+          approvedTime: updatedDoc.approvedTime || null,
+          finalDate,
+          finalTime,
+          reason: updatedDoc.reason,
+          status: updatedDoc.status,
+          work_completed: updatedDoc.status,
+          work_started: `Appointment: ${finalDate} @ ${finalTime}`,
+          description: updatedDoc.reason ? `Date: ${finalDate}\nTime: ${finalTime}\nPurpose: ${updatedDoc.reason}` : `Date: ${finalDate}\nTime: ${finalTime}`,
+          is_completed: updatedDoc.status === 'APPROVED' || updatedDoc.status === 'REJECTED',
           category: 'preacher_appointment',
           ...body,
         };
