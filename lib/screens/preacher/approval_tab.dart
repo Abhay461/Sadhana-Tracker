@@ -506,7 +506,7 @@ class _ApprovalTabState extends State<ApprovalTab> {
                           final messenger = ScaffoldMessenger.of(context);
                           try {
                             final category = u['category'];
-                            final updateId = u['id'] ?? u['_id'];
+                            final updateId = (u['appointmentId'] ?? u['appointment_id'] ?? u['_id'] ?? u['id'])?.toString();
 
                             if (category == 'residency_admission') {
                               await ApiService.patch('/sadhana/updates/$updateId', {
@@ -552,6 +552,14 @@ class _ApprovalTabState extends State<ApprovalTab> {
                                 'is_completed': true,
                                 'work_completed': 'PAID',
                               });
+                            } else if (category == 'preacher_appointment') {
+                              debugPrint('📌 [PREACHER APPROVE APPOINTMENT REQUEST]: ID=$updateId');
+                              final res = await ApiService.patch('/sadhana/updates/$updateId', {
+                                'status': 'APPROVED',
+                                'is_completed': true,
+                                'work_completed': 'APPROVED',
+                              });
+                              debugPrint('📌 [PREACHER APPROVE APPOINTMENT RESPONSE]: $res');
                             } else {
                               await ApiService.patch('/sadhana/updates/$updateId', {'is_completed': true});
                             }
@@ -571,6 +579,14 @@ class _ApprovalTabState extends State<ApprovalTab> {
                             }
                           } catch (e) {
                             debugPrint('Error approving: $e');
+                            if (mounted) {
+                              messenger.showSnackBar(
+                                SnackBar(
+                                  backgroundColor: Colors.redAccent,
+                                  content: Text('Approval failed: ${e.toString().replaceAll('ApiException', '').trim()}'),
+                                ),
+                              );
+                            }
                           }
                         },
                           child: const Text('APPROVE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
@@ -587,8 +603,8 @@ class _ApprovalTabState extends State<ApprovalTab> {
                           onPressed: () async {
                             final messenger = ScaffoldMessenger.of(context);
                             try {
-                              final updateId = u['id'] ?? u['_id'];
                               final category = u['category'];
+                              final updateId = (u['appointmentId'] ?? u['appointment_id'] ?? u['_id'] ?? u['id'])?.toString();
                               if (category == 'residency_admission') {
                                 await ApiService.patch('/sadhana/updates/$updateId', {
                                   'is_completed': true,
@@ -604,6 +620,14 @@ class _ApprovalTabState extends State<ApprovalTab> {
                                   'is_completed': false,
                                   'work_completed': 'PENDING',
                                 });
+                              } else if (category == 'preacher_appointment') {
+                                debugPrint('📌 [PREACHER REJECT APPOINTMENT REQUEST]: ID=$updateId');
+                                final res = await ApiService.patch('/sadhana/updates/$updateId', {
+                                  'status': 'REJECTED',
+                                  'is_completed': true,
+                                  'work_completed': 'REJECTED',
+                                });
+                                debugPrint('📌 [PREACHER REJECT APPOINTMENT RESPONSE]: $res');
                               } else {
                                 await ApiService.delete('/sadhana/updates/$updateId');
                               }
@@ -623,6 +647,14 @@ class _ApprovalTabState extends State<ApprovalTab> {
                             }
                           } catch (e) {
                             debugPrint('Error rejecting: $e');
+                            if (mounted) {
+                              messenger.showSnackBar(
+                                SnackBar(
+                                  backgroundColor: Colors.redAccent,
+                                  content: Text('Rejection failed: ${e.toString().replaceAll('ApiException', '').trim()}'),
+                                ),
+                              );
+                            }
                           }
                         },
                         child: const Text('REJECT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),

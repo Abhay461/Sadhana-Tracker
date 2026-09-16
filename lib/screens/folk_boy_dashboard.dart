@@ -6671,11 +6671,9 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
       List<dynamic> res = [];
       dynamic data;
       try {
-        data = await ApiService.get('/sadhana/history');
-      } catch (_) {
-        try {
-          data = await ApiService.get('/sadhana/updates');
-        } catch (_) {}
+        data = await ApiService.get('/sadhana/updates');
+      } catch (e) {
+        debugPrint('Error fetching appointments from /sadhana/updates: $e');
       }
       if (data is Map && data.containsKey('items')) {
         data = data['items'];
@@ -6683,6 +6681,8 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
       if (data is List) {
         res = data.where((u) => u is Map && u['category'] == 'preacher_appointment').toList();
       }
+
+      debugPrint('📌 [STUDENT APPOINTMENTS RETRIEVAL RESPONSE]: count=${res.length}, items=$res');
 
       if (mounted) {
         setState(() {
@@ -6772,7 +6772,9 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
         'points': 0,
       };
 
-      await ApiService.post('/sadhana/student-update', updateData);
+      debugPrint('📌 [STUDENT APPOINTMENT SUBMIT REQUEST]: $updateData');
+      final resPayload = await ApiService.post('/sadhana/student-update', updateData);
+      debugPrint('📌 [STUDENT APPOINTMENT CREATION RESPONSE]: $resPayload');
       NotificationHelper.sendUpdateNotification(updateData).catchError((_) {});
 
       if (mounted) {
@@ -6897,7 +6899,33 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
       itemCount: _appointments.length,
       itemBuilder: (context, idx) {
         final appt = _appointments[idx];
-        final isCompleted = appt['is_completed'] ?? false;
+        final rawStatus = (appt['work_completed'] ?? appt['status'] ?? 'PENDING').toString().toUpperCase();
+        final isApproved = rawStatus == 'APPROVED';
+        final isRejected = rawStatus == 'REJECTED';
+        final isCompleted = isApproved || isRejected || (appt['is_completed'] == true);
+
+        Color badgeColor;
+        Color textColor;
+        String statusText;
+        IconData statusIcon;
+
+        if (isApproved) {
+          badgeColor = const Color(0xFFE6F4EA);
+          textColor = const Color(0xFF137333);
+          statusText = 'APPROVED / BOOKED';
+          statusIcon = Icons.check_circle;
+        } else if (isRejected) {
+          badgeColor = const Color(0xFFFCE8E6);
+          textColor = const Color(0xFFC5221F);
+          statusText = 'REJECTED';
+          statusIcon = Icons.cancel;
+        } else {
+          badgeColor = const Color(0xFFFFF4E5);
+          textColor = const Color(0xFFB06000);
+          statusText = 'PENDING APPROVAL';
+          statusIcon = Icons.pending_actions;
+        }
+
         final details = appt['description'] ?? '';
         
         String dateText = '---';
@@ -6941,22 +6969,19 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
-                        color: isCompleted ? const Color(0xFFE6F4EA) : const Color(0xFFFFF4E5),
+                        color: badgeColor,
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
-                        isCompleted ? 'APPROVED / BOOKED' : 'PENDING APPROVAL',
+                        statusText,
                         style: TextStyle(
-                          color: isCompleted ? const Color(0xFF137333) : const Color(0xFFB06000),
+                          color: textColor,
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
-                    if (isCompleted)
-                      Icon(Icons.check_circle, color: Colors.green[600], size: 24)
-                    else
-                      Icon(Icons.pending_actions, color: Colors.orange[600], size: 24),
+                    Icon(statusIcon, color: textColor, size: 24),
                   ],
                 ),
                 const SizedBox(height: 16),

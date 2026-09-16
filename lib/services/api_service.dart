@@ -222,14 +222,16 @@ class ApiService {
 
   static Future<dynamic> patch(String endpoint, Map<String, dynamic> body) async {
     final headers = await _getHeaders();
+    final url = '$baseUrl$endpoint';
+    debugPrint('📌 [PATCH REQUEST URL]: $url');
+    debugPrint('📌 [PATCH REQUEST BODY]: ${jsonEncode(body)}');
     final response = await http.patch(
-      Uri.parse('$baseUrl$endpoint'),
+      Uri.parse(url),
       headers: headers,
       body: jsonEncode(body),
     );
-    if (response.statusCode == 404) {
-      return {'success': true, 'message': 'Patched successfully'};
-    }
+    debugPrint('📌 [PATCH RESPONSE STATUS]: ${response.statusCode}');
+    debugPrint('📌 [PATCH RESPONSE BODY]: ${response.body}');
     return _processResponse(response);
   }
 

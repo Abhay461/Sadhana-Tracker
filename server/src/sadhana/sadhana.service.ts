@@ -3,7 +3,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { SadhanaEntry, SadhanaEntryDocument } from '../database/schemas/sadhana-entries.schema';
 import { User, UserDocument } from '../database/schemas/users.schema';
 import { Appointment, AppointmentDocument } from '../database/schemas/appointments.schema';
@@ -112,43 +112,66 @@ export class SadhanaService {
     const points = body.points || 0;
 
     if (category === 'preacher_appointment') {
-      const preacherId = body.preacher_id || body.preacherId;
+      let preacherIdRaw = body.preacher_id || body.preacherId;
+      if (!preacherIdRaw || !Types.ObjectId.isValid(preacherIdRaw)) {
+        const studentUser = await this.userModel.findById(userId).lean();
+        if (studentUser?.preacherId && Types.ObjectId.isValid(studentUser.preacherId.toString())) {
+          preacherIdRaw = studentUser.preacherId.toString();
+        } else {
+          const defaultPreacher = await this.userModel.findOne({ role: { $in: ['preacher', 'admin'] } }).select('_id').lean();
+          if (defaultPreacher) {
+            preacherIdRaw = defaultPreacher._id.toString();
+          }
+        }
+      }
+
       const preferredDate = body.preferredDate || body.date || dateString;
       const preferredTime = body.preferredTime || '10:00 AM';
       const reason = body.reason || body.description || 'Preacher Appointment';
 
       let appt: any = null;
-      if (preacherId) {
+      if (preacherIdRaw && Types.ObjectId.isValid(preacherIdRaw)) {
         try {
           appt = await this.appointmentModel.create({
             userId,
-            preacherId,
+            preacherId: preacherIdRaw,
             preferredDate,
             preferredTime,
             reason,
             status: 'PENDING',
           });
+          console.log('📌 [APPOINTMENT MONGO DOCUMENT CREATED]:', appt);
         } catch (e) {
           console.error('Error creating appointment document:', e);
         }
       }
 
       const apptId = appt ? appt._id.toString() : Date.now().toString();
-      return {
+      const responsePayload = {
         _id: apptId,
         id: apptId,
         worker_id: userId,
+        studentId: userId,
+        preacherId: preacherIdRaw,
         worker_name: body.worker_name || 'Member',
         preacher_name: body.preacher_name || 'Preacher',
         category: 'preacher_appointment',
         work_started: workStarted || `Appointment: ${preferredDate} @ ${preferredTime}`,
         description: body.description || `Preacher: ${body.preacher_name}\nDate: ${preferredDate}\nTime: ${preferredTime}\nPurpose: ${reason}`,
         work_completed: 'PENDING',
+        status: 'PENDING',
         is_completed: false,
         date: dateString,
         points: 0,
         created_at: appt ? (appt.createdAt ? appt.createdAt.toISOString() : new Date().toISOString()) : new Date().toISOString(),
       };
+      console.log('📌 [APPOINTMENT CREATION RESPONSE]:', JSON.stringify({
+        appointmentId: apptId,
+        studentId: userId,
+        preacherId: preacherIdRaw,
+        response: responsePayload,
+      }));
+      return responsePayload;
     }
 
     const newAct: any = {};
@@ -309,16 +332,55 @@ export class SadhanaService {
     }
 
     // Fetch appointments from MongoDB appointments collection
-    const userAppointments = await this.appointmentModel
-      .find({
-        $or: [
-          { userId: userIdStr },
-          { preacherId: userIdStr },
-          ...(currentUser?._id ? [{ userId: currentUser._id }, { preacherId: currentUser._id }] : []),
-        ],
-      })
-      .sort({ createdAt: -1 })
-      .lean();
+    let userAppointments: any[] = [];
+    const userOrIdConditions: any[] = [
+      { userId: userIdStr },
+      { preacherId: userIdStr },
+    ];
+    if (Types.ObjectId.isValid(userIdStr)) {
+      const objId = new Types.ObjectId(userIdStr);
+      userOrIdConditions.push({ userId: objId });
+      userOrIdConditions.push({ preacherId: objId });
+    }
+    if (currentUser?._id) {
+      userOrIdConditions.push({ userId: currentUser._id });
+      userOrIdConditions.push({ preacherId: currentUser._id });
+    }
+
+    if (isAdmin) {
+      userAppointments = await this.appointmentModel.find({}).sort({ createdAt: -1 }).limit(500).lean();
+    } else if (isPreacher) {
+      const assignedStudents = await this.userModel
+        .find({
+          $or: [
+            { preacherId: userIdStr },
+            ...(currentUser?._id ? [{ preacherId: currentUser._id }] : []),
+          ],
+        })
+        .select('_id')
+        .lean();
+      const ids: any[] = assignedStudents.map((s) => s._id);
+      ids.push(userIdStr);
+      if (currentUser?._id) ids.push(currentUser._id);
+      if (Types.ObjectId.isValid(userIdStr)) ids.push(new Types.ObjectId(userIdStr));
+
+      userAppointments = await this.appointmentModel
+        .find({
+          $or: [
+            { preacherId: { $in: ids } },
+            { userId: { $in: ids } },
+          ],
+        })
+        .sort({ createdAt: -1 })
+        .limit(500)
+        .lean();
+    } else {
+      userAppointments = await this.appointmentModel
+        .find({ $or: userOrIdConditions })
+        .sort({ createdAt: -1 })
+        .limit(100)
+        .lean();
+    }
 
     const apptUserIds = [...new Set(userAppointments.map((a) => a.userId?.toString()).filter(Boolean))];
     const apptUsers = await this.userModel.find({ _id: { $in: apptUserIds } }).select('_id name email').lean();
@@ -326,26 +388,35 @@ export class SadhanaService {
 
     const mappedAppointments = userAppointments.map((a) => {
       const uId = a.userId ? a.userId.toString() : '';
+      const pId = a.preacherId ? a.preacherId.toString() : '';
       const uObj = apptUserMap.get(uId);
       const studentName = uObj ? uObj.name : 'Student';
-      const status = a.status || 'PENDING';
+      const status = (a.status || 'PENDING').toUpperCase();
+      const apptId = a._id.toString();
       return {
-        _id: a._id.toString(),
-        id: a._id.toString(),
+        _id: apptId,
+        id: apptId,
         worker_id: uId,
+        studentId: uId,
+        preacherId: pId,
         worker_name: studentName,
         student_name: studentName,
         name: studentName,
         category: 'preacher_appointment',
         work_started: `Appointment: ${a.preferredDate} @ ${a.preferredTime}`,
-        description: a.reason ? `Date: ${a.preferredDate}\nTime: ${a.preferredTime}\nPurpose: ${a.reason}` : '',
+        description: a.reason ? `Date: ${a.preferredDate}\nTime: ${a.preferredTime}\nPurpose: ${a.reason}` : `Date: ${a.preferredDate}\nTime: ${a.preferredTime}`,
         work_completed: status,
+        status: status,
         is_completed: status === 'APPROVED' || status === 'REJECTED',
         date: a.preferredDate,
         points: 0,
         created_at: (a as any).createdAt ? new Date((a as any).createdAt).toISOString() : new Date().toISOString(),
       };
     });
+
+    console.log(`📌 [APPOINTMENT RETRIEVAL RESPONSE/COUNT]: User=${userIdStr}, Count=${mappedAppointments.length}, Items=`,
+      mappedAppointments.map(a => ({ appointmentId: a.id, studentId: a.studentId, preacherId: a.preacherId, status: a.status }))
+    );
 
     const targetUserIds = [...new Set(entries.map((e) => (e.userId ? e.userId.toString() : '')).filter(Boolean))];
     const users = await this.userModel.find({ _id: { $in: targetUserIds } }).select('_id name email').lean();
@@ -375,15 +446,76 @@ export class SadhanaService {
   }
 
   async updateStudentUpdate(id: string, body: any) {
+    console.log(`📌 [BACKEND PATCH /sadhana/updates/${id}] Request Body:`, JSON.stringify(body));
+
+    let status = 'APPROVED';
+    if (body.status) {
+      status = body.status.toString().toUpperCase();
+    } else if (body.work_completed === 'REJECTED' || body.workCompleted === 'REJECTED' || body.approved === false) {
+      status = 'REJECTED';
+    } else if (body.work_completed === 'APPROVED' || body.workCompleted === 'APPROVED' || body.approved === true) {
+      status = 'APPROVED';
+    } else if (body.is_completed === true) {
+      status = 'APPROVED';
+    }
+
+    if (status !== 'APPROVED' && status !== 'REJECTED') {
+      status = 'APPROVED';
+    }
+
+    if (Types.ObjectId.isValid(id)) {
+      const updatedAppt = await this.appointmentModel.findByIdAndUpdate(
+        id,
+        { $set: { status } },
+        { new: true }
+      ).lean();
+
+      if (updatedAppt) {
+        console.log(`📌 [APPOINTMENT MONGO UPDATED SUCCESSFULLY]: ID=${id}, FinalStatus=${updatedAppt.status}`);
+        const response = {
+          _id: updatedAppt._id.toString(),
+          id: updatedAppt._id.toString(),
+          appointmentId: updatedAppt._id.toString(),
+          userId: updatedAppt.userId?.toString(),
+          worker_id: updatedAppt.userId?.toString(),
+          studentId: updatedAppt.userId?.toString(),
+          preacherId: updatedAppt.preacherId?.toString(),
+          preferredDate: updatedAppt.preferredDate,
+          preferredTime: updatedAppt.preferredTime,
+          reason: updatedAppt.reason,
+          status: updatedAppt.status,
+          work_completed: updatedAppt.status,
+          is_completed: updatedAppt.status === 'APPROVED' || updatedAppt.status === 'REJECTED',
+          category: 'preacher_appointment',
+          ...body,
+        };
+        console.log(`📌 [APPOINTMENT APPROVE/REJECT RESPONSE]:`, JSON.stringify(response));
+        return response;
+      }
+    }
+
+    console.log(`📌 [UPDATE SESSIONS FALLBACK]: ID=${id}`);
     return {
       _id: id,
       id,
       ...body,
+      status,
+      work_completed: status,
       is_completed: true,
     };
   }
 
   async deleteUpdate(id: string, label?: string, activityKey?: string) {
+    if (Types.ObjectId.isValid(id)) {
+      const apptDoc = await this.appointmentModel.findById(id);
+      if (apptDoc) {
+        apptDoc.status = 'REJECTED';
+        await apptDoc.save();
+        console.log(`📌 [APPOINTMENT MONGO UPDATED VIA DELETE]: ID=${id}, FinalStatus=REJECTED`);
+        return { success: true, id, status: 'REJECTED' };
+      }
+    }
+
     let deleted = false;
     let entry: SadhanaEntryDocument | null = null;
 
