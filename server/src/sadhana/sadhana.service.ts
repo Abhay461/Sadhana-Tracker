@@ -576,7 +576,23 @@ export class SadhanaService {
       return { success: false, message: 'Record not found' };
     }
 
-    const key = activityKey || this.determineActivityKeyFromLabel(label || '');
+    let key = activityKey || this.determineActivityKeyFromLabel(label || '');
+
+    if (!key && entry.activities) {
+      const acts = entry.activities as any;
+      const lowerLabel = (label || '').toLowerCase();
+      if (acts.wakeUpTime && (lowerLabel.includes('wake') || lowerLabel.includes('morning'))) key = 'wakeUpTime';
+      else if (acts.sleepTime && lowerLabel.includes('sleep')) key = 'sleepTime';
+      else if (acts.manglaArti && lowerLabel.includes('mangla')) key = 'manglaArti';
+      else if (acts.chanting && (lowerLabel.includes('chant') || lowerLabel.includes('round'))) key = 'chanting';
+      else if (acts.onlineSession && lowerLabel.includes('online')) key = 'onlineSession';
+      else if (acts.bookReading && (lowerLabel.includes('book') || lowerLabel.includes('read'))) key = 'bookReading';
+      else if (acts.service && lowerLabel.includes('service')) key = 'service';
+      else if (acts.templeVisit && lowerLabel.includes('temple')) key = 'templeVisit';
+      else if (acts.srimadBhagavatamClass && lowerLabel.includes('bhagavatam')) key = 'srimadBhagavatamClass';
+      else if (acts.bhagavadGitaClass && (lowerLabel.includes('bhagavad') || lowerLabel.includes('gita'))) key = 'bhagavadGitaClass';
+      else if (acts.ekadashiFasting && (lowerLabel.includes('ekadashi') || lowerLabel.includes('fast'))) key = 'ekadashiFasting';
+    }
 
     if (key && entry.activities && (entry.activities as any)[key] !== undefined) {
       const act = JSON.parse(JSON.stringify(entry.activities));
@@ -616,7 +632,7 @@ export class SadhanaService {
         );
         deleted = true;
       }
-    } else {
+    } else if (!label || label.trim() === '') {
       await this.sadhanaModel.deleteOne({ _id: entry._id });
       deleted = true;
     }
@@ -626,17 +642,17 @@ export class SadhanaService {
   private determineActivityKeyFromLabel(label: string): string | null {
     const lower = label.toLowerCase().trim();
     if (!lower) return null;
-    if (lower.includes('wake-up') || lower.includes('wake up') || lower.startsWith('morning')) return 'wakeUpTime';
-    if (lower.startsWith('sleep')) return 'sleepTime';
+    if (lower.includes('wake-up') || lower.includes('wake up') || lower.includes('morning') || lower.includes('wake')) return 'wakeUpTime';
+    if (lower.includes('sleep')) return 'sleepTime';
     if (lower.includes('mangla')) return 'manglaArti';
-    if (lower.startsWith('chanting')) return 'chanting';
-    if (lower.startsWith('online')) return 'onlineSession';
-    if ((lower.startsWith('book reading') || lower.startsWith('book')) && !lower.includes('accommodation') && !lower.includes('booking')) return 'bookReading';
-    if (lower.startsWith('service')) return 'service';
-    if (lower.startsWith('temple')) return 'templeVisit';
+    if (lower.includes('chant') || lower.includes('round')) return 'chanting';
+    if (lower.includes('online')) return 'onlineSession';
+    if ((lower.includes('book reading') || lower.includes('reading') || lower.includes('book')) && !lower.includes('accommodation') && !lower.includes('booking')) return 'bookReading';
+    if (lower.includes('service')) return 'service';
+    if (lower.includes('temple')) return 'templeVisit';
     if (lower.includes('bhagavatam')) return 'srimadBhagavatamClass';
     if (lower.includes('bhagavad') || lower.includes('gita')) return 'bhagavadGitaClass';
-    if (lower.includes('ekadashi')) return 'ekadashiFasting';
+    if (lower.includes('ekadashi') || lower.includes('fast')) return 'ekadashiFasting';
     return null;
   }
 
