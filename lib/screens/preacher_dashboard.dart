@@ -30,12 +30,35 @@ import 'preacher/festival_tab.dart';
 class PreacherDashboard extends StatefulWidget {
   const PreacherDashboard({super.key});
 
+  static void clearStaticCache() {
+    _PreacherDashboardState.clearStaticCache();
+  }
+
   @override
   State<PreacherDashboard> createState() => _PreacherDashboardState();
 }
 
 class _PreacherDashboardState extends State<PreacherDashboard> {
   final _picker = ImagePicker();
+
+  // Static in-memory cache for instant UI restoration (<1 sec) across screen re-opens
+  static String? _staticCacheUid;
+  static Map<String, dynamic>? _staticProfile;
+  static List<dynamic>? _staticFolkBoys;
+  static Map<String, List<dynamic>>? _staticAllUpdates;
+  static List<dynamic>? _staticAnnouncements;
+  static List<dynamic>? _staticTripBookings;
+  static List<dynamic>? _staticEventBookings;
+
+  static void clearStaticCache() {
+    _staticCacheUid = null;
+    _staticProfile = null;
+    _staticFolkBoys = null;
+    _staticAllUpdates = null;
+    _staticAnnouncements = null;
+    _staticTripBookings = null;
+    _staticEventBookings = null;
+  }
 
   Map<String, dynamic>? _profile;
   bool _isLoadingProfile = true;
@@ -76,6 +99,34 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
   @override
   void initState() {
     super.initState();
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+    if (_staticCacheUid != null && _staticCacheUid != currentUid) {
+      clearStaticCache();
+    }
+    _staticCacheUid = currentUid;
+
+    // Populate immediately from static cache if available for 0ms delay
+    if (_staticProfile != null) {
+      _profile = _staticProfile;
+      _isLoadingProfile = false;
+    }
+    if (_staticFolkBoys != null && _staticFolkBoys!.isNotEmpty) {
+      _folkBoys = List.from(_staticFolkBoys!);
+      _isLoadingBoys = false;
+    }
+    if (_staticAllUpdates != null && _staticAllUpdates!.isNotEmpty) {
+      _allUpdates = Map.from(_staticAllUpdates!);
+    }
+    if (_staticAnnouncements != null) {
+      _announcements = List.from(_staticAnnouncements!);
+    }
+    if (_staticTripBookings != null) {
+      _tripBookings = List.from(_staticTripBookings!);
+    }
+    if (_staticEventBookings != null) {
+      _eventBookings = List.from(_staticEventBookings!);
+    }
+
     _loadProfileAndData();
   }
 
@@ -83,51 +134,72 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
+    if (_staticCacheUid != null && _staticCacheUid != user.uid) {
+      clearStaticCache();
+    }
+    _staticCacheUid = user.uid;
+
+    if (initialProfile != null) {
+      _profile = initialProfile;
+      _staticProfile = initialProfile;
+      _isLoadingProfile = false;
+    } else if (_staticProfile != null) {
+      _profile = _staticProfile;
+      _isLoadingProfile = false;
+    }
+
+    if (_staticFolkBoys != null && _staticFolkBoys!.isNotEmpty) {
+      _folkBoys = List.from(_staticFolkBoys!);
+      _isLoadingBoys = false;
+    }
+    if (_staticAllUpdates != null && _staticAllUpdates!.isNotEmpty) {
+      _allUpdates = Map.from(_staticAllUpdates!);
+    }
+
     try {
-      dynamic profileData;
-      if (initialProfile != null) {
-        profileData = initialProfile;
-      } else {
-        profileData = await ApiService.get('/users/me');
-      }
-
-      final role = ((profileData is Map ? profileData['role'] : null) as String? ?? '').toLowerCase();
-      if (role != 'preacher' && role != 'admin') {
-        debugPrint('PreacherDashboard: User role is "$role" (not preacher/admin). Redirecting to home...');
-        if (mounted) {
-          Navigator.pushReplacementNamed(context, '/home');
-        }
-        return;
-      }
-
+      // Fire parallel requests concurrently to avoid waterfall latency
+      await Future.wait([
+        if (_profile == null)
+          ApiService.get('/users/me').then((profileData) {
+            if (profileData is Map && mounted) {
+              final map = Map<String, dynamic>.from(profileData);
+              final role = (map['role'] as String? ?? '').toLowerCase();
+              if (role != 'preacher' && role != 'admin') {
+                Navigator.pushReplacementNamed(context, '/home');
+                return;
+              }
+              setState(() {
+                _profile = map;
+                _staticProfile = map;
+                _isLoadingProfile = false;
+              });
+            }
+          }).catchError((e) {
+            debugPrint('Error loading preacher profile: $e');
+            if (mounted) setState(() => _isLoadingProfile = false);
+          }),
+        _fetchFolkBoys(),
+        _fetchAllUpdates(),
+        _fetchAnnouncements(),
+        _fetchTripAndEventBookings(),
+      ]);
+    } catch (e) {
+      debugPrint('Error loading preacher profile and data: $e');
       if (mounted) {
         setState(() {
-          _profile = profileData is Map ? Map<String, dynamic>.from(profileData) : null;
           _isLoadingProfile = false;
+          _isLoadingBoys = false;
         });
-      }
-
-      await _fetchFolkBoys();
-      await _fetchAnnouncements();
-    } catch (e) {
-      debugPrint('Error loading preacher profile: $e');
-      if (mounted) {
-        setState(() => _isLoadingProfile = false);
       }
     }
   }
 
   Future<void> _fetchFolkBoys() async {
-    if (_profile == null) return;
     try {
-      if (mounted) setState(() => _isLoadingBoys = true);
-      final data = await ApiService.get('/preacher/students');
-
-      debugPrint('=== DEBUG PREACHER DASHBOARD: /preacher/students ===');
-      debugPrint('Runtime type of students response: ${data.runtimeType}');
-      if (data is Map) {
-        debugPrint('Map keys in students response: ${data.keys.toList()}');
+      if (_folkBoys.isEmpty && mounted) {
+        setState(() => _isLoadingBoys = true);
       }
+      final data = await ApiService.get('/preacher/students');
 
       List<dynamic> extractedStudents = [];
       if (data is List) {
@@ -141,19 +213,13 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
         }
       }
 
-      debugPrint('Fetched _folkBoys count: ${extractedStudents.length}');
-      for (var b in extractedStudents) {
-        debugPrint('  Student record: $b');
-      }
-
       if (mounted) {
         setState(() {
           _folkBoys = extractedStudents;
+          _staticFolkBoys = extractedStudents;
           _isLoadingBoys = false;
         });
       }
-
-      await _fetchAllUpdates();
     } catch (e) {
       debugPrint('Error fetching folk boys: $e');
       if (mounted) setState(() => _isLoadingBoys = false);
@@ -162,13 +228,19 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
 
   Future<void> _fetchTripAndEventBookings() async {
     try {
-      final tripData = await ApiService.get('/trips');
-      final eventData = await ApiService.get('/events');
+      final results = await Future.wait([
+        ApiService.get('/trips').catchError((e) => []),
+        ApiService.get('/events').catchError((e) => []),
+      ]);
+      final tripData = results[0];
+      final eventData = results[1];
 
       if (mounted) {
         setState(() {
           _tripBookings = tripData is List ? tripData : [];
           _eventBookings = eventData is List ? eventData : [];
+          _staticTripBookings = _tripBookings;
+          _staticEventBookings = _eventBookings;
         });
       }
     } catch (e) {
@@ -616,7 +688,6 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
   }
 
   Future<void> _fetchAllUpdates() async {
-    await _fetchTripAndEventBookings();
     try {
       dynamic updatesData = await ApiService.get('/sadhana/updates');
 
@@ -746,6 +817,7 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
       if (mounted) {
         setState(() {
           _allUpdates = grouped;
+          _staticAllUpdates = grouped;
         });
       }
     } catch (e) {
@@ -759,6 +831,7 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
       if (mounted) {
         setState(() {
           _announcements = data is List ? data : [];
+          _staticAnnouncements = _announcements;
         });
       }
     } catch (e) {

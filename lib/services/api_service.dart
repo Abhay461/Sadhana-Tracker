@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
 import '../utils/constants.dart';
 import '../utils/notification_helper.dart';
+import '../screens/preacher_dashboard.dart';
 
 class ApiService {
   static String get baseUrl => Constants.apiBaseUrl;
@@ -16,6 +17,7 @@ class ApiService {
     _cachedIdToken = null;
     _cachedUid = null;
     _tokenFetchTime = null;
+    PreacherDashboard.clearStaticCache();
   }
 
   static Future<void> logout() async {
@@ -36,7 +38,7 @@ class ApiService {
         idToken = _cachedIdToken;
       } else {
         try {
-          idToken = await user.getIdToken(true).timeout(const Duration(seconds: 4));
+          idToken = await user.getIdToken(false).timeout(const Duration(seconds: 4));
           if (idToken != null && idToken.isNotEmpty) {
             _cachedIdToken = idToken;
             _cachedUid = user.uid;
