@@ -67,30 +67,10 @@ class ApiService {
 
   static Future<dynamic> get(String endpoint) async {
     final headers = await _getHeaders();
-    String targetEndpoint = endpoint;
-    if (endpoint == '/sadhana/me' || endpoint == '/sadhana/updates') {
-      targetEndpoint = '/sadhana/history';
-    }
-
     final response = await http.get(
-      Uri.parse('$baseUrl$targetEndpoint'),
+      Uri.parse('$baseUrl$endpoint'),
       headers: headers,
     );
-
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      return _processResponse(response);
-    }
-
-    if (response.statusCode == 404 && targetEndpoint != '/sadhana/history') {
-      final fbResponse = await http.get(
-        Uri.parse('$baseUrl/sadhana/history'),
-        headers: headers,
-      );
-      if (fbResponse.statusCode >= 200 && fbResponse.statusCode < 300) {
-        return _processResponse(fbResponse);
-      }
-    }
-
     return _processResponse(response);
   }
 

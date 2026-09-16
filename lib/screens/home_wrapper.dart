@@ -30,7 +30,8 @@ class _HomeWrapperState extends State<HomeWrapper> {
   }
 
   void _navigateToRole(String role, {Map<String, dynamic>? profile}) {
-    if (role == 'preacher') {
+    final cleanRole = role.toLowerCase().replaceAll('pending_', '');
+    if (cleanRole == 'preacher' || cleanRole == 'admin') {
       Navigator.pushReplacementNamed(context, '/preacher', arguments: profile);
     } else {
       Navigator.pushReplacementNamed(context, '/folk-boy', arguments: profile);
@@ -52,15 +53,14 @@ class _HomeWrapperState extends State<HomeWrapper> {
       // Sync or fetch user profile from NestJS API
       final response = await ApiService.get('/users/me').timeout(const Duration(seconds: 4));
       final rawRole = (response is Map ? response['role'] : null) ?? 'folk_boy';
-      final role = rawRole.toString().replaceAll('pending_', '');
 
       if (mounted) {
-        _navigateToRole(role, profile: response is Map<String, dynamic> ? response : null);
+        _navigateToRole(rawRole.toString(), profile: response is Map<String, dynamic> ? response : null);
       }
     } catch (e) {
       debugPrint('HOME_WRAPPER API Error: $e');
       if (mounted) {
-        _navigateToRole('folk_boy');
+        Navigator.pushReplacementNamed(context, '/login');
       }
     }
   }
