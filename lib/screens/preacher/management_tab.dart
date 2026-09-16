@@ -700,14 +700,92 @@ class _ManagementTabState extends State<ManagementTab> {
       return null;
     }
 
+    TimeOfDay? parseTimeOfDay(String timeStr) {
+      final s = timeStr.trim().toUpperCase();
+      if (s.isEmpty) return null;
+
+      try {
+        bool isPM = s.contains('PM');
+        bool isAM = s.contains('AM');
+        final clean = s.replaceAll('AM', '').replaceAll('PM', '').trim();
+        final parts = clean.split(':');
+        if (parts.length >= 2) {
+          int hour = int.parse(parts[0].trim());
+          int minute = int.parse(parts[1].trim());
+          if (isPM && hour < 12) hour += 12;
+          if (isAM && hour == 12) hour = 0;
+          return TimeOfDay(hour: hour, minute: minute);
+        }
+      } catch (_) {}
+      return null;
+    }
+
+    String formatDurationText(String rawStr, {String defaultText = 'Attended'}) {
+      final s = rawStr.trim();
+      if (s.isEmpty) return defaultText;
+
+      final lower = s.toLowerCase();
+      if (lower == 'attended' || lower == 'visited' || lower == 'completed' || lower == 'filled') {
+        return s;
+      }
+      if (lower.contains('min') || lower.contains('hr')) {
+        return s;
+      }
+
+      final numVal = int.tryParse(s);
+      if (numVal != null) {
+        if (numVal % 60 == 0) {
+          final hrs = numVal ~/ 60;
+          return '$hrs hr${hrs > 1 ? 's' : ''}';
+        }
+        return '$numVal mins';
+      }
+
+      if (s.contains('-')) {
+        final parts = s.split('-');
+        if (parts.length == 2) {
+          final start = parseTimeOfDay(parts[0].trim());
+          final end = parseTimeOfDay(parts[1].trim());
+          if (start != null && end != null) {
+            int startMin = start.hour * 60 + start.minute;
+            int endMin = end.hour * 60 + end.minute;
+            if (endMin < startMin) endMin += 24 * 60;
+            final diff = endMin - startMin;
+            if (diff > 0) {
+              if (diff % 60 == 0) {
+                final hrs = diff ~/ 60;
+                return '$hrs hr${hrs > 1 ? 's' : ''}';
+              } else if (diff > 60) {
+                final hrs = (diff / 60).toStringAsFixed(1);
+                return '$hrs hrs';
+              } else {
+                return '$diff mins';
+              }
+            }
+          }
+        }
+      }
+
+      return s;
+    }
+
     String getDetailText(Map<String, dynamic> u) {
       final workComp = (u['work_completed'] ?? u['detail'] ?? '').toString().trim();
-      if (workComp.isNotEmpty && workComp != 'null') return workComp;
-      final workStart = (u['work_started'] ?? '').toString().trim();
-      if (workStart.contains('(') && workStart.contains(')')) {
-        final inside = workStart.substring(workStart.indexOf('(') + 1, workStart.lastIndexOf(')')).trim();
-        if (inside.isNotEmpty) return inside;
+      final key = getMatchedKey(u);
+
+      String textToFormat = workComp;
+      if (textToFormat.isEmpty || textToFormat == 'null') {
+        final workStart = (u['work_started'] ?? '').toString().trim();
+        if (workStart.contains('(') && workStart.contains(')')) {
+          textToFormat = workStart.substring(workStart.indexOf('(') + 1, workStart.lastIndexOf(')')).trim();
+        }
       }
+
+      if (key == 'online session' || key == 'service' || key == 'srimad bhagavatam class' || key == 'bhagavad gita class') {
+        return formatDurationText(textToFormat, defaultText: 'Attended');
+      }
+
+      if (textToFormat.isNotEmpty && textToFormat != 'null') return textToFormat;
       return 'Filled';
     }
 
@@ -742,8 +820,9 @@ class _ManagementTabState extends State<ManagementTab> {
         }
         if (acts['onlineSession'] != null) {
           final o = acts['onlineSession'];
-          if (o is Map && (o['attended'] == true || o['timeSpan'] != null)) {
-            result['online session'] = (o['timeSpan'] ?? 'Attended').toString();
+          if (o is Map && (o['attended'] == true || o['timeSpan'] != null || o['duration'] != null)) {
+            final t = (o['durationMinutes'] ?? o['duration'] ?? o['timeSpan'] ?? 'Attended').toString();
+            result['online session'] = formatDurationText(t, defaultText: 'Attended');
           } else if (o == true) {
             result['online session'] = 'Attended';
           }
@@ -762,13 +841,17 @@ class _ManagementTabState extends State<ManagementTab> {
         if (acts['service'] != null) {
           final s = acts['service'];
           if (s is Map) {
-            final name = (s['serviceName'] ?? '').toString();
             final dur = (s['durationMinutes'] ?? s['duration'] ?? '').toString();
-            final durStr = dur.isNotEmpty ? '$dur mins' : '';
-            final combined = [name, durStr].where((x) => x.isNotEmpty).join(' - ');
-            result['service'] = combined.isNotEmpty ? combined : 'Completed';
+            final name = (s['serviceName'] ?? s['name'] ?? '').toString();
+            if (dur.isNotEmpty) {
+              result['service'] = formatDurationText(dur);
+            } else if (name.isNotEmpty) {
+              result['service'] = name;
+            } else {
+              result['service'] = 'Completed';
+            }
           } else if (s is String && s.isNotEmpty) {
-            result['service'] = s;
+            result['service'] = formatDurationText(s);
           }
         }
         if (acts['templeVisit'] != null) {
@@ -781,16 +864,18 @@ class _ManagementTabState extends State<ManagementTab> {
         }
         if (acts['srimadBhagavatamClass'] != null) {
           final sb = acts['srimadBhagavatamClass'];
-          if (sb is Map && (sb['attended'] == true || sb['timeSpan'] != null)) {
-            result['srimad bhagavatam class'] = (sb['timeSpan'] ?? 'Attended').toString();
+          if (sb is Map && (sb['attended'] == true || sb['timeSpan'] != null || sb['duration'] != null)) {
+            final t = (sb['durationMinutes'] ?? sb['duration'] ?? sb['timeSpan'] ?? 'Attended').toString();
+            result['srimad bhagavatam class'] = formatDurationText(t, defaultText: 'Attended');
           } else if (sb == true) {
             result['srimad bhagavatam class'] = 'Attended';
           }
         }
         if (acts['bhagavadGitaClass'] != null) {
           final bg = acts['bhagavadGitaClass'];
-          if (bg is Map && (bg['attended'] == true || bg['timeSpan'] != null)) {
-            result['bhagavad gita class'] = (bg['timeSpan'] ?? 'Attended').toString();
+          if (bg is Map && (bg['attended'] == true || bg['timeSpan'] != null || bg['duration'] != null)) {
+            final t = (bg['durationMinutes'] ?? bg['duration'] ?? bg['timeSpan'] ?? 'Attended').toString();
+            result['bhagavad gita class'] = formatDurationText(t, defaultText: 'Attended');
           } else if (bg == true) {
             result['bhagavad gita class'] = 'Attended';
           }
@@ -1476,177 +1561,6 @@ class _ManagementTabState extends State<ManagementTab> {
             padding: const EdgeInsets.all(16),
             children: [
               _buildSadhanaCardWidget(sadhanaLogs: sadhanaTasks),
-              if (filteredTasks.isNotEmpty) ...[
-                const Padding(
-                  padding: EdgeInsets.only(left: 4, bottom: 12, top: 8),
-                  child: Text(
-                    'Student Activity Feed',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF3F1200)),
-                  ),
-                ),
-                ...filteredTasks.map((task) {
-                  final isCompleted = task['is_completed'] ?? false;
-                  final boyId = task['worker_id']?.toString();
-                  final matches = widget.folkBoys.where((b) => b['id'].toString() == boyId);
-                  final boy = matches.isNotEmpty ? matches.first : null;
-                  final photoUrl = boy?['photo_url'];
-
-                  return Card(
-                    color: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                      side: BorderSide(color: Colors.grey[200]!),
-                    ),
-                    margin: const EdgeInsets.only(bottom: 12),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          GestureDetector(
-                            onTap: boy != null
-                                ? () {
-                                    setState(() {
-                                      _selectedBoy = boy;
-                                    });
-                                  }
-                                : null,
-                            child: CircleAvatar(
-                              radius: 24,
-                              backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
-                              child: photoUrl == null
-                                  ? Text(
-                                      (task['worker_name'] ?? 'S')[0].toUpperCase(),
-                                      style: const TextStyle(fontWeight: FontWeight.bold),
-                                    )
-                                  : null,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Expanded(
-                                      child: GestureDetector(
-                                        onTap: boy != null
-                                            ? () {
-                                                setState(() {
-                                                  _selectedBoy = boy;
-                                                });
-                                              }
-                                            : null,
-                                        child: Text(
-                                          task['worker_name'] ?? 'Student',
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 14,
-                                            color: Color(0xFF1E293B),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    Text(
-                                      task['date'] ?? '',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.grey[500],
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  task['work_started'] ?? 'No title',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 13,
-                                    color: Color(0xFF334155),
-                                  ),
-                                ),
-                                if (task['description'] != null &&
-                                    (task['description'] as String).trim().isNotEmpty &&
-                                    task['description'] != task['work_started']) ...[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    task['description'],
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey[600],
-                                    ),
-                                  ),
-                                ],
-                                const SizedBox(height: 8),
-                                Wrap(
-                                  spacing: 6,
-                                  runSpacing: 4,
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF3F1200).withValues(alpha: 0.06),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Text(
-                                        (task['category'] ?? 'Task').toString().toUpperCase(),
-                                        style: const TextStyle(
-                                          fontSize: 9,
-                                          fontWeight: FontWeight.bold,
-                                          color: Color(0xFF3F1200),
-                                          letterSpacing: 0.5,
-                                        ),
-                                      ),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: isCompleted ? const Color(0xFFD1FAE5) : const Color(0xFFFEE2E2),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Text(
-                                        isCompleted ? 'COMPLETED' : 'PENDING',
-                                        style: TextStyle(
-                                          fontSize: 9,
-                                          fontWeight: FontWeight.bold,
-                                          color: isCompleted ? const Color(0xFF059669) : const Color(0xFFEF4444),
-                                          letterSpacing: 0.5,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (task['photo_url'] != null)
-                            IconButton(
-                              icon: const Icon(Icons.image_outlined, color: Color(0xFF3F1200)),
-                              onPressed: () {
-                                showDialog(
-                                  context: context,
-                                  builder: (context) => Dialog(
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(20),
-                                      child: Image.network(task['photo_url']),
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                        ],
-                      ),
-                    ),
-                  );
-                }),
-              ],
             ],
           ),
         ),
