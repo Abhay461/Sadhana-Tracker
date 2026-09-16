@@ -174,6 +174,24 @@ export class SadhanaService {
       return responsePayload;
     }
 
+    if (category === 'accommodation' || category === 'residency_admission' || category === 'payment') {
+      return {
+        _id: Date.now().toString(),
+        id: Date.now().toString(),
+        worker_id: userId,
+        worker_name: body.worker_name || 'Member',
+        preacher_name: body.preacher_name || 'Preacher',
+        category: category,
+        work_started: workStarted,
+        description: body.description || '',
+        work_completed: workCompleted || 'PENDING',
+        is_completed: body.is_completed ?? false,
+        date: dateString,
+        points: points,
+        created_at: new Date().toISOString(),
+      };
+    }
+
     const newAct: any = {};
     const lower = (workStarted + ' ' + (body.description || '')).toLowerCase();
 
@@ -209,7 +227,7 @@ export class SadhanaService {
         if (match) t = match[1].trim();
       }
       newAct.onlineSession = { attended: true, timeSpan: t && t.toLowerCase() !== 'attended' ? t : '' };
-    } else if (lower.includes('book')) {
+    } else if ((lower.includes('book reading') || lower.includes('reading') || lower.includes('book')) && !lower.includes('accommodation') && !lower.includes('booking')) {
       newAct.bookReading = { bookName: workStarted, pagesOrMinutes: workCompleted || '30 mins' };
     } else if (lower.includes('service')) {
       newAct.service = { serviceName: workStarted, durationMinutes: 30 };
@@ -613,7 +631,7 @@ export class SadhanaService {
     if (lower.includes('mangla')) return 'manglaArti';
     if (lower.startsWith('chanting')) return 'chanting';
     if (lower.startsWith('online')) return 'onlineSession';
-    if (lower.startsWith('book reading') || lower.startsWith('book')) return 'bookReading';
+    if ((lower.startsWith('book reading') || lower.startsWith('book')) && !lower.includes('accommodation') && !lower.includes('booking')) return 'bookReading';
     if (lower.startsWith('service')) return 'service';
     if (lower.startsWith('temple')) return 'templeVisit';
     if (lower.includes('bhagavatam')) return 'srimadBhagavatamClass';

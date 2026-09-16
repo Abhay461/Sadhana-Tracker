@@ -6596,6 +6596,80 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> with S
   }
 }
 
+class _AppointmentSuccessDialog extends StatefulWidget {
+  final String dateStr;
+  final String timeStr;
+  const _AppointmentSuccessDialog({required this.dateStr, required this.timeStr});
+
+  @override
+  State<_AppointmentSuccessDialog> createState() => _AppointmentSuccessDialogState();
+}
+
+class _AppointmentSuccessDialogState extends State<_AppointmentSuccessDialog> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer(const Duration(milliseconds: 1200), () {
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      elevation: 4,
+      backgroundColor: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                color: Color(0xFFF0FDFA),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.check_circle_rounded, color: Color(0xFF0D9488), size: 48),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Appointment Request Submitted!',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0F172A),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Your appointment request for ${widget.dateStr} at ${widget.timeStr} has been sent to Preacher for approval.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13,
+                color: Color(0xFF64748B),
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _PreacherAppointmentSheet extends StatefulWidget {
   final Map<String, dynamic> profile;
   final Map<String, dynamic>? preacher;
@@ -6778,9 +6852,8 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
       NotificationHelper.sendUpdateNotification(updateData).catchError((_) {});
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Appointment request submitted successfully!')),
-        );
+        FocusScope.of(context).unfocus();
+        FocusManager.instance.primaryFocus?.unfocus();
         widget.onBookingSuccess();
         _fetchAppointments();
         _purposeController.clear();
@@ -6788,6 +6861,12 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
           _appointmentDate = null;
           _appointmentTime = null;
         });
+
+        await showDialog(
+          context: context,
+          barrierDismissible: true,
+          builder: (dialogCtx) => _AppointmentSuccessDialog(dateStr: dateStr, timeStr: timeStr),
+        );
       }
     } catch (e) {
       debugPrint('Error booking appointment: $e');
@@ -6950,6 +7029,20 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
           }
         }
 
+        String cleanPreacherName = preacherName.trim();
+        if (cleanPreacherName.startsWith('Preacher: ')) {
+          cleanPreacherName = cleanPreacherName.replaceFirst('Preacher: ', '').trim();
+        }
+        if (cleanPreacherName == 'Preacher' || cleanPreacherName.isEmpty) {
+          final effName = _effectivePreacher?['name']?.toString().trim();
+          if (effName != null && effName.isNotEmpty && effName != 'Preacher') {
+            cleanPreacherName = effName;
+          }
+        }
+        if (cleanPreacherName.startsWith('Preacher: ')) {
+          cleanPreacherName = cleanPreacherName.replaceFirst('Preacher: ', '').trim();
+        }
+
         if (appt['finalDate'] != null && appt['finalDate'].toString().isNotEmpty) {
           final rawFinalDate = appt['finalDate'].toString();
           try {
@@ -6962,6 +7055,42 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
         if (appt['finalTime'] != null && appt['finalTime'].toString().isNotEmpty) {
           timeText = appt['finalTime'].toString();
         }
+
+        String reqDateRaw = (appt['preferredDate'] ?? '').toString().trim();
+        String reqTimeRaw = (appt['preferredTime'] ?? '').toString().trim();
+        
+        if (reqDateRaw.isEmpty || reqTimeRaw.isEmpty) {
+          final lines = details.toString().split('\n');
+          for (var line in lines) {
+            if (reqDateRaw.isEmpty && line.startsWith('Date: ')) {
+              reqDateRaw = line.replaceAll('Date: ', '').trim();
+            } else if (reqTimeRaw.isEmpty && line.startsWith('Time: ')) {
+              reqTimeRaw = line.replaceAll('Time: ', '').trim();
+            }
+          }
+        }
+
+        final String appDateRaw = (appt['approvedDate'] ?? '').toString().trim();
+        final String appTimeRaw = (appt['approvedTime'] ?? '').toString().trim();
+
+        final bool isTimeChanged = isApproved &&
+            appDateRaw.isNotEmpty &&
+            appTimeRaw.isNotEmpty &&
+            reqDateRaw.isNotEmpty &&
+            reqTimeRaw.isNotEmpty &&
+            (appDateRaw != reqDateRaw || appTimeRaw != reqTimeRaw);
+
+        String formatDateTimeStr(String d, String t) {
+          String dateFormatted = d;
+          try {
+            final parsed = DateTime.parse(d);
+            dateFormatted = DateFormat('dd MMM yyyy').format(parsed);
+          } catch (_) {}
+          return '$dateFormatted${t.isNotEmpty ? ' at $t' : ''}';
+        }
+
+        final requestedStr = formatDateTimeStr(reqDateRaw, reqTimeRaw);
+        final confirmedStr = formatDateTimeStr(appDateRaw, appTimeRaw);
 
         return Card(
           elevation: 0,
@@ -7003,7 +7132,7 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
                     const Icon(Icons.person_outline, size: 18, color: Colors.grey),
                     const SizedBox(width: 8),
                     Text(
-                      'Preacher: $preacherName',
+                      cleanPreacherName == 'Preacher' ? 'Preacher' : 'Preacher: $cleanPreacherName',
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF1E293B)),
                     ),
                   ],
@@ -7043,7 +7172,50 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
                     ),
                   ],
                 ),
-                const Divider(height: 24),
+                if (isTimeChanged) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFFBEB),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFFDE68A), width: 0.8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          '📅 Preacher changed the appointment time',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 10.5,
+                            color: Color(0xFF92400E),
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          'Requested: $requestedStr',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: Color(0xFFB45309),
+                            decoration: TextDecoration.lineThrough,
+                          ),
+                        ),
+                        const SizedBox(height: 1),
+                        Text(
+                          'Confirmed: $confirmedStr',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF78350F),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [

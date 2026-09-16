@@ -130,7 +130,7 @@ class ApiService {
         if (match != null) t = match.group(1)!.trim();
       }
       activities['onlineSession'] = {'attended': true, if (t.isNotEmpty && t.toLowerCase() != 'attended') 'timeSpan': t};
-    } else if (lower.contains('book') || lower.contains('reading')) {
+    } else if (lower.contains('book reading') || (lower.contains('reading') && !lower.contains('accommodation')) || (lower.contains('book') && !lower.contains('accommodation') && !lower.contains('booking'))) {
       String bookName = workStarted.replaceFirst(RegExp(r'^Book Reading\s*-\s*', caseSensitive: false), '').trim();
       if (bookName.isEmpty) bookName = 'Bhagavad Gita';
       activities['bookReading'] = {'bookName': bookName, 'pagesOrMinutes': workCompleted.isNotEmpty ? workCompleted : '30 mins'};
