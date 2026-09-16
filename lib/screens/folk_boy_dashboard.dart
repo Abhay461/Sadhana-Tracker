@@ -14,6 +14,7 @@ import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import 'resident_enrollment_form_screen.dart';
 import 'student_payment_screen.dart';
+import '../widgets/inline_youtube_player.dart';
 import '../utils/notification_helper.dart';
 
 class FolkBoyDashboard extends StatefulWidget {
@@ -1848,6 +1849,10 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
           children: [
             _buildTodayFestivalCard(),
             _buildInlineSadhanaCard(),
+            const SizedBox(height: 20),
+            _buildDailyDarshanCard(),
+            const SizedBox(height: 20),
+            _buildYouTubeSection(),
             const SizedBox(height: 20),
             _buildDailyQuoteCard(),
             () {
@@ -4507,6 +4512,44 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   }
 
 
+
+  Widget _buildYouTubeSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 18),
+        Row(
+          children: [
+            Container(
+              width: 28,
+              height: 28,
+              decoration: const BoxDecoration(
+                color: Color(0xFF0F172A),
+                shape: BoxShape.circle,
+              ),
+              child: const Center(
+                child: Icon(Icons.play_arrow_rounded, color: Colors.white, size: 18),
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Text(
+              'Inspiring Video',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0F172A),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        const InlineYouTubePlayerCard(
+          videoUrl: 'https://youtu.be/yDDpmRHUipU?si=LLpAv4La5kZV5cp5',
+          title: 'Mega Youth Fest Lit Up ! 2026 || Bhakti Sangeet & Inspirations',
+        ),
+      ],
+    );
+  }
 
   Widget _buildDailyQuoteCard() {
     if (_todayQuote == null) return const SizedBox.shrink();
