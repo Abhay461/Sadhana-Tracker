@@ -50,7 +50,7 @@ class FcmService {
         'platform': platform,
         'appInstanceId': appInstanceId,
         'appVersion': '1.0.0',
-      });
+      }).timeout(const Duration(seconds: 3));
       debugPrint('FCM token successfully registered with NestJS backend');
     } catch (e) {
       debugPrint('Failed to register FCM token with backend: $e');

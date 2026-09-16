@@ -403,7 +403,10 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
                                 backgroundColor: const Color(0xFFEEF2F6),
                                 child: (_profile?['photo_url'] == null || _profile!['photo_url'].toString().trim().isEmpty)
                                     ? Text(
-                                        (_profile?['name'] ?? 'P')[0].toUpperCase(),
+                                        (() {
+                                          final n = (_profile?['name'] ?? 'Preacher').toString().trim();
+                                          return n.isNotEmpty ? n[0].toUpperCase() : 'P';
+                                        })(),
                                         style: const TextStyle(
                                           fontSize: 18,
                                           fontWeight: FontWeight.bold,

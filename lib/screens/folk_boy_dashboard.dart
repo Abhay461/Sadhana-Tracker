@@ -112,7 +112,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
 
   Future<void> _fetchCourses() async {
     try {
-      final response = await ApiService.get('/courses');
+      final response = await ApiService.get('/courses').timeout(const Duration(seconds: 15));
       if (response != null && response is List && response.isNotEmpty) {
         if (mounted) {
           setState(() {
@@ -280,7 +280,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
 
   Future<void> _fetchDailyDarshan() async {
     try {
-      final response = await ApiService.get('/daily-darshan/today');
+      final response = await ApiService.get('/daily-darshan/today').timeout(const Duration(seconds: 15));
       if (response != null && response is Map<String, dynamic>) {
         if (mounted) {
           setState(() {
@@ -295,7 +295,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
 
   Future<void> _fetchDailyQuote() async {
     try {
-      final response = await ApiService.get('/daily-quotes/today');
+      final response = await ApiService.get('/daily-quotes/today').timeout(const Duration(seconds: 15));
       if (response != null && response is Map<String, dynamic>) {
         if (mounted) {
           setState(() {
@@ -320,7 +320,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
 
   Future<void> _fetchTodayFestival() async {
     try {
-      final response = await ApiService.get('/festivals/today');
+      final response = await ApiService.get('/festivals/today').timeout(const Duration(seconds: 15));
       if (response != null && response is Map<String, dynamic>) {
         final img = (response['imageUrl'] as String? ?? '').trim();
         if (img.isNotEmpty && mounted) {
@@ -375,11 +375,27 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       if (initialProfile != null) {
         profileData = Map<String, dynamic>.from(initialProfile);
       } else {
-        final response = await ApiService.get('/users/me');
-        if (response is! Map) {
-          throw StateError('The profile service returned an invalid response.');
+        try {
+          final response = await ApiService.get('/users/me').timeout(const Duration(seconds: 15));
+          if (response is Map) {
+            profileData = Map<String, dynamic>.from(response);
+          } else {
+            profileData = {
+              'id': user.uid,
+              'name': user.displayName ?? 'Devotee',
+              'email': user.email ?? '',
+              'role': 'folk_boy',
+            };
+          }
+        } catch (e) {
+          debugPrint('Error getting profile in dashboard: $e');
+          profileData = {
+            'id': user.uid,
+            'name': user.displayName ?? 'Devotee',
+            'email': user.email ?? '',
+            'role': 'folk_boy',
+          };
         }
-        profileData = Map<String, dynamic>.from(response);
       }
 
       profileData['id'] ??= profileData['_id'];
@@ -411,7 +427,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
 
         if (preacherId != null && preacherId.isNotEmpty) {
           try {
-            final preachersData = await ApiService.get('/users/preachers');
+            final preachersData = await ApiService.get('/users/preachers').timeout(const Duration(seconds: 4));
             if (preachersData is List) {
               final match = preachersData.firstWhere(
                 (p) => (p['id'] ?? p['_id'])?.toString() == preacherId || p['name'] == preacherName,
@@ -438,12 +454,14 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         profileData['preacher_id'] ??= resolvedPreacher['id'] ?? resolvedPreacher['_id'];
       }
 
-      setState(() {
-        _profile = profileData;
-        _preacher = resolvedPreacher;
-        _photoUrl = profileData['photo_url'];
-        _isLoadingProfile = false;
-      });
+      if (mounted) {
+        setState(() {
+          _profile = profileData;
+          _preacher = resolvedPreacher;
+          _photoUrl = profileData['photo_url'];
+          _isLoadingProfile = false;
+        });
+      }
 
       await _fetchUpdates();
     } catch (e) {
@@ -660,7 +678,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       List<dynamic> data = [];
       dynamic res;
       try {
-        res = await ApiService.get('/sadhana/history');
+        res = await ApiService.get('/sadhana/history').timeout(const Duration(seconds: 15));
         debugPrint('📋 [DEBUG] Raw /sadhana/history response type: ${res.runtimeType}');
         if (res is Map) debugPrint('📋 [DEBUG] Response keys: ${res.keys.toList()}');
         if (res is Map && res.containsKey('items')) {
@@ -678,7 +696,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       } catch (e) {
         debugPrint('📋 [DEBUG] Error fetching history: $e');
         try {
-          res = await ApiService.get('/sadhana/updates');
+          res = await ApiService.get('/sadhana/updates').timeout(const Duration(seconds: 15));
           if (res is List) data = res;
         } catch (_) {}
       }
@@ -728,7 +746,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
 
   Future<void> _fetchAnnouncements() async {
     try {
-      final data = await ApiService.get('/announcements');
+      final data = await ApiService.get('/announcements').timeout(const Duration(seconds: 15));
       if (data is List) {
         final List<Map<String, dynamic>> loadedAnnouncements = [];
         for (var ann in data) {
@@ -3099,64 +3117,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   }
 
   Widget _buildCoursesTab() {
-    final List<Map<String, dynamic>> courses = [
-      {
-        'title': 'Discover Yourself (DYS)',
-        'subtitle': 'Science of Self, Mind & Meditation',
-        'duration': '6 Sessions',
-        'category': 'Foundational',
-        'price': '₹499',
-        'originalPrice': '₹999',
-        'icon': Icons.psychology_rounded,
-        'color': const Color(0xFF4F46E5),
-        'bg': const Color(0xFFEEF2FF),
-        'image': 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=600&q=80',
-        'description': 'Systematic course exploring life purpose, mind control, karma & meditation practices.',
-      },
-      {
-        'title': 'Bhagavad Gita As It Is',
-        'subtitle': '18 Chapters In-Depth Study',
-        'duration': '12 Weeks',
-        'category': 'Vedic Wisdom',
-        'price': '₹999',
-        'originalPrice': '₹1999',
-        'icon': Icons.auto_stories_rounded,
-        'color': const Color(0xFFD97706),
-        'bg': const Color(0xFFFFFBEB),
-        'image': 'https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=600&q=80',
-        'description': 'Learn timeless wisdom for daily life, duty, devotion, and inner peace.',
-      },
-      {
-        'title': 'Spiritual Scientist',
-        'subtitle': 'Consciousness & Scientific Evidence',
-        'duration': '4 Sessions',
-        'category': 'Science & Spirituality',
-        'price': '₹349',
-        'originalPrice': '₹699',
-        'icon': Icons.science_rounded,
-        'color': const Color(0xFF059669),
-        'bg': const Color(0xFFECFDF5),
-        'image': 'https://images.unsplash.com/photo-1507413245164-6160d8298b31?auto=format&fit=crop&w=600&q=80',
-        'description': 'Scientific inquiry into life, origin of species, consciousness, and cosmology.',
-      },
-      {
-        'title': 'Japa Yoga & Habit Building',
-        'subtitle': 'Mastering Mantra Meditation',
-        'duration': '3 Weeks',
-        'category': 'Practicum',
-        'price': '₹299',
-        'originalPrice': '₹599',
-        'icon': Icons.spa_rounded,
-        'color': const Color(0xFFDB2777),
-        'bg': const Color(0xFFFDF2F8),
-        'image': 'https://images.unsplash.com/photo-1609137144813-7d9921338f24?auto=format&fit=crop&w=600&q=80',
-        'description': 'Practical guide to morning habits, mantra meditation focus, and spiritual discipline.',
-      },
-    ];
-
-    final List<Map<String, dynamic>> displayCourses = _dynamicCourses.isNotEmpty
-        ? _dynamicCourses
-        : courses;
+    final List<Map<String, dynamic>> displayCourses = _dynamicCourses;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
@@ -3254,155 +3215,212 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFDCFCE7),
+                  color: displayCourses.isNotEmpty ? const Color(0xFFDCFCE7) : const Color(0xFFFEF3C7),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  '${displayCourses.length} Available',
-                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
+                  displayCourses.isNotEmpty ? '${displayCourses.length} Available' : 'Coming Soon',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: displayCourses.isNotEmpty ? const Color(0xFF16A34A) : const Color(0xFFD97706),
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 14),
-          ...displayCourses.map((crs) {
-            final Color themeColor = crs['color'] is Color
-                ? crs['color'] as Color
-                : const Color(0xFF4F46E5);
-            final Color bgColor = crs['bg'] is Color
-                ? crs['bg'] as Color
-                : const Color(0xFFEEF2FF);
-            final IconData icon = crs['icon'] is IconData
-                ? crs['icon'] as IconData
-                : Icons.auto_stories_rounded;
-            final String imageUrl = (crs['image'] ?? crs['bannerImage'] ?? 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=600&q=80').toString();
-
-            return Card(
-              margin: const EdgeInsets.only(bottom: 14),
-              elevation: 0,
-              shape: RoundedRectangleBorder(
+          if (displayCourses.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+              decoration: BoxDecoration(
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
-                side: const BorderSide(color: Color(0xFFE2E8F0)),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.03),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
-              clipBehavior: Clip.antiAlias,
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  AspectRatio(
-                    aspectRatio: 16 / 9,
-                    child: Image.network(
-                      imageUrl,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      cacheWidth: 600,
-                      errorBuilder: (_, __, ___) => Container(color: themeColor),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFFF7ED),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.hourglass_top_rounded,
+                      size: 44,
+                      color: Color(0xFFEA580C),
                     ),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: bgColor,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(icon, color: themeColor, size: 22),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: bgColor,
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Text(
-                                      crs['category'].toString().toUpperCase(),
-                                      style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: themeColor),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    crs['title'],
-                                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
-                                  ),
-                                  Text(
-                                    crs['subtitle'],
-                                    style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          crs['description'],
-                          style: const TextStyle(fontSize: 12.5, color: Color(0xFF475569), height: 1.4),
-                        ),
-                        const SizedBox(height: 14),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    const Icon(Icons.schedule, size: 13, color: Color(0xFF64748B)),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      crs['duration'],
-                                      style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    Text(
-                                      crs['originalPrice'] ?? '',
-                                      style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8), decoration: TextDecoration.lineThrough),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      crs['price'] ?? '',
-                                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                            ElevatedButton.icon(
-                              onPressed: () {
-                                _showCoursePaymentDialog(crs);
-                              },
-                              icon: const Icon(Icons.shopping_cart_outlined, size: 16),
-                              label: Text('Buy Course (${crs['price']})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF3F1200),
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Coming Soon',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0F172A),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'New courses will be available soon. Stay tuned!',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF64748B),
                     ),
                   ),
                 ],
               ),
-            );
-          }),
+            )
+          else
+            ...displayCourses.map((crs) {
+              final Color themeColor = crs['color'] is Color
+                  ? crs['color'] as Color
+                  : const Color(0xFF4F46E5);
+              final Color bgColor = crs['bg'] is Color
+                  ? crs['bg'] as Color
+                  : const Color(0xFFEEF2FF);
+              final IconData icon = crs['icon'] is IconData
+                  ? crs['icon'] as IconData
+                  : Icons.auto_stories_rounded;
+              final String imageUrl = (crs['image'] ?? crs['bannerImage'] ?? 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=600&q=80').toString();
+
+              return Card(
+                margin: const EdgeInsets.only(bottom: 14),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    AspectRatio(
+                      aspectRatio: 16 / 9,
+                      child: Image.network(
+                        imageUrl,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        cacheWidth: 600,
+                        errorBuilder: (_, __, ___) => Container(color: themeColor),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: bgColor,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(icon, color: themeColor, size: 22),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: bgColor,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        crs['category'].toString().toUpperCase(),
+                                        style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: themeColor),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      crs['title'],
+                                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                                    ),
+                                    Text(
+                                      crs['subtitle'],
+                                      style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            crs['description'],
+                            style: const TextStyle(fontSize: 12.5, color: Color(0xFF475569), height: 1.4),
+                          ),
+                          const SizedBox(height: 14),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.schedule, size: 13, color: Color(0xFF64748B)),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        crs['duration'],
+                                        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      Text(
+                                        crs['originalPrice'] ?? '',
+                                        style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8), decoration: TextDecoration.lineThrough),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        crs['price'] ?? '',
+                                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  _showCoursePaymentDialog(crs);
+                                },
+                                icon: const Icon(Icons.shopping_cart_outlined, size: 16),
+                                label: Text('Buy Course (${crs['price']})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF3F1200),
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
         ],
       ),
     );
@@ -3469,7 +3487,10 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
                     backgroundColor: const Color(0xFFF1F5F9),
                     child: _photoUrl == null
                         ? Text(
-                            (_profile?['name'] ?? 'U')[0].toUpperCase(),
+                            (() {
+                              final n = (_profile?['name'] ?? _profile?['full_name'] ?? 'U').toString().trim();
+                              return n.isNotEmpty ? n[0].toUpperCase() : 'U';
+                            })(),
                             style: const TextStyle(
                               fontSize: 28,
                               fontWeight: FontWeight.bold,
@@ -4309,7 +4330,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
               backgroundColor: const Color(0xFFF1F5F9),
               child: preacherPhoto == null
                   ? Text(
-                      preacherName[0].toUpperCase(),
+                      preacherName.trim().isNotEmpty ? preacherName.trim()[0].toUpperCase() : 'P',
                       style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Color(0xFF3F1200)),
                     )
                   : null,
@@ -7475,7 +7496,12 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
                         : null,
                     backgroundColor: const Color(0xFFE2E8F0),
                     child: activePreacher['photo_url'] == null
-                        ? Text((activePreacher['name'] ?? 'P')[0].toUpperCase(), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)))
+                        ? Text(
+                            (activePreacher['name'] ?? 'P').toString().trim().isNotEmpty
+                                ? (activePreacher['name'] ?? 'P').toString().trim()[0].toUpperCase()
+                                : 'P',
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                          )
                         : null,
                   ),
                   const SizedBox(width: 12),

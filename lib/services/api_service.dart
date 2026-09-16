@@ -12,13 +12,9 @@ class ApiService {
     String? idToken;
     if (user != null) {
       try {
-        idToken = await user.getIdToken(false);
-      } catch (_) {
-        try {
-          idToken = await user.getIdToken(true);
-        } catch (e) {
-          debugPrint('Firebase token refresh warning: $e');
-        }
+        idToken = await user.getIdToken(false).timeout(const Duration(seconds: 2));
+      } catch (e) {
+        debugPrint('Firebase token refresh warning: $e');
       }
     }
 

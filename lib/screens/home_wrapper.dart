@@ -50,7 +50,7 @@ class _HomeWrapperState extends State<HomeWrapper> {
 
     try {
       // Sync or fetch user profile from NestJS API
-      final response = await ApiService.get('/users/me').timeout(const Duration(seconds: 15));
+      final response = await ApiService.get('/users/me').timeout(const Duration(seconds: 4));
       final rawRole = (response is Map ? response['role'] : null) ?? 'folk_boy';
       final role = rawRole.toString().replaceAll('pending_', '');
 
