@@ -52,6 +52,7 @@ class _SplashScreenState extends State<SplashScreen> {
   Future<void> _checkAuthAndRedirect() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
+      ApiService.clearTokenCache();
       if (mounted) Navigator.pushReplacementNamed(context, '/login');
       return;
     }
@@ -68,6 +69,7 @@ class _SplashScreenState extends State<SplashScreen> {
       _navigateToRole(rawRole, profileData);
     } catch (e) {
       debugPrint('SPLASH API Error: $e');
+      ApiService.clearTokenCache();
       if (mounted) Navigator.pushReplacementNamed(context, '/login');
     }
   }

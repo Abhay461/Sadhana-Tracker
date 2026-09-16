@@ -504,7 +504,7 @@ class _SettingsTabState extends State<SettingsTab> {
                 onSwipeCompleted: () async {
                   final navigator = Navigator.of(context);
                   try {
-                    await FirebaseAuth.instance.signOut();
+                    await ApiService.logout();
                   } catch (_) {}
                   navigator.pushReplacementNamed('/login');
                 },

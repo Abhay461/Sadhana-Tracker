@@ -3,16 +3,25 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
 import '../utils/constants.dart';
+import '../utils/notification_helper.dart';
 
 class ApiService {
   static String get baseUrl => Constants.apiBaseUrl;
 
   static String? _cachedIdToken;
+  static String? _cachedUid;
   static DateTime? _tokenFetchTime;
 
   static void clearTokenCache() {
     _cachedIdToken = null;
+    _cachedUid = null;
     _tokenFetchTime = null;
+  }
+
+  static Future<void> logout() async {
+    clearTokenCache();
+    await NotificationHelper.logoutUser().catchError((_) {});
+    await FirebaseAuth.instance.signOut().catchError((_) {});
   }
 
   static Future<Map<String, String>> _getHeaders() async {
@@ -21,21 +30,29 @@ class ApiService {
     if (user != null) {
       final now = DateTime.now();
       if (_cachedIdToken != null &&
+          _cachedUid == user.uid &&
           _tokenFetchTime != null &&
           now.difference(_tokenFetchTime!).inMinutes < 10) {
         idToken = _cachedIdToken;
       } else {
         try {
-          idToken = await user.getIdToken(false).timeout(const Duration(seconds: 3));
+          idToken = await user.getIdToken(true).timeout(const Duration(seconds: 4));
           if (idToken != null && idToken.isNotEmpty) {
             _cachedIdToken = idToken;
+            _cachedUid = user.uid;
             _tokenFetchTime = now;
           }
         } catch (e) {
           debugPrint('Firebase token refresh warning: $e');
-          idToken = _cachedIdToken;
+          if (_cachedUid == user.uid) {
+            idToken = _cachedIdToken;
+          } else {
+            clearTokenCache();
+          }
         }
       }
+    } else {
+      clearTokenCache();
     }
 
     final timezoneOffset = DateTime.now().timeZoneOffset.inMinutes.toString();

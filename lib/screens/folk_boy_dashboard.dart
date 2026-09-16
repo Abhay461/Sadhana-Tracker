@@ -1542,11 +1542,13 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
           actions: [
             IconButton(
               icon: const Icon(Icons.logout, color: Color(0xFF64748B)),
-              onPressed: () {
+              onPressed: () async {
                 try {
-                  FirebaseAuth.instance.signOut().catchError((_) {});
+                  await ApiService.logout();
                 } catch (_) {}
-                Navigator.pushReplacementNamed(context, '/login');
+                if (mounted) {
+                  Navigator.pushReplacementNamed(context, '/login');
+                }
               },
             ),
           ],
@@ -3371,7 +3373,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
               child: _SwipeToLogoutButton(
                 onSwipeCompleted: () async {
                   try {
-                    await FirebaseAuth.instance.signOut();
+                    await ApiService.logout();
                   } catch (_) {}
                   if (mounted) {
                     Navigator.pushReplacementNamed(context, '/login');
