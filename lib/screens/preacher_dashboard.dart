@@ -145,8 +145,8 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
 
   Future<void> _fetchTripAndEventBookings() async {
     try {
-      final tripData = await ApiService.get('/trips/registrations');
-      final eventData = await ApiService.get('/events/registrations');
+      final tripData = await ApiService.get('/trips');
+      final eventData = await ApiService.get('/events');
 
       if (mounted) {
         setState(() {
@@ -163,7 +163,7 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
     await _fetchTripAndEventBookings();
     if (_folkBoys.isEmpty) return;
     try {
-      final updatesData = await ApiService.get('/sadhana/students');
+      final updatesData = await ApiService.get('/sadhana/updates');
       final List<dynamic> processedUpdates = updatesData is List ? List.from(updatesData) : [];
       
       // Process signals in-memory
