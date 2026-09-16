@@ -176,6 +176,106 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
     }
   }
 
+  TimeOfDay? _parseTimeOfDay(String timeStr) {
+    final s = timeStr.trim().toUpperCase();
+    if (s.isEmpty) return null;
+
+    try {
+      bool isPM = s.contains('PM');
+      bool isAM = s.contains('AM');
+      final clean = s.replaceAll('AM', '').replaceAll('PM', '').trim();
+      final parts = clean.split(':');
+      if (parts.length >= 2) {
+        int hour = int.parse(parts[0].trim());
+        int minute = int.parse(parts[1].trim());
+        if (isPM && hour < 12) hour += 12;
+        if (isAM && hour == 12) hour = 0;
+        return TimeOfDay(hour: hour, minute: minute);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  String _formatDurationText(String rawStr, {String defaultText = 'Attended'}) {
+    final s = rawStr.trim();
+    if (s.isEmpty) return defaultText;
+
+    final lower = s.toLowerCase();
+    if (lower == 'attended' || lower == 'visited' || lower == 'completed' || lower == 'filled') {
+      return 'Attended';
+    }
+
+    if (lower.contains('hour') || lower.contains('hr')) {
+      final numMatch = RegExp(r'(\d+(?:\.\d+)?)\s*(?:hours?|hrs?)', caseSensitive: false).firstMatch(s);
+      if (numMatch != null) {
+        final valStr = numMatch.group(1)!;
+        final val = double.tryParse(valStr);
+        if (val != null) {
+          if (val == 1.0) return '1 hr';
+          if (val == val.toInt().toDouble()) return '${val.toInt()} hrs';
+          return '$valStr hrs';
+        }
+      }
+      return s.replaceAll(RegExp(r'hours?', caseSensitive: false), 'hrs');
+    }
+
+    if (lower.contains('minute') || lower.contains('min')) {
+      final numMatch = RegExp(r'(\d+)\s*(?:minutes?|mins?)', caseSensitive: false).firstMatch(s);
+      if (numMatch != null) {
+        final mins = int.tryParse(numMatch.group(1)!);
+        if (mins != null) {
+          if (mins % 60 == 0) {
+            final hrs = mins ~/ 60;
+            return '$hrs hr${hrs > 1 ? 's' : ''}';
+          }
+          return '$mins mins';
+        }
+      }
+      return s;
+    }
+
+    final numVal = int.tryParse(s);
+    if (numVal != null) {
+      if (numVal % 60 == 0) {
+        final hrs = numVal ~/ 60;
+        return '$hrs hr${hrs > 1 ? 's' : ''}';
+      }
+      return '$numVal mins';
+    }
+
+    if (s.contains('-')) {
+      final parts = s.split('-');
+      if (parts.length == 2) {
+        final start = _parseTimeOfDay(parts[0].trim());
+        final end = _parseTimeOfDay(parts[1].trim());
+        if (start != null && end != null) {
+          int startMin = start.hour * 60 + start.minute;
+          int endMin = end.hour * 60 + end.minute;
+          if (endMin < startMin) endMin += 24 * 60;
+          final diff = endMin - startMin;
+          if (diff > 0) {
+            if (diff % 60 == 0) {
+              final hrs = diff ~/ 60;
+              return '$hrs hr${hrs > 1 ? 's' : ''}';
+            } else if (diff > 60) {
+              final hrs = (diff / 60).toStringAsFixed(1);
+              return '$hrs hrs';
+            } else {
+              return '$diff mins';
+            }
+          }
+        }
+      }
+    }
+
+    final singleTime = _parseTimeOfDay(s);
+    if (singleTime != null) {
+      return '1 hr';
+    }
+
+    return s;
+  }
+
   List<dynamic> _normalizeSadhanaItems(List<dynamic> rawList) {
     final List<dynamic> result = [];
     for (var u in rawList) {
@@ -308,8 +408,9 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
 
         if (activities['onlineSession'] != null) {
           final o = activities['onlineSession'];
-          if (o is Map && (o['attended'] == true || o['timeSpan'] != null)) {
-            final t = (o['timeSpan'] ?? 'Attended').toString();
+          if (o is Map && (o['attended'] == true || o['timeSpan'] != null || o['duration'] != null || o['time'] != null)) {
+            final rawT = (o['durationMinutes'] ?? o['duration'] ?? o['timeSpan'] ?? o['time'] ?? 'Attended').toString();
+            final t = _formatDurationText(rawT, defaultText: 'Attended');
             result.add({
               'id': itemMap['id'] ?? itemMap['_id'],
               'worker_id': workerId,
@@ -371,30 +472,30 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
         if (activities['service'] != null) {
           final s = activities['service'];
           if (s is Map) {
-            final name = (s['serviceName'] ?? '').toString();
-            final dur = (s['durationMinutes'] ?? s['duration'] ?? '').toString();
-            final durStr = dur.isNotEmpty ? '$dur mins' : '';
-            final combined = [name, durStr].where((x) => x.isNotEmpty).join(' - ');
+            final dur = (s['durationMinutes'] ?? s['duration'] ?? s['timeSpan'] ?? s['time'] ?? '').toString();
+            final name = (s['serviceName'] ?? s['name'] ?? '').toString();
+            final t = dur.isNotEmpty ? _formatDurationText(dur) : (name.isNotEmpty ? name : 'Completed');
             result.add({
               'id': itemMap['id'] ?? itemMap['_id'],
               'worker_id': workerId,
               'worker_name': workerName,
               'date': date,
               'category': 'folk_sadhna',
-              'work_started': 'Service: ${combined.isNotEmpty ? combined : "Completed"}',
-              'work_completed': combined.isNotEmpty ? combined : 'Completed',
+              'work_started': 'Service: $t',
+              'work_completed': t,
               'is_completed': true,
               'activities': rawActs,
             });
           } else if (s is String && s.isNotEmpty) {
+            final t = _formatDurationText(s);
             result.add({
               'id': itemMap['id'] ?? itemMap['_id'],
               'worker_id': workerId,
               'worker_name': workerName,
               'date': date,
               'category': 'folk_sadhna',
-              'work_started': 'Service: $s',
-              'work_completed': s,
+              'work_started': 'Service: $t',
+              'work_completed': t,
               'is_completed': true,
               'activities': rawActs,
             });
@@ -420,8 +521,9 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
 
         if (activities['srimadBhagavatamClass'] != null) {
           final sb = activities['srimadBhagavatamClass'];
-          if (sb is Map && (sb['attended'] == true || sb['timeSpan'] != null)) {
-            final t = (sb['timeSpan'] ?? 'Attended').toString();
+          if (sb is Map && (sb['attended'] == true || sb['timeSpan'] != null || sb['duration'] != null || sb['time'] != null)) {
+            final rawT = (sb['durationMinutes'] ?? sb['duration'] ?? sb['timeSpan'] ?? sb['time'] ?? 'Attended').toString();
+            final t = _formatDurationText(rawT, defaultText: 'Attended');
             result.add({
               'id': itemMap['id'] ?? itemMap['_id'],
               'worker_id': workerId,
@@ -450,8 +552,9 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
 
         if (activities['bhagavadGitaClass'] != null) {
           final bg = activities['bhagavadGitaClass'];
-          if (bg is Map && (bg['attended'] == true || bg['timeSpan'] != null)) {
-            final t = (bg['timeSpan'] ?? 'Attended').toString();
+          if (bg is Map && (bg['attended'] == true || bg['timeSpan'] != null || bg['duration'] != null || bg['time'] != null)) {
+            final rawT = (bg['durationMinutes'] ?? bg['duration'] ?? bg['timeSpan'] ?? bg['time'] ?? 'Attended').toString();
+            final t = _formatDurationText(rawT, defaultText: 'Attended');
             result.add({
               'id': itemMap['id'] ?? itemMap['_id'],
               'worker_id': workerId,

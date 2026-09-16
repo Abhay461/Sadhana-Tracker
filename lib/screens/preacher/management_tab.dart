@@ -720,29 +720,101 @@ class _ManagementTabState extends State<ManagementTab> {
       return null;
     }
 
-    String formatDurationText(String rawStr, {String defaultText = 'Attended'}) {
+    String? formatDurationText(String rawStr, {String defaultText = 'Attended'}) {
       final s = rawStr.trim();
-      if (s.isEmpty) return defaultText;
+      if (s.isEmpty || s == 'null') return null;
 
       final lower = s.toLowerCase();
-      if (lower == 'attended' || lower == 'visited' || lower == 'completed' || lower == 'filled') {
-        return s;
+      if (lower == '0' || lower == '0 mins' || lower == '0 min' || lower == '0m' || lower == '0 hrs' || lower == '0 hr' || lower == '0h') {
+        return null;
       }
-      if (lower.contains('min') || lower.contains('hr')) {
-        return s;
+      if (lower == 'attended' || lower == 'visited' || lower == 'completed' || lower == 'filled') {
+        return 'Attended';
       }
 
-      final numVal = int.tryParse(s);
+      // Extract content inside parentheses if present, e.g. "08:00 AM to 10:15 AM (2 hr 15 mins)" -> "2 hr 15 mins"
+      String textToProcess = s;
+      if (s.contains('(') && s.contains(')')) {
+        final inside = s.substring(s.indexOf('(') + 1, s.lastIndexOf(')')).trim();
+        if (inside.isNotEmpty && inside != 'null') {
+          textToProcess = inside;
+        }
+      }
+
+      final procLower = textToProcess.toLowerCase();
+
+      // Check for combined Hours + Minutes pattern (e.g. "2 hr 15 mins", "2 hrs 15 mins", "2 hours 15 minutes")
+      final hrMinMatch = RegExp(r'(\d+)\s*(?:hours?|hrs?|hr)\s*(?:and\s*)?(\d+)\s*(?:minutes?|mins?|min)', caseSensitive: false).firstMatch(textToProcess);
+      if (hrMinMatch != null) {
+        final hrs = int.tryParse(hrMinMatch.group(1)!);
+        final mins = int.tryParse(hrMinMatch.group(2)!);
+        if (hrs != null && mins != null) {
+          if (hrs <= 0 && mins <= 0) return null;
+          if (hrs > 0 && mins > 0) return '$hrs hr${hrs > 1 ? 's' : ''} $mins mins';
+          if (hrs > 0) return '$hrs hr${hrs > 1 ? 's' : ''}';
+          return '$mins mins';
+        }
+      }
+
+      // Check for Hours pattern (e.g. "2 hrs", "2.5 hrs")
+      if (procLower.contains('hour') || procLower.contains('hr')) {
+        final numMatch = RegExp(r'(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|hr)', caseSensitive: false).firstMatch(textToProcess);
+        if (numMatch != null) {
+          final valStr = numMatch.group(1)!;
+          final val = double.tryParse(valStr);
+          if (val != null) {
+            if (val <= 0) return null;
+            final totalMins = (val * 60).round();
+            final hrs = totalMins ~/ 60;
+            final mins = totalMins % 60;
+            if (hrs > 0 && mins > 0) {
+              return '$hrs hr${hrs > 1 ? 's' : ''} $mins mins';
+            }
+            return '$hrs hr${hrs > 1 ? 's' : ''}';
+          }
+        }
+      }
+
+      // Check for Minutes pattern (e.g. "135 mins", "45 mins")
+      if (procLower.contains('minute') || procLower.contains('min')) {
+        final numMatch = RegExp(r'(\d+)\s*(?:minutes?|mins?|min)', caseSensitive: false).firstMatch(textToProcess);
+        if (numMatch != null) {
+          final totalMins = int.tryParse(numMatch.group(1)!);
+          if (totalMins != null) {
+            if (totalMins <= 0) return null;
+            final hrs = totalMins ~/ 60;
+            final mins = totalMins % 60;
+            if (hrs > 0 && mins > 0) {
+              return '$hrs hr${hrs > 1 ? 's' : ''} $mins mins';
+            } else if (hrs > 0) {
+              return '$hrs hr${hrs > 1 ? 's' : ''}';
+            }
+            return '$mins mins';
+          }
+        }
+      }
+
+      // Check for plain number (e.g. "135", "90")
+      final numVal = int.tryParse(textToProcess);
       if (numVal != null) {
-        if (numVal % 60 == 0) {
-          final hrs = numVal ~/ 60;
+        if (numVal <= 0) return null;
+        final hrs = numVal ~/ 60;
+        final mins = numVal % 60;
+        if (hrs > 0 && mins > 0) {
+          return '$hrs hr${hrs > 1 ? 's' : ''} $mins mins';
+        } else if (hrs > 0) {
           return '$hrs hr${hrs > 1 ? 's' : ''}';
         }
         return '$numVal mins';
       }
 
-      if (s.contains('-')) {
-        final parts = s.split('-');
+      // Check for Time Range pattern (e.g. "08:00 AM - 10:15 AM" or "08:00 AM to 10:15 AM")
+      String cleanRangeStr = textToProcess;
+      if (cleanRangeStr.contains(' to ')) {
+        cleanRangeStr = cleanRangeStr.replaceAll(' to ', ' - ');
+      }
+      if (cleanRangeStr.contains('-')) {
+        final parts = cleanRangeStr.split('-');
         if (parts.length == 2) {
           final start = parseTimeOfDay(parts[0].trim());
           final end = parseTimeOfDay(parts[1].trim());
@@ -752,12 +824,12 @@ class _ManagementTabState extends State<ManagementTab> {
             if (endMin < startMin) endMin += 24 * 60;
             final diff = endMin - startMin;
             if (diff > 0) {
-              if (diff % 60 == 0) {
-                final hrs = diff ~/ 60;
+              final hrs = diff ~/ 60;
+              final mins = diff % 60;
+              if (hrs > 0 && mins > 0) {
+                return '$hrs hr${hrs > 1 ? 's' : ''} $mins mins';
+              } else if (hrs > 0) {
                 return '$hrs hr${hrs > 1 ? 's' : ''}';
-              } else if (diff > 60) {
-                final hrs = (diff / 60).toStringAsFixed(1);
-                return '$hrs hrs';
               } else {
                 return '$diff mins';
               }
@@ -766,10 +838,15 @@ class _ManagementTabState extends State<ManagementTab> {
         }
       }
 
-      return s;
+      final singleTime = parseTimeOfDay(textToProcess);
+      if (singleTime != null) {
+        return '1 hr';
+      }
+
+      return textToProcess;
     }
 
-    String getDetailText(Map<String, dynamic> u) {
+    String? getDetailText(Map<String, dynamic> u) {
       final workComp = (u['work_completed'] ?? u['detail'] ?? '').toString().trim();
       final key = getMatchedKey(u);
 
@@ -785,8 +862,8 @@ class _ManagementTabState extends State<ManagementTab> {
         return formatDurationText(textToFormat, defaultText: 'Attended');
       }
 
-      if (textToFormat.isNotEmpty && textToFormat != 'null') return textToFormat;
-      return 'Filled';
+      if (textToFormat.isNotEmpty && textToFormat != 'null' && textToFormat != '0') return textToFormat;
+      return null;
     }
 
     Map<String, String> extractActivitiesFromLog(Map<String, dynamic> u) {
@@ -813,16 +890,18 @@ class _ManagementTabState extends State<ManagementTab> {
         if (acts['chanting'] != null) {
           final c = acts['chanting'];
           if (c is Map && c['rounds'] != null) {
-            result['chanting'] = '${c['rounds']} Rounds';
-          } else if (c is num) {
+            final r = c['rounds'];
+            if (r is num && r > 0) result['chanting'] = '$r Rounds';
+          } else if (c is num && c > 0) {
             result['chanting'] = '$c Rounds';
           }
         }
         if (acts['onlineSession'] != null) {
           final o = acts['onlineSession'];
-          if (o is Map && (o['attended'] == true || o['timeSpan'] != null || o['duration'] != null)) {
-            final t = (o['durationMinutes'] ?? o['duration'] ?? o['timeSpan'] ?? 'Attended').toString();
-            result['online session'] = formatDurationText(t, defaultText: 'Attended');
+          if (o is Map && (o['attended'] == true || o['timeSpan'] != null || o['duration'] != null || o['time'] != null)) {
+            final t = (o['durationMinutes'] ?? o['duration'] ?? o['timeSpan'] ?? o['time'] ?? '').toString();
+            final formatted = formatDurationText(t, defaultText: 'Attended');
+            if (formatted != null) result['online session'] = formatted;
           } else if (o == true) {
             result['online session'] = 'Attended';
           }
@@ -830,28 +909,50 @@ class _ManagementTabState extends State<ManagementTab> {
         if (acts['bookReading'] != null) {
           final b = acts['bookReading'];
           if (b is Map) {
-            final name = (b['bookName'] ?? '').toString();
-            final detail = (b['pagesOrMinutes'] ?? b['duration'] ?? '').toString();
-            final combined = [name, detail].where((s) => s.isNotEmpty).join(' - ');
-            result['book reading'] = combined.isNotEmpty ? combined : 'Completed';
-          } else if (b is String && b.isNotEmpty) {
+            final name = (b['bookName'] ?? b['name'] ?? b['book_name'] ?? b['book'] ?? b['title'] ?? '').toString().trim();
+            final pagesOrMins = b['pagesOrMinutes'] ?? b['pagesRead'] ?? b['pages'] ?? b['durationMinutes'] ?? b['duration'] ?? b['timeSpan'] ?? b['value'];
+            final readingType = (b['readingType'] ?? b['type'] ?? '').toString().trim().toLowerCase();
+
+            String detailStr = '';
+            if (pagesOrMins != null && pagesOrMins.toString().isNotEmpty && pagesOrMins.toString() != '0' && pagesOrMins.toString() != 'null') {
+              final strVal = pagesOrMins.toString().trim();
+              final isClockTime = parseTimeOfDay(strVal) != null || RegExp(r'^\d{1,2}:\d{2}\s*(?:AM|PM)?$', caseSensitive: false).hasMatch(strVal);
+
+              if (!isClockTime) {
+                if (readingType.contains('page') || b['pagesRead'] != null) {
+                  detailStr = strVal.toLowerCase().contains('page') ? strVal : '$strVal pages';
+                } else if (readingType.contains('min') || b['durationMinutes'] != null) {
+                  detailStr = (strVal.toLowerCase().contains('min') || strVal.toLowerCase().contains('hr')) ? strVal : '$strVal mins';
+                } else {
+                  detailStr = strVal;
+                }
+              }
+            }
+
+            final combined = [name, detailStr].where((s) => s.isNotEmpty && s != '0' && s != 'null').join(' - ');
+            if (combined.isNotEmpty) result['book reading'] = combined;
+          } else if (b is String && b.isNotEmpty && b != '0' && b != 'null') {
             result['book reading'] = b;
           }
         }
         if (acts['service'] != null) {
           final s = acts['service'];
           if (s is Map) {
-            final dur = (s['durationMinutes'] ?? s['duration'] ?? '').toString();
-            final name = (s['serviceName'] ?? s['name'] ?? '').toString();
-            if (dur.isNotEmpty) {
-              result['service'] = formatDurationText(dur);
-            } else if (name.isNotEmpty) {
+            final dur = (s['durationMinutes'] ?? s['duration'] ?? s['timeSpan'] ?? s['time'] ?? '').toString();
+            final name = (s['serviceName'] ?? s['name'] ?? '').toString().trim();
+            final formattedDur = formatDurationText(dur);
+            if (name.isNotEmpty && name != 'null' && name != '0' && name.toLowerCase() != 'service') {
               result['service'] = name;
-            } else {
-              result['service'] = 'Completed';
+            } else if (formattedDur != null) {
+              result['service'] = formattedDur;
             }
-          } else if (s is String && s.isNotEmpty) {
-            result['service'] = formatDurationText(s);
+          } else if (s is String && s.isNotEmpty && s != '0') {
+            final formattedDur = formatDurationText(s);
+            if (formattedDur != null) {
+              result['service'] = formattedDur;
+            } else {
+              result['service'] = s;
+            }
           }
         }
         if (acts['templeVisit'] != null) {
@@ -864,27 +965,29 @@ class _ManagementTabState extends State<ManagementTab> {
         }
         if (acts['srimadBhagavatamClass'] != null) {
           final sb = acts['srimadBhagavatamClass'];
-          if (sb is Map && (sb['attended'] == true || sb['timeSpan'] != null || sb['duration'] != null)) {
-            final t = (sb['durationMinutes'] ?? sb['duration'] ?? sb['timeSpan'] ?? 'Attended').toString();
-            result['srimad bhagavatam class'] = formatDurationText(t, defaultText: 'Attended');
+          if (sb is Map && (sb['attended'] == true || sb['timeSpan'] != null || sb['duration'] != null || sb['time'] != null)) {
+            final t = (sb['durationMinutes'] ?? sb['duration'] ?? sb['timeSpan'] ?? sb['time'] ?? '').toString();
+            final formatted = formatDurationText(t, defaultText: 'Attended');
+            if (formatted != null) result['srimad bhagavatam class'] = formatted;
           } else if (sb == true) {
             result['srimad bhagavatam class'] = 'Attended';
           }
         }
         if (acts['bhagavadGitaClass'] != null) {
           final bg = acts['bhagavadGitaClass'];
-          if (bg is Map && (bg['attended'] == true || bg['timeSpan'] != null || bg['duration'] != null)) {
-            final t = (bg['durationMinutes'] ?? bg['duration'] ?? bg['timeSpan'] ?? 'Attended').toString();
-            result['bhagavad gita class'] = formatDurationText(t, defaultText: 'Attended');
+          if (bg is Map && (bg['attended'] == true || bg['timeSpan'] != null || bg['duration'] != null || bg['time'] != null)) {
+            final t = (bg['durationMinutes'] ?? bg['duration'] ?? bg['timeSpan'] ?? bg['time'] ?? '').toString();
+            final formatted = formatDurationText(t, defaultText: 'Attended');
+            if (formatted != null) result['bhagavad gita class'] = formatted;
           } else if (bg == true) {
             result['bhagavad gita class'] = 'Attended';
           }
         }
         if (acts['ekadashiFasting'] != null) {
           final e = acts['ekadashiFasting'];
-          if (e is Map && e['fastingType'] != null) {
+          if (e is Map && e['fastingType'] != null && e['fastingType'].toString() != 'No Fasting') {
             result['ekadashi fasting'] = e['fastingType'].toString();
-          } else if (e is String && e.isNotEmpty) {
+          } else if (e is String && e.isNotEmpty && e != 'No Fasting') {
             result['ekadashi fasting'] = e;
           }
         }
@@ -892,11 +995,15 @@ class _ManagementTabState extends State<ManagementTab> {
 
       final key = getMatchedKey(u);
       if (key != null) {
-        result[key] = getDetailText(u);
+        if (!result.containsKey(key)) {
+          final detail = getDetailText(u);
+          if (detail != null) result[key] = detail;
+        }
       } else {
         final act = (u['work_started'] ?? u['activity'] ?? u['title'] ?? '').toString().trim().toLowerCase();
-        if (act.isNotEmpty) {
-          result[act] = getDetailText(u);
+        if (act.isNotEmpty && !result.containsKey(act)) {
+          final detail = getDetailText(u);
+          if (detail != null) result[act] = detail;
         }
       }
 
@@ -967,7 +1074,7 @@ class _ManagementTabState extends State<ManagementTab> {
           tableRows.add({
             'id': log['id'],
             'activity': stdAct,
-            'detail': detail.isNotEmpty ? detail : 'Filled',
+            'detail': (detail != null && detail.isNotEmpty) ? detail : 'Filled',
             'isCompleted': isComp,
             'raw': log,
           });
@@ -1207,6 +1314,50 @@ class _ManagementTabState extends State<ManagementTab> {
       }
     }
 
+    final Map<String, double> activityColumnWidths = {};
+    for (var act in standardActivities) {
+      final key = act['key']!;
+      int maxLen = act['title']!.length;
+
+      for (var student in studentsToDisplay) {
+        final studentId = (student['id'] ?? student['_id'] ?? student['userId'] ?? student['user_id'] ?? (student['user'] is Map ? student['user']['_id'] ?? student['user']['id'] : null) ?? '').toString();
+        final studentNameStr = (student['name'] ?? student['student_name'] ?? student['studentName'] ?? student['userName'] ?? (student['user'] is Map ? student['user']['name'] : null) ?? '').toString().trim().toLowerCase();
+
+        final List<dynamic> candidateLogs = [
+          ...?(widget.allUpdates[studentId]),
+          ...?(widget.allUpdates[studentNameStr]),
+          ...sadhanaLogs.where((u) => isSameStudent(student, u)),
+          ...widget.allUpdates.values.expand((x) => x).where((u) => isSameStudent(student, u)),
+        ];
+
+        final Map<String, dynamic> uniqueBoyLogsMap = {};
+        for (var u in candidateLogs) {
+          final uIdKey = (u['id'] ?? u['_id'] ?? '${u['date']}_${u['work_started']}').toString();
+          uniqueBoyLogsMap[uIdKey] = u;
+        }
+
+        final boyLogs = uniqueBoyLogsMap.values.where((u) => matchesLogDate(u)).toList();
+
+        for (var u in boyLogs) {
+          final extracted = extractActivitiesFromLog(u);
+          final d = extracted[key];
+          if (d != null && d.length > maxLen) {
+            maxLen = d.length;
+          }
+        }
+      }
+
+      if (maxLen > 28) {
+        activityColumnWidths[key] = 210.0;
+      } else if (maxLen > 20) {
+        activityColumnWidths[key] = 165.0;
+      } else if (maxLen > 12) {
+        activityColumnWidths[key] = 135.0;
+      } else {
+        activityColumnWidths[key] = 108.0;
+      }
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1381,8 +1532,11 @@ class _ManagementTabState extends State<ManagementTab> {
                         color: const Color(0xFFF8FAFC),
                         child: Row(
                           children: standardActivities.map((act) {
+                            final key = act['key']!;
+                            final colWidth = activityColumnWidths[key] ?? 108.0;
+
                             return Container(
-                              width: 105,
+                              width: colWidth,
                               height: 36,
                               alignment: Alignment.center,
                               padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -1431,20 +1585,6 @@ class _ManagementTabState extends State<ManagementTab> {
                           filledMap.addAll(extracted);
                         }
 
-                        final Map<String, String> renderedBadges = {};
-                        for (var act in standardActivities) {
-                          final key = act['key']!;
-                          if (filledMap.containsKey(key)) {
-                            renderedBadges[act['title']!] = filledMap[key]!;
-                          }
-                        }
-
-                        debugPrint('=== DEBUG PREACHER DASHBOARD MATRIX MATCH ===');
-                        debugPrint('Student: ${student['name'] ?? studentNameStr} (ID: $studentId)');
-                        debugPrint('  → Matched Sadhana Records (${boyLogs.length}): $boyLogs');
-                        debugPrint('  → Extracted Activities: $filledMap');
-                        debugPrint('  → Rendered Green Badges: $renderedBadges');
-
                         final isEven = index % 2 == 0;
                         final rowColor = isEven ? Colors.white : const Color(0xFFFAFAFA);
 
@@ -1453,10 +1593,11 @@ class _ManagementTabState extends State<ManagementTab> {
                           child: Row(
                             children: standardActivities.map((act) {
                               final key = act['key']!;
+                              final colWidth = activityColumnWidths[key] ?? 108.0;
                               final detail = filledMap[key];
 
                               return Container(
-                                width: 105,
+                                width: colWidth,
                                 height: 42,
                                 alignment: Alignment.center,
                                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
@@ -1476,6 +1617,7 @@ class _ManagementTabState extends State<ManagementTab> {
                                         ),
                                         child: Text(
                                           detail,
+                                          textAlign: TextAlign.center,
                                           style: const TextStyle(
                                             fontWeight: FontWeight.bold,
                                             fontSize: 10.5,
