@@ -121,11 +121,17 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
     if (_profile == null) return;
     try {
       if (mounted) setState(() => _isLoadingBoys = true);
-      final data = await ApiService.get('/users/students');
+      final data = await ApiService.get('/preacher/students');
 
       if (mounted) {
         setState(() {
-          _folkBoys = data is List ? data : [];
+          if (data is List) {
+            _folkBoys = data;
+          } else if (data is Map && data['students'] is List) {
+            _folkBoys = List.from(data['students']);
+          } else {
+            _folkBoys = [];
+          }
           _isLoadingBoys = false;
         });
       }
