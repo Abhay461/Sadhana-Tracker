@@ -161,11 +161,20 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
 
   Future<void> _fetchAllUpdates() async {
     await _fetchTripAndEventBookings();
-    if (_folkBoys.isEmpty) return;
     try {
-      final updatesData = await ApiService.get('/sadhana/updates');
-      final List<dynamic> processedUpdates = updatesData is List ? List.from(updatesData) : [];
-      
+      dynamic updatesData = await ApiService.get('/sadhana/updates');
+      List<dynamic> processedUpdates = [];
+
+      if (updatesData is List) {
+        processedUpdates = List.from(updatesData);
+      } else if (updatesData is Map && updatesData['items'] is List) {
+        processedUpdates = List.from(updatesData['items']);
+      } else if (updatesData is Map && updatesData['updates'] is List) {
+        processedUpdates = List.from(updatesData['updates']);
+      } else if (updatesData is Map && updatesData['data'] is List) {
+        processedUpdates = List.from(updatesData['data']);
+      }
+
       // Process signals in-memory
       final approvalSignals = processedUpdates.where((u) => u['category'] == 'accommodation_approval_signal').toList();
       final deleteSignals = processedUpdates.where((u) => u['category'] == 'accommodation_delete_signal').toList();
@@ -240,11 +249,21 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
 
       final Map<String, List<dynamic>> grouped = {};
       for (var u in processedUpdates) {
-        final workerId = u['worker_id'].toString();
-        if (!grouped.containsKey(workerId)) {
-          grouped[workerId] = [];
+        final workerId = (u['worker_id'] ?? u['workerId'] ?? u['user_id'] ?? u['userId'] ?? '').toString();
+        final workerName = (u['worker_name'] ?? u['workerName'] ?? u['name'] ?? '').toString().toLowerCase();
+
+        if (workerId.isNotEmpty) {
+          if (!grouped.containsKey(workerId)) {
+            grouped[workerId] = [];
+          }
+          grouped[workerId]!.add(u);
         }
-        grouped[workerId]!.add(u);
+        if (workerName.isNotEmpty) {
+          if (!grouped.containsKey(workerName)) {
+            grouped[workerName] = [];
+          }
+          grouped[workerName]!.add(u);
+        }
       }
 
       if (mounted) {
@@ -354,21 +373,12 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
   Widget build(BuildContext context) {
     if (_isLoadingProfile) {
       return const Scaffold(
-        backgroundColor: Color(0xFFFAF8F5),
+        backgroundColor: Colors.white,
         body: Center(child: CircularProgressIndicator()),
       );
     }
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
-        statusBarColor: Colors.white,
-        statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.light,
-      ),
-      child: Container(
-        color: Colors.white,
-        child: SafeArea(
-          child: PopScope(
+    return PopScope(
             canPop: _selectedIndex == 0 && _activeTab == null,
             onPopInvokedWithResult: (didPop, result) {
               if (didPop) return;
@@ -383,72 +393,34 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
               }
             },
             child: Scaffold(
-              backgroundColor: const Color(0xFFFAF8F5),
-              appBar: _selectedIndex == 0
-                  ? AppBar(
-                      automaticallyImplyLeading: false,
-                      backgroundColor: const Color(0xFF3F1200),
-                      elevation: 0.5,
-                      toolbarHeight: 80,
-                      systemOverlayStyle: const SystemUiOverlayStyle(
-                        statusBarColor: Colors.white,
-                        statusBarIconBrightness: Brightness.dark,
-                        statusBarBrightness: Brightness.light,
-                      ),
-                      centerTitle: false,
-                      title: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                        child: Row(
-                          children: [
-                            GestureDetector(
-                              onTap: _updateMainProfilePhoto,
-                              child: CircleAvatar(
-                                radius: 24,
-                                backgroundImage: (_profile?['photo_url'] != null && _profile!['photo_url'].toString().trim().isNotEmpty)
-                                    ? NetworkImage(_profile!['photo_url'].toString().trim())
-                                    : null,
-                                backgroundColor: const Color(0xFFEEF2F6),
-                                child: (_profile?['photo_url'] == null || _profile!['photo_url'].toString().trim().isEmpty)
-                                    ? Text(
-                                        (() {
-                                          final n = (_profile?['name'] ?? 'Preacher').toString().trim();
-                                          return n.isNotEmpty ? n[0].toUpperCase() : 'P';
-                                        })(),
-                                        style: const TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.bold,
-                                          color: Color(0xFF3F1200),
-                                        ),
-                                      )
-                                    : null,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    'Hare Krishna, ${_profile?['name'] ?? 'Preacher'}',
-                                    style: const TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  const SizedBox(height: 2),
-                                  const _LiveDateTimeWidget(color: Colors.white70),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  : null,
+              backgroundColor: const Color(0xFFF8FAFC),
+              appBar: AppBar(
+                automaticallyImplyLeading: false,
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                scrolledUnderElevation: 0,
+                toolbarHeight: 95,
+                flexibleSpace: Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Color(0xFFBAE6FD),
+                        Color(0xFFE0F2FE),
+                        Color(0xFFF8FAFC),
+                      ],
+                    ),
+                  ),
+                ),
+                systemOverlayStyle: const SystemUiOverlayStyle(
+                  statusBarColor: Colors.transparent,
+                  statusBarIconBrightness: Brightness.dark,
+                  statusBarBrightness: Brightness.light,
+                ),
+                centerTitle: true,
+                title: _buildHeaderLogo(),
+              ),
               body: IndexedStack(
                 index: _selectedIndex,
                 children: [
@@ -567,11 +539,8 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
                 ),
               ),
             ),
-          ),
-        ),
-      ),
-    );
-  }
+          );
+        }
 
   Widget _buildHomeTabContent() {
     final activeFolkBoys = _folkBoys.where((b) => !(b['role'] as String? ?? '').startsWith('pending_')).toList();
@@ -922,6 +891,19 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
         return const FestivalTab();
     }
     return const SizedBox.shrink();
+  }
+
+  Widget _buildHeaderLogo() {
+    return Image.asset(
+      'assets/folk_logo.png',
+      height: 82,
+      fit: BoxFit.contain,
+      errorBuilder: (context, error, stackTrace) => Image.asset(
+        'assets/logo.jpg',
+        height: 82,
+        fit: BoxFit.contain,
+      ),
+    );
   }
 }
 

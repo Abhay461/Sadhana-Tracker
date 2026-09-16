@@ -716,9 +716,26 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       ).toList();
       debugPrint('📋 [DEBUG] Clean updates count: ${cleanUpdates.length}');
 
+      final List<dynamic> mergedUpdates = List.from(cleanUpdates);
+      for (var localItem in _updates) {
+        final idStr = (localItem['id'] ?? localItem['_id'] ?? '').toString();
+        if (idStr.startsWith('temp_')) {
+          final lDate = (localItem['date'] ?? '').toString();
+          final lWork = (localItem['work_started'] ?? '').toString();
+          final existsInServer = cleanUpdates.any((u) {
+            final uDate = (u['date'] ?? '').toString();
+            final uWork = (u['work_started'] ?? u['title'] ?? '').toString();
+            return uDate == lDate && (uWork == lWork || uWork.startsWith(lWork) || lWork.startsWith(uWork));
+          });
+          if (!existsInServer) {
+            mergedUpdates.insert(0, localItem);
+          }
+        }
+      }
+
       if (!mounted) return;
       setState(() {
-        _updates = cleanUpdates;
+        _updates = mergedUpdates;
       });
 
       final approvedResidency = cleanUpdates.any((u) =>
@@ -1536,6 +1553,11 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       return Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
+          systemOverlayStyle: const SystemUiOverlayStyle(
+            statusBarColor: Colors.transparent,
+            statusBarIconBrightness: Brightness.dark,
+            statusBarBrightness: Brightness.light,
+          ),
           title: const Text('Folk Boy Dashboard', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
           backgroundColor: Colors.white,
           elevation: 0,

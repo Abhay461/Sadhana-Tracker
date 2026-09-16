@@ -314,7 +314,7 @@ class _AccommodationTabState extends State<AccommodationTab> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text('Residency Accommodation Bookings', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
         backgroundColor: Colors.white,
