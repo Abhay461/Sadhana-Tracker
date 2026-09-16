@@ -28,6 +28,11 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        try {
+            io.flutter.plugins.GeneratedPluginRegistrant.registerWith(flutterEngine)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error registering plugins: ${e.message}", e)
+        }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DOWNLOAD_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {

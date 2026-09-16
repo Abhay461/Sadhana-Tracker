@@ -29,11 +29,11 @@ class _HomeWrapperState extends State<HomeWrapper> {
     });
   }
 
-  void _navigateToRole(String role) {
+  void _navigateToRole(String role, {Map<String, dynamic>? profile}) {
     if (role == 'preacher') {
-      Navigator.pushReplacementNamed(context, '/preacher');
+      Navigator.pushReplacementNamed(context, '/preacher', arguments: profile);
     } else {
-      Navigator.pushReplacementNamed(context, '/folk-boy');
+      Navigator.pushReplacementNamed(context, '/folk-boy', arguments: profile);
     }
   }
 
@@ -55,7 +55,7 @@ class _HomeWrapperState extends State<HomeWrapper> {
       final role = rawRole.toString().replaceAll('pending_', '');
 
       if (mounted) {
-        _navigateToRole(role);
+        _navigateToRole(role, profile: response is Map<String, dynamic> ? response : null);
       }
     } catch (e) {
       debugPrint('HOME_WRAPPER API Error: $e');

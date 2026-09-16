@@ -7,14 +7,34 @@ import '../utils/constants.dart';
 class ApiService {
   static String get baseUrl => Constants.apiBaseUrl;
 
+  static String? _cachedIdToken;
+  static DateTime? _tokenFetchTime;
+
+  static void clearTokenCache() {
+    _cachedIdToken = null;
+    _tokenFetchTime = null;
+  }
+
   static Future<Map<String, String>> _getHeaders() async {
     final user = FirebaseAuth.instance.currentUser;
     String? idToken;
     if (user != null) {
-      try {
-        idToken = await user.getIdToken(false).timeout(const Duration(seconds: 2));
-      } catch (e) {
-        debugPrint('Firebase token refresh warning: $e');
+      final now = DateTime.now();
+      if (_cachedIdToken != null &&
+          _tokenFetchTime != null &&
+          now.difference(_tokenFetchTime!).inMinutes < 10) {
+        idToken = _cachedIdToken;
+      } else {
+        try {
+          idToken = await user.getIdToken(false).timeout(const Duration(seconds: 3));
+          if (idToken != null && idToken.isNotEmpty) {
+            _cachedIdToken = idToken;
+            _tokenFetchTime = now;
+          }
+        } catch (e) {
+          debugPrint('Firebase token refresh warning: $e');
+          idToken = _cachedIdToken;
+        }
       }
     }
 
@@ -253,6 +273,7 @@ class ApiService {
     }
 
     if (response.statusCode == 401) {
+      clearTokenCache();
       FirebaseAuth.instance.signOut().catchError((_) {});
     }
 

@@ -29,7 +29,7 @@ export class AnnouncementsController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete announcement or YouTube banner' })
+  @ApiOperation({ summary: 'Delete announcement' })
   async deleteAnnouncement(@Param('id') id: string) {
     return this.announcementsService.deleteAnnouncement(id);
   }

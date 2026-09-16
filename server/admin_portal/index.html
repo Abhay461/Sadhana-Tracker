@@ -665,7 +665,7 @@
       <!-- Tab 3: Announcements & Video Banners -->
       <div id="announcementsTab" class="tab-content">
         <div class="admin-card">
-          <h2><i class="ri-notification-3-line" style="color: var(--accent);"></i> Publish Announcement / YouTube Video Banner</h2>
+          <h2><i class="ri-notification-3-line" style="color: var(--accent);"></i> Publish Announcement</h2>
           <form id="announcementForm" onsubmit="submitAnnouncement(event)">
             <div class="form-group">
               <label>Title</label>
@@ -673,32 +673,21 @@
             </div>
             <div class="form-group">
               <label>Category</label>
-              <select id="annCategory" class="form-control" onchange="toggleAnnCategory()">
-                <option value="[YOUTUBE]">YouTube Video Banner (Home Page)</option>
+              <select id="annCategory" class="form-control">
                 <option value="[EVENT]">Event</option>
                 <option value="[TRIP]">Trip / Yatra</option>
                 <option value="[SESSION]">Online Session</option>
               </select>
             </div>
-            <div id="annYoutubeFields" style="display: block;">
-              <div class="form-group">
-                <label>YouTube Video Link</label>
-                <input type="url" id="annYoutubeUrl" class="form-control" placeholder="e.g. https://youtu.be/..." required>
-              </div>
-              <div class="form-group">
-                <label>Banner Image URL (Optional - Auto thumbnail generated if empty)</label>
-                <input type="url" id="annBannerUrl" class="form-control" placeholder="e.g. https://images.unsplash.com/...">
-              </div>
-            </div>
-            <div class="form-group" id="annDescField" style="display: none;">
+            <div class="form-group" id="annDescField">
               <label>Description / Details</label>
-              <textarea id="annContent" class="form-control" rows="4"></textarea>
+              <textarea id="annContent" class="form-control" rows="4" required></textarea>
             </div>
-            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px; padding: 12px;"><i class="ri-send-plane-fill"></i> Publish Announcement / Banner</button>
+            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px; padding: 12px;"><i class="ri-send-plane-fill"></i> Publish Announcement</button>
           </form>
         </div>
         <div style="max-width: 760px; width: 100%;">
-          <h3 style="margin-bottom: 14px; font-family: var(--font-heading); font-size: 17px;">Published Announcements & YouTube Videos</h3>
+          <h3 style="margin-bottom: 14px; font-family: var(--font-heading); font-size: 17px;">Published Announcements</h3>
           <div id="announcementListContainer"></div>
         </div>
       </div>
@@ -1562,43 +1551,11 @@
       }
     }
 
-    function toggleAnnCategory() {
-      const cat = document.getElementById('annCategory').value;
-      const ytFields = document.getElementById('annYoutubeFields');
-      const descField = document.getElementById('annDescField');
-      if (cat === '[YOUTUBE]') {
-        ytFields.style.display = 'block';
-        descField.style.display = 'none';
-        document.getElementById('annContent').removeAttribute('required');
-        document.getElementById('annYoutubeUrl').setAttribute('required', 'true');
-      } else {
-        ytFields.style.display = 'none';
-        descField.style.display = 'block';
-        document.getElementById('annContent').setAttribute('required', 'true');
-        document.getElementById('annYoutubeUrl').removeAttribute('required');
-      }
-    }
-
     async function submitAnnouncement(e) {
       e.preventDefault();
       const cat = document.getElementById('annCategory').value;
       const title = document.getElementById('annTitle').value.trim();
-      let contentPayload = '';
-
-      if (cat === '[YOUTUBE]') {
-        const youtubeUrl = document.getElementById('annYoutubeUrl').value.trim();
-        let bannerUrl = document.getElementById('annBannerUrl').value.trim();
-        if (!bannerUrl) {
-          const regExp = /^.*(?:youtu.be\/|v\/|e\/|u\/\w+\/|embed\/|v=)([^#\&\?]*).*/i;
-          const match = youtubeUrl.match(regExp);
-          if (match && match[1].length === 11) {
-            bannerUrl = `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg`;
-          }
-        }
-        contentPayload = `[YOUTUBE] ${title} | ${bannerUrl} | ${youtubeUrl}`;
-      } else {
-        contentPayload = `${cat} ${title}\n${document.getElementById('annContent').value}`;
-      }
+      const contentPayload = `${cat} ${title}\n${document.getElementById('annContent').value}`;
 
       const payload = {
         title: title,
@@ -1735,7 +1692,7 @@
           const json = await res.json();
           const list = Array.isArray(json) ? json : (json.data || json.items || []);
           if (!list || list.length === 0) {
-            container.innerHTML = '<p style="color: var(--text-muted);">No Announcements / YouTube Videos published yet.</p>';
+            container.innerHTML = '<p style="color: var(--text-muted);">No Announcements published yet.</p>';
             return;
           }
           container.innerHTML = list.map(item => `
@@ -1759,7 +1716,7 @@
     }
 
     async function deleteAnnouncementWeb(id) {
-      if (!confirm('Are you sure you want to permanently delete this Announcement / YouTube Video? This will delete images from Cloudinary and text from MongoDB.')) return;
+      if (!confirm('Are you sure you want to permanently delete this Announcement? This will delete images from Cloudinary and text from MongoDB.')) return;
       try {
         const res = await fetch(`${API_BASE}/announcements/${id}`, { method: 'DELETE' });
         if (res.ok) {

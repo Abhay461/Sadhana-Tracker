@@ -60,7 +60,7 @@ class _AnnouncementsTabState extends State<AnnouncementsTab> {
   Widget build(BuildContext context) {
     final pureAnnouncements = widget.announcements.where((a) {
       final text = (a['content'] ?? '').toString();
-      return !text.startsWith('[TRIP]') && !text.startsWith('[EVENT]') && !text.startsWith('[NOTIF]') && !text.startsWith('[YOUTUBE]');
+      return !text.startsWith('[TRIP]') && !text.startsWith('[EVENT]') && !text.startsWith('[NOTIF]');
     }).toList();
 
     return Column(

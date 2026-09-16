@@ -71,10 +71,6 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   int _currentAnnouncementIndex = 0;
   Timer? _carouselTimer;
 
-  final PageController _youtubePageController = PageController();
-  int _currentYouTubeIndex = 0;
-  Timer? _youtubeTimer;
-
   static const String _razorpayApiKey = 'rzp_test_Tb22VLcoOG6jA0';
   static const String _razorpaySecret = 'PX2qUQCiLui8JEdzuzwzTdbK';
   Razorpay? _razorpay;
@@ -355,9 +351,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       _razorpay?.clear();
     } catch (_) {}
     _carouselTimer?.cancel();
-    _youtubeTimer?.cancel();
     _pageController.dispose();
-    _youtubePageController.dispose();
     _roundsController.dispose();
     _bookController.dispose();
     _readingValueController.dispose();
@@ -414,6 +408,16 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         return;
       }
 
+      if (mounted) {
+        setState(() {
+          _profile = profileData;
+          _photoUrl = profileData['photo_url'];
+          _isLoadingProfile = false;
+        });
+      }
+
+      _fetchUpdates();
+
       Map<String, dynamic>? resolvedPreacher;
       if (profileData['preacher'] is Map) {
         resolvedPreacher = Map<String, dynamic>.from(profileData['preacher'] as Map);
@@ -452,18 +456,12 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
 
       if (resolvedPreacher != null) {
         profileData['preacher_id'] ??= resolvedPreacher['id'] ?? resolvedPreacher['_id'];
+        if (mounted) {
+          setState(() {
+            _preacher = resolvedPreacher;
+          });
+        }
       }
-
-      if (mounted) {
-        setState(() {
-          _profile = profileData;
-          _preacher = resolvedPreacher;
-          _photoUrl = profileData['photo_url'];
-          _isLoadingProfile = false;
-        });
-      }
-
-      await _fetchUpdates();
     } catch (e) {
       debugPrint('Error loading profile: $e');
       if (mounted) {
@@ -771,24 +769,6 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
               'banner': parts.length > 3 ? parts[3] : '',
               'link': parts.length > 4 ? parts[4] : '',
             });
-          } else if (content.startsWith('[YOUTUBE]')) {
-            final parts = content.replaceFirst('[YOUTUBE] ', '').split(' | ');
-            final youtubeUrl = parts.length > 2 ? parts[2] : (parts.length > 1 ? parts[1] : '');
-            String bannerUrl = parts.length > 1 ? parts[1] : '';
-            if (bannerUrl.isEmpty || !bannerUrl.startsWith('http')) {
-              final videoId = _extractYouTubeId(youtubeUrl);
-              if (videoId != null) {
-                bannerUrl = 'https://img.youtube.com/vi/$videoId/hqdefault.jpg';
-              }
-            }
-            loadedAnnouncements.add({
-              'type': 'youtube',
-              'id': ann['id'] ?? ann['_id'],
-              'title': parts.isNotEmpty ? parts[0] : 'YouTube Video',
-              'time': '',
-              'banner': bannerUrl,
-              'link': youtubeUrl,
-            });
           } else {
             loadedAnnouncements.add({
               'type': ann['category'] == 'online_session' ? 'session' : 'announcement',
@@ -807,7 +787,6 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         }
       }
       _startCarouselTimer();
-      _startYouTubeTimer();
     } catch (e) {
       debugPrint('Error fetching announcements: $e');
     }
@@ -829,22 +808,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     }
   }
 
-  void _startYouTubeTimer() {
-    _youtubeTimer?.cancel();
-    final youtubeItems = _announcements.where((a) => a['type'] == 'youtube').toList();
-    if (youtubeItems.length > 1) {
-      _youtubeTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
-        if (_youtubePageController.hasClients) {
-          final nextPage = (_currentYouTubeIndex + 1) % youtubeItems.length;
-          _youtubePageController.animateToPage(
-            nextPage,
-            duration: const Duration(milliseconds: 800),
-            curve: Curves.easeInOut,
-          );
-        }
-      });
-    }
-  }
+
 
   bool get _isDayLockedByPreacher {
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
@@ -1885,11 +1849,9 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
             _buildTodayFestivalCard(),
             _buildInlineSadhanaCard(),
             const SizedBox(height: 20),
-            _buildDailyDarshanCard(),
-            _buildYouTubeVideoBanners(),
             _buildDailyQuoteCard(),
             () {
-              final generalAnnouncements = _announcements.where((a) => a['type'] != 'youtube').toList();
+              final generalAnnouncements = _announcements;
               if (generalAnnouncements.isEmpty) return const SizedBox.shrink();
               return Column(
                 children: [
@@ -3117,311 +3079,14 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   }
 
   Widget _buildCoursesTab() {
-    final List<Map<String, dynamic>> displayCourses = _dynamicCourses;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            margin: const EdgeInsets.only(bottom: 18),
-            width: double.infinity,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              gradient: const LinearGradient(
-                colors: [Color(0xFF3F1200), Color(0xFF7C2D12)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF3F1200).withValues(alpha: 0.25),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Stack(
-                children: [
-                  Positioned(
-                    right: -15,
-                    bottom: -15,
-                    child: Icon(
-                      Icons.auto_stories_rounded,
-                      size: 130,
-                      color: Colors.white.withValues(alpha: 0.08),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(18.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFDE68A),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: const [
-                              Icon(Icons.stars_rounded, size: 14, color: Color(0xFF92400E)),
-                              SizedBox(width: 4),
-                              Text(
-                                'FOLK ACADEMY BANNER',
-                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Color(0xFF92400E), letterSpacing: 0.5),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'Transform Your Life with Vedic Wisdom',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white, height: 1.2),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Explore interactive youth workshops, mind management & mantra meditation courses guided by experienced preachers.',
-                          style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.9), height: 1.35),
-                        ),
-                        const SizedBox(height: 14),
-                        Row(
-                          children: [
-                            _buildBannerTag(Icons.workspace_premium_rounded, 'Certificate'),
-                            const SizedBox(width: 8),
-                            _buildBannerTag(Icons.groups_rounded, 'Live Sessions'),
-                            const SizedBox(width: 8),
-                            _buildBannerTag(Icons.sell_rounded, 'Paid Courses'),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Vedic & Youth Growth Courses',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: displayCourses.isNotEmpty ? const Color(0xFFDCFCE7) : const Color(0xFFFEF3C7),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  displayCourses.isNotEmpty ? '${displayCourses.length} Available' : 'Coming Soon',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: displayCourses.isNotEmpty ? const Color(0xFF16A34A) : const Color(0xFFD97706),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          if (displayCourses.isEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.03),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFFFF7ED),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.hourglass_top_rounded,
-                      size: 44,
-                      color: Color(0xFFEA580C),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Coming Soon',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF0F172A),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'New courses will be available soon. Stay tuned!',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Color(0xFF64748B),
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else
-            ...displayCourses.map((crs) {
-              final Color themeColor = crs['color'] is Color
-                  ? crs['color'] as Color
-                  : const Color(0xFF4F46E5);
-              final Color bgColor = crs['bg'] is Color
-                  ? crs['bg'] as Color
-                  : const Color(0xFFEEF2FF);
-              final IconData icon = crs['icon'] is IconData
-                  ? crs['icon'] as IconData
-                  : Icons.auto_stories_rounded;
-              final String imageUrl = (crs['image'] ?? crs['bannerImage'] ?? 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=600&q=80').toString();
-
-              return Card(
-                margin: const EdgeInsets.only(bottom: 14),
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: const BorderSide(color: Color(0xFFE2E8F0)),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    AspectRatio(
-                      aspectRatio: 16 / 9,
-                      child: Image.network(
-                        imageUrl,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        cacheWidth: 600,
-                        errorBuilder: (_, __, ___) => Container(color: themeColor),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: bgColor,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(icon, color: themeColor, size: 22),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: bgColor,
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Text(
-                                        crs['category'].toString().toUpperCase(),
-                                        style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: themeColor),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      crs['title'],
-                                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
-                                    ),
-                                    Text(
-                                      crs['subtitle'],
-                                      style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            crs['description'],
-                            style: const TextStyle(fontSize: 12.5, color: Color(0xFF475569), height: 1.4),
-                          ),
-                          const SizedBox(height: 14),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.schedule, size: 13, color: Color(0xFF64748B)),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        crs['duration'],
-                                        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      Text(
-                                        crs['originalPrice'] ?? '',
-                                        style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8), decoration: TextDecoration.lineThrough),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        crs['price'] ?? '',
-                                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                              ElevatedButton.icon(
-                                onPressed: () {
-                                  _showCoursePaymentDialog(crs);
-                                },
-                                icon: const Icon(Icons.shopping_cart_outlined, size: 16),
-                                label: Text('Buy Course (${crs['price']})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF3F1200),
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
-        ],
+    return const Center(
+      child: Text(
+        'Coming Soon',
+        style: TextStyle(
+          fontSize: 22,
+          fontWeight: FontWeight.bold,
+          color: Color(0xFF0F172A),
+        ),
       ),
     );
   }
@@ -4841,182 +4506,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     );
   }
 
-  String? _extractYouTubeId(String url) {
-    final regExp = RegExp(
-      r'^.*(?:youtu.be\/|v\/|e\/|u\/\w+\/|embed\/|v=)([^#\&\?]*).*',
-      caseSensitive: false,
-    );
-    final match = regExp.firstMatch(url.trim());
-    return (match != null && match.group(1)!.length == 11) ? match.group(1) : null;
-  }
 
-  Widget _buildYouTubeVideoBanners() {
-    final youtubeItems = _announcements.where((a) => a['type'] == 'youtube').toList();
-    if (youtubeItems.isEmpty) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 16),
-        const Text(
-          'Video',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF0F172A),
-          ),
-        ),
-        const SizedBox(height: 10),
-        SizedBox(
-          height: (MediaQuery.of(context).size.width - 32) * 9 / 16,
-          child: PageView.builder(
-            controller: _youtubePageController,
-            onPageChanged: (index) {
-              setState(() {
-                _currentYouTubeIndex = index;
-              });
-            },
-            itemCount: youtubeItems.length,
-            itemBuilder: (context, index) {
-              final item = youtubeItems[index];
-              final title = item['title'] as String? ?? 'YouTube Video';
-              final banner = item['banner'] as String? ?? '';
-              final link = item['link'] as String? ?? '';
-
-              return GestureDetector(
-                onTap: () {
-                  if (link.isNotEmpty) {
-                    launchUrl(Uri.parse(link), mode: LaunchMode.externalApplication);
-                  }
-                },
-                child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 2),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.08),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        if (banner.isNotEmpty)
-                          Image.network(
-                            banner,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(color: const Color(0xFF1E293B)),
-                          )
-                        else
-                          Container(color: const Color(0xFF1E293B)),
-                        Container(
-                          decoration: const BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [Colors.black12, Colors.black87],
-                            ),
-                          ),
-                        ),
-                        Center(
-                          child: Container(
-                            width: 54,
-                            height: 38,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFF0000),
-                              borderRadius: BorderRadius.circular(10),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.red.withValues(alpha: 0.4),
-                                  blurRadius: 10,
-                                  spreadRadius: 1,
-                                ),
-                              ],
-                            ),
-                            child: const Center(
-                              child: Icon(
-                                Icons.play_arrow_rounded,
-                                color: Colors.white,
-                                size: 28,
-                              ),
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          top: 12,
-                          left: 12,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.6),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: const [
-                                Icon(Icons.play_arrow_rounded, color: Colors.red, size: 14),
-                                SizedBox(width: 4),
-                                Text(
-                                  'YouTube',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          left: 14,
-                          right: 14,
-                          bottom: 14,
-                          child: Text(
-                            title,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-        if (youtubeItems.length > 1) ...[
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(youtubeItems.length, (index) {
-              return Container(
-                width: index == _currentYouTubeIndex ? 16 : 6,
-                height: 6,
-                margin: const EdgeInsets.symmetric(horizontal: 3),
-                decoration: BoxDecoration(
-                  color: index == _currentYouTubeIndex ? Colors.red : Colors.grey[300],
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              );
-            }),
-          ),
-        ],
-      ],
-    );
-  }
 
   Widget _buildDailyQuoteCard() {
     if (_todayQuote == null) return const SizedBox.shrink();
