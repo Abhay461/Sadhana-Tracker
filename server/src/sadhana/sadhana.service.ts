@@ -569,6 +569,7 @@ export class SadhanaService {
         apptDoc.status = 'REJECTED';
         await apptDoc.save();
         console.log(`📌 [APPOINTMENT MONGO UPDATED VIA DELETE]: ID=${id}, FinalStatus=REJECTED`);
+        this.realtimeService.emit('appointment_update', 'update', { id, appointmentId: id, status: 'REJECTED' });
         return { success: true, id, status: 'REJECTED' };
       }
     }

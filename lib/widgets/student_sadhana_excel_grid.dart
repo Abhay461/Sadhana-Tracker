@@ -17,13 +17,66 @@ class StudentSadhanaExcelGrid extends StatefulWidget {
 
 class _StudentSadhanaExcelGridState extends State<StudentSadhanaExcelGrid> {
   String _dateSearchQuery = '';
-  final ScrollController _horizontalController = ScrollController();
-  final ScrollController _verticalController = ScrollController();
+
+  final ScrollController _headerHorizontalController = ScrollController();
+  final ScrollController _bodyHorizontalController = ScrollController();
+  final ScrollController _dateVerticalController = ScrollController();
+  final ScrollController _bodyVerticalController = ScrollController();
+
+  bool _isSyncingHorizontal = false;
+  bool _isSyncingVertical = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _bodyHorizontalController.addListener(() {
+      if (_isSyncingHorizontal) return;
+      _isSyncingHorizontal = true;
+      if (_headerHorizontalController.hasClients &&
+          _headerHorizontalController.offset != _bodyHorizontalController.offset) {
+        _headerHorizontalController.jumpTo(_bodyHorizontalController.offset);
+      }
+      _isSyncingHorizontal = false;
+    });
+
+    _headerHorizontalController.addListener(() {
+      if (_isSyncingHorizontal) return;
+      _isSyncingHorizontal = true;
+      if (_bodyHorizontalController.hasClients &&
+          _bodyHorizontalController.offset != _headerHorizontalController.offset) {
+        _bodyHorizontalController.jumpTo(_headerHorizontalController.offset);
+      }
+      _isSyncingHorizontal = false;
+    });
+
+    _bodyVerticalController.addListener(() {
+      if (_isSyncingVertical) return;
+      _isSyncingVertical = true;
+      if (_dateVerticalController.hasClients &&
+          _dateVerticalController.offset != _bodyVerticalController.offset) {
+        _dateVerticalController.jumpTo(_bodyVerticalController.offset);
+      }
+      _isSyncingVertical = false;
+    });
+
+    _dateVerticalController.addListener(() {
+      if (_isSyncingVertical) return;
+      _isSyncingVertical = true;
+      if (_bodyVerticalController.hasClients &&
+          _bodyVerticalController.offset != _dateVerticalController.offset) {
+        _bodyVerticalController.jumpTo(_dateVerticalController.offset);
+      }
+      _isSyncingVertical = false;
+    });
+  }
 
   @override
   void dispose() {
-    _horizontalController.dispose();
-    _verticalController.dispose();
+    _headerHorizontalController.dispose();
+    _bodyHorizontalController.dispose();
+    _dateVerticalController.dispose();
+    _bodyVerticalController.dispose();
     super.dispose();
   }
 
@@ -36,6 +89,7 @@ class _StudentSadhanaExcelGridState extends State<StudentSadhanaExcelGrid> {
     {'key': 'reading', 'title': '📖 Book Reading'},
     {'key': 'class', 'title': '💻 Session / Class'},
     {'key': 'service', 'title': '🏛️ Temple / Service'},
+    {'key': 'ekadashi', 'title': '🍎 Ekadashi Fasting'},
     {'key': 'sleep', 'title': '🌙 Sleep Time'},
     {'key': 'screen_time', 'title': '📱 Screen Time'},
   ];
@@ -90,10 +144,17 @@ class _StudentSadhanaExcelGridState extends State<StudentSadhanaExcelGrid> {
   /// Normalize and extract unique dates from updates list
   List<String> _getSortedUniqueDates() {
     final Set<String> dateSet = {};
+    final now = DateTime.now();
+    final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
     for (var u in widget.studentUpdates) {
       if (u is Map<String, dynamic>) {
         final d = _getLogDate(u);
         if (d.isNotEmpty) {
+          final dt = _tryParseDate(d);
+          if (dt != null && dt.isAfter(todayEnd)) {
+            continue;
+          }
           dateSet.add(d);
         }
       }
@@ -180,6 +241,13 @@ class _StudentSadhanaExcelGridState extends State<StudentSadhanaExcelGrid> {
         return null;
       }
 
+      if (columnKey == 'ekadashi') {
+        final fType = (obj['fastingType'] ?? obj['type'] ?? obj['fasting'] ?? obj['value'] ?? '').toString().trim();
+        if (fType.isNotEmpty && fType != 'null' && fType != 'No Fasting') return fType;
+        if (obj['fasting'] == true || obj['attended'] == true) return 'Fasting';
+        return null;
+      }
+
       // Fallback map inspection
       if (obj['time'] != null && obj['time'].toString().isNotEmpty && obj['time'] != 'null') return obj['time'].toString();
       if (obj['name'] != null && obj['name'].toString().isNotEmpty && obj['name'] != 'null') return obj['name'].toString();
@@ -251,6 +319,12 @@ class _StudentSadhanaExcelGridState extends State<StudentSadhanaExcelGrid> {
       if (acts['templeVisit'] != null) return _parseActivityValue(acts['templeVisit'], columnKey);
       if (cat == 'service' || act.contains('service') || act.contains('temple') || act.contains('seva')) {
         return directVal.isNotEmpty ? directVal : 'Logged';
+      }
+    } else if (columnKey == 'ekadashi') {
+      if (acts['ekadashiFasting'] != null) return _parseActivityValue(acts['ekadashiFasting'], columnKey);
+      if (acts['ekadashi'] != null) return _parseActivityValue(acts['ekadashi'], columnKey);
+      if (cat == 'ekadashi' || cat == 'ekadashi_fasting' || act.contains('ekadashi') || act.contains('fasting')) {
+        return directVal.isNotEmpty ? directVal : 'Fasting';
       }
     } else if (columnKey == 'sleep') {
       if (acts['sleepTime'] != null) return _parseActivityValue(acts['sleepTime'], columnKey);
@@ -510,88 +584,178 @@ class _StudentSadhanaExcelGridState extends State<StudentSadhanaExcelGrid> {
                     ),
                   ),
                 )
-              : Scrollbar(
-                  controller: _horizontalController,
-                  thumbVisibility: true,
-                  child: SingleChildScrollView(
-                    controller: _horizontalController,
-                    scrollDirection: Axis.horizontal,
-                    child: SizedBox(
-                      width: 1050, // Total fixed width for clean 9-column excel grid
-                      child: Column(
-                        children: [
-                          // Table Header Row
-                          Container(
-                            color: const Color(0xFF107C41), // Header excel theme
-                            child: Row(
-                              children: _columns.map((col) {
-                                final double colWidth = col['key'] == 'date' ? 140.0 : 113.0;
-                                return Container(
-                                  width: colWidth,
-                                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-                                  alignment: Alignment.center,
-                                  decoration: const BoxDecoration(
-                                    border: Border(
-                                      right: BorderSide(color: Color(0xFF185C37), width: 1),
-                                    ),
-                                  ),
-                                  child: Text(
-                                    col['title']!,
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
-                            ),
-                          ),
+              : Builder(
+                  builder: (context) {
+                    const double dateColWidth = 140.0;
+                    const double dataColWidth = 113.0;
+                    final dataCols = _columns.where((c) => c['key'] != 'date').toList();
+                    final double scrollableWidth = dataCols.length * dataColWidth;
 
-                          // Table Rows (Date Wise)
-                          Expanded(
-                            child: Scrollbar(
-                              controller: _verticalController,
-                              thumbVisibility: true,
-                              child: ListView.builder(
-                                controller: _verticalController,
-                                itemCount: dates.length,
-                                itemBuilder: (context, rowIndex) {
-                                  final dateStr = dates[rowIndex];
-                                  final bool isEven = rowIndex % 2 == 0;
+                    return Column(
+                      children: [
+                        // ── STICKY TOP HEADER ROW (Freeze Top Header) ──
+                        Container(
+                          color: const Color(0xFF107C41), // Header excel theme
+                          child: Row(
+                            children: [
+                              // Top-Left Corner (Fixed Date Header - Frozen Left & Top)
+                              Container(
+                                width: dateColWidth,
+                                height: 40,
+                                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                                alignment: Alignment.centerLeft,
+                                decoration: const BoxDecoration(
+                                  border: Border(
+                                    right: BorderSide(color: Color(0xFF185C37), width: 1.5),
+                                    bottom: BorderSide(color: Color(0xFF185C37), width: 1),
+                                  ),
+                                ),
+                                child: const Text(
+                                  '📅 Date',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 11.5,
+                                  ),
+                                ),
+                              ),
 
-                                  return Container(
-                                    decoration: BoxDecoration(
-                                      color: isEven ? Colors.white : const Color(0xFFF8FAFC),
-                                      border: const Border(
-                                        bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1),
-                                      ),
-                                    ),
+                              // Horizontally Scrollable Activity Titles Header
+                              Expanded(
+                                child: SingleChildScrollView(
+                                  controller: _headerHorizontalController,
+                                  scrollDirection: Axis.horizontal,
+                                  physics: const ClampingScrollPhysics(),
+                                  child: SizedBox(
+                                    width: scrollableWidth,
                                     child: Row(
-                                      children: _columns.map((col) {
-                                        final double colWidth = col['key'] == 'date' ? 140.0 : 113.0;
+                                      children: dataCols.map((col) {
                                         return Container(
-                                          width: colWidth,
-                                          height: 48,
+                                          width: dataColWidth,
+                                          height: 40,
+                                          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                                          alignment: Alignment.center,
                                           decoration: const BoxDecoration(
                                             border: Border(
-                                              right: BorderSide(color: Color(0xFFE2E8F0), width: 1),
+                                              right: BorderSide(color: Color(0xFF185C37), width: 1),
+                                              bottom: BorderSide(color: Color(0xFF185C37), width: 1),
                                             ),
                                           ),
-                                          child: _buildCellContent(dateStr, col['key']!),
+                                          child: Text(
+                                            col['title']!,
+                                            textAlign: TextAlign.center,
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 11,
+                                            ),
+                                          ),
                                         );
                                       }).toList(),
                                     ),
-                                  );
-                                },
+                                  ),
+                                ),
                               ),
-                            ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
+                        ),
+
+                        // ── SCROLLABLE BODY ROWS (Freeze Left Date Column) ──
+                        Expanded(
+                          child: Row(
+                            children: [
+                              // STICKY LEFT DATE COLUMN (Frozen Left, Scrolls Vertically)
+                              SizedBox(
+                                width: dateColWidth,
+                                child: ListView.builder(
+                                  controller: _dateVerticalController,
+                                  itemCount: dates.length,
+                                  physics: const ClampingScrollPhysics(),
+                                  itemBuilder: (context, rowIndex) {
+                                    final dateStr = dates[rowIndex];
+                                    final bool isEven = rowIndex % 2 == 0;
+                                    return Container(
+                                      height: 48,
+                                      alignment: Alignment.centerLeft,
+                                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                                      decoration: BoxDecoration(
+                                        color: isEven ? Colors.white : const Color(0xFFF8FAFC),
+                                        border: const Border(
+                                          right: BorderSide(color: Color(0xFFCBD5E1), width: 1.5),
+                                          bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        _formatDateHeader(dateStr),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 11.5,
+                                          color: Color(0xFF0F172A),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+
+                              // MAIN DATA CELLS GRID (Scrolls Horizontally & Vertically)
+                              Expanded(
+                                child: Scrollbar(
+                                  controller: _bodyHorizontalController,
+                                  thumbVisibility: true,
+                                  child: SingleChildScrollView(
+                                    controller: _bodyHorizontalController,
+                                    scrollDirection: Axis.horizontal,
+                                    physics: const ClampingScrollPhysics(),
+                                    child: SizedBox(
+                                      width: scrollableWidth,
+                                      child: Scrollbar(
+                                        controller: _bodyVerticalController,
+                                        thumbVisibility: true,
+                                        child: ListView.builder(
+                                          controller: _bodyVerticalController,
+                                          itemCount: dates.length,
+                                          physics: const ClampingScrollPhysics(),
+                                          itemBuilder: (context, rowIndex) {
+                                            final dateStr = dates[rowIndex];
+                                            final bool isEven = rowIndex % 2 == 0;
+
+                                            return Container(
+                                              height: 48,
+                                              decoration: BoxDecoration(
+                                                color: isEven ? Colors.white : const Color(0xFFF8FAFC),
+                                                border: const Border(
+                                                  bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1),
+                                                ),
+                                              ),
+                                              child: Row(
+                                                children: dataCols.map((col) {
+                                                  return Container(
+                                                    width: dataColWidth,
+                                                    height: 48,
+                                                    decoration: const BoxDecoration(
+                                                      border: Border(
+                                                        right: BorderSide(color: Color(0xFFE2E8F0), width: 1),
+                                                      ),
+                                                    ),
+                                                    child: _buildCellContent(dateStr, col['key']!),
+                                                  );
+                                                }).toList(),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
         ),
       ],

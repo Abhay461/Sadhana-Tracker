@@ -408,46 +408,24 @@ class _StudentListTabState extends State<StudentListTab> {
                   ],
                 ),
                 const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF3F1200),
-                          side: const BorderSide(color: Color(0xFF3F1200)),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-                        ),
-                        icon: const Icon(Icons.person_outline, size: 16),
-                        label: const Text(
-                          'Personal Details',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5),
-                        ),
-                        onPressed: () => _showBoyPersonalDetails(_selectedBoy!),
-                      ),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF3F1200),
+                      side: const BorderSide(color: Color(0xFF3F1200)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFFDB2777),
-                          side: const BorderSide(color: Color(0xFFF472B6)),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-                        ),
-                        icon: const Icon(Icons.smartphone_outlined, size: 16),
-                        label: const Text(
-                          'View Screen Time',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5),
-                        ),
-                        onPressed: () => _showBoyScreenTimeDetails(_selectedBoy!),
-                      ),
+                    icon: const Icon(Icons.person_outline, size: 16),
+                    label: const Text(
+                      'Personal Details',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5),
                     ),
-                  ],
+                    onPressed: () => _showBoyPersonalDetails(_selectedBoy!),
+                  ),
                 ),
               ],
             ),

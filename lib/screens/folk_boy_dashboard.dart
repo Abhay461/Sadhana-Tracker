@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/api_service.dart';
 import '../services/cloudinary_service.dart';
+import '../services/realtime_service.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/services.dart';
@@ -94,6 +95,34 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     }
   }
 
+  StreamSubscription<RealtimeEvent>? _realtimeSub;
+
+  void _startRealtimeRefresh() {
+    RealtimeService.instance.connect();
+    _realtimeSub?.cancel();
+    _realtimeSub = RealtimeService.instance.eventStream.listen(_handleRealtimeEvent);
+  }
+
+  void _handleRealtimeEvent(RealtimeEvent event) {
+    if (!mounted) return;
+    debugPrint('⚡ [STUDENT DASHBOARD] Live event received: ${event.type} (${event.action})');
+    switch (event.type) {
+      case 'sadhana_update':
+      case 'accommodation_update':
+      case 'appointment_update':
+      case 'student_update':
+      case 'trip_update':
+      case 'event_update':
+      case 'payment_update':
+        _fetchUpdates();
+        _loadProfileAndData();
+        break;
+      case 'announcement_update':
+        _fetchAnnouncements();
+        break;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -106,6 +135,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     _fetchTodayFestival();
     _fetchCourses();
     _initRazorpay();
+    _startRealtimeRefresh();
   }
 
   Future<void> _fetchCourses() async {
@@ -453,6 +483,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
 
   @override
   void dispose() {
+    _realtimeSub?.cancel();
     try {
       _razorpay?.clear();
     } catch (_) {}

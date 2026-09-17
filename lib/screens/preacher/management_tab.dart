@@ -697,6 +697,7 @@ class _ManagementTabState extends State<ManagementTab> {
       {'key': 'temple visit', 'title': 'Temple Visit'},
       {'key': 'srimad bhagavatam class', 'title': 'SB Class'},
       {'key': 'bhagavad gita class', 'title': 'BG Class'},
+      {'key': 'ekadashi fasting', 'title': 'Ekadashi Fasting'},
       {'key': 'sleep time', 'title': 'Sleep Time'},
     ];
 
