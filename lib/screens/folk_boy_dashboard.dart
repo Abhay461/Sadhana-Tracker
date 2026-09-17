@@ -6156,13 +6156,17 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> with S
 
       final requestDetails = 'Name: $name\nAge: $age\nArrival: $arrivalStr\nDeparture: $departureStr';
 
+      final preacherId = (widget.preacher?['id'] ?? widget.preacher?['_id'] ?? widget.profile['preacher_id'] ?? widget.profile['preacherId'])?.toString();
       final updateData = {
         'worker_id': widget.profile['id'] ?? widget.profile['_id'],
         'worker_name': widget.profile['name'],
+        'preacher_id': preacherId,
+        'preacherId': preacherId,
         'preacher_name': widget.preacher?['name'] ?? 'Preacher',
         'category': 'accommodation',
         'work_started': 'Accommodation Booking',
         'description': requestDetails,
+        'requestDetails': requestDetails,
         'work_completed': '',
         'is_completed': false,
         'date': DateFormat('yyyy-MM-dd').format(DateTime.now()),
@@ -6175,17 +6179,15 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> with S
         'created_at': DateTime.now().toIso8601String(),
       };
 
-      // 1. Post to NestJS /accommodations endpoint (Populates MongoDB accommodations collection)
+      // Post strictly to NestJS /accommodations endpoint
       try {
         await ApiService.post('/accommodations', {
           'requestDetails': requestDetails,
+          'preacherId': preacherId,
         });
       } catch (accError) {
         debugPrint('Error saving to /accommodations endpoint: $accError');
       }
-
-      // 2. Post to /sadhana for real-time activity feed fallback
-      await ApiService.post('/sadhana', updateData).catchError((_) {});
       NotificationHelper.sendUpdateNotification(updateData).catchError((_) {});
 
       if (mounted) {

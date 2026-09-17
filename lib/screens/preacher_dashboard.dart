@@ -689,18 +689,20 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
 
   Future<void> _fetchAllUpdates() async {
     try {
-      dynamic updatesData = await ApiService.get('/sadhana/updates');
+      final fetchResults = await Future.wait([
+        ApiService.get('/sadhana/updates').catchError((e) => []),
+        ApiService.get('/accommodations/queue').catchError((e) => []),
+      ]);
+      dynamic updatesData = fetchResults[0];
+      dynamic accQueueData = fetchResults[1];
 
       debugPrint('=== DEBUG PREACHER DASHBOARD: /sadhana/updates RESPONSE ===');
       debugPrint('Runtime type of updatesData: ${updatesData.runtimeType}');
-      if (updatesData is Map) {
-        debugPrint('Map keys in updatesData: ${updatesData.keys.toList()}');
-      }
 
       List<dynamic> extractList(dynamic data) {
         if (data is List) return List.from(data);
         if (data is Map) {
-          for (var key in ['items', 'updates', 'data', 'records', 'results', 'sadhana', 'history', 'logs', 'sadhanaUpdates']) {
+          for (var key in ['items', 'updates', 'data', 'records', 'results', 'sadhana', 'history', 'logs', 'sadhanaUpdates', 'accommodations']) {
             final val = data[key];
             if (val is List) return List.from(val);
             if (val is Map) {
@@ -713,6 +715,35 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
       }
 
       List<dynamic> rawUpdates = extractList(updatesData);
+
+      void mergeAccommodations(dynamic accData) {
+        for (var acc in extractList(accData)) {
+          if (acc is Map) {
+            final reqDetails = (acc['requestDetails'] ?? acc['description'] ?? '').toString();
+            final userObj = acc['user'] ?? acc['student'] ?? acc['worker'];
+            final wId = userObj is Map ? (userObj['_id'] ?? userObj['id']) : (acc['worker_id'] ?? acc['userId'] ?? acc['studentId']);
+            final wName = userObj is Map ? userObj['name'] : (acc['worker_name'] ?? acc['userName'] ?? acc['studentName'] ?? 'Student');
+            final status = (acc['status'] ?? '').toString().toUpperCase();
+            final isDone = status == 'APPROVED' || acc['is_completed'] == true;
+            final room = acc['assignedRoom'] ?? acc['work_completed'] ?? '';
+            rawUpdates.add({
+              '_id': acc['_id'] ?? acc['id'],
+              'id': acc['id'] ?? acc['_id'],
+              'worker_id': wId,
+              'worker_name': wName,
+              'category': 'accommodation',
+              'work_started': 'Accommodation Booking',
+              'description': reqDetails,
+              'work_completed': isDone ? (room.toString().isNotEmpty ? 'ROOM: $room' : 'Approved') : (status.isNotEmpty ? status : 'PENDING'),
+              'is_completed': isDone,
+              'created_at': acc['createdAt'] ?? acc['created_at'] ?? DateTime.now().toIso8601String(),
+            });
+          }
+        }
+      }
+
+      mergeAccommodations(accQueueData);
+
       debugPrint('Total raw updates extracted: ${rawUpdates.length}');
       if (rawUpdates.isNotEmpty) {
         debugPrint('Sample raw update record #0: ${rawUpdates.first}');
@@ -899,17 +930,24 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
     }).length;
 
     int pendingUpdatesCount = 0;
+    final Set<String> seenPendingIds = {};
     for (var list in _allUpdates.values) {
       for (var u in list) {
         final cat = u['category'];
+        final id = (u['_id'] ?? u['id'] ?? u['appointmentId'] ?? '').toString();
         if (cat == 'preacher_appointment' || cat == 'accommodation' || cat == 'residency_admission') {
-          if (u['is_completed'] == false) {
-            pendingUpdatesCount++;
+          final isDone = u['is_completed'] == true || u['work_completed'] == 'APPROVED' || u['status'] == 'APPROVED';
+          if (!isDone) {
+            if (id.isEmpty || seenPendingIds.add(id)) {
+              pendingUpdatesCount++;
+            }
           }
         } else if (cat == 'payment') {
           final workCompleted = u['work_completed'] ?? '';
           if (u['is_completed'] == false && (workCompleted == 'SUBMITTED' || workCompleted == 'WAITING_APPROVAL')) {
-            pendingUpdatesCount++;
+            if (id.isEmpty || seenPendingIds.add(id)) {
+              pendingUpdatesCount++;
+            }
           }
         }
       }
@@ -1225,11 +1263,6 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
                 title: 'Block List',
                 icon: Icons.block_outlined,
                 onTap: () => setState(() => _activeTab = 'blocklist'),
-              ),
-              _buildServiceListItem(
-                title: 'Accommodation',
-                icon: Icons.home_outlined,
-                onTap: () => setState(() => _activeTab = 'accommodation'),
               ),
               _buildServiceListItem(
                 title: 'Residency Admission',

@@ -288,7 +288,8 @@ class _ApprovalTabState extends State<ApprovalTab> {
         final cat = u['category'];
         final id = (u['_id'] ?? u['id'] ?? u['appointmentId'] ?? '').toString();
         if (cat == 'preacher_appointment' || cat == 'accommodation' || cat == 'residency_admission') {
-          if (u['is_completed'] == false) {
+          final isCompleted = u['is_completed'] == true || u['isCompleted'] == true || (u['work_completed'] != null && u['work_completed'].toString().isNotEmpty && u['work_completed'] != 'PENDING');
+          if (!isCompleted) {
             if (id.isEmpty || seenPendingIds.add(id)) {
               pendingUpdates.add(u);
             }
@@ -484,9 +485,9 @@ class _ApprovalTabState extends State<ApprovalTab> {
                                   final roomNum = roomController.text.trim();
                                   final roomText = roomNum.isEmpty ? 'Approved' : 'Room $roomNum';
 
-                                  await ApiService.patch('/sadhana/updates/$updateId', {
-                                    'is_completed': true,
-                                    'work_completed': roomText,
+                                  await ApiService.patch('/accommodations/$updateId/status', {
+                                    'status': 'APPROVED',
+                                    'assignedRoom': roomNum,
                                   });
                                 } else if (category == 'payment') {
                                   await ApiService.patch('/payments/$updateId', {
@@ -559,9 +560,8 @@ class _ApprovalTabState extends State<ApprovalTab> {
                                     'work_completed': 'REJECTED',
                                   });
                                 } else if (category == 'accommodation') {
-                                  await ApiService.patch('/sadhana/updates/$updateId', {
-                                    'is_completed': true,
-                                    'work_completed': 'REJECTED',
+                                  await ApiService.patch('/accommodations/$updateId/status', {
+                                    'status': 'REJECTED',
                                   });
                                 } else if (category == 'payment') {
                                   await ApiService.patch('/payments/$updateId', {
