@@ -61,6 +61,26 @@ class _ApprovalTabState extends State<ApprovalTab> {
     );
   }
 
+  Widget _buildCategoryBadge(String cat) {
+    final config = _getCategoryConfig(cat);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: config.color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: config.color.withValues(alpha: 0.3), width: 0.5),
+      ),
+      child: Text(
+        config.name.toUpperCase(),
+        style: TextStyle(
+          fontSize: 8,
+          fontWeight: FontWeight.bold,
+          color: config.color,
+        ),
+      ),
+    );
+  }
+
   String _cleanDescription(dynamic description, String category, {dynamic workStarted}) {
     final desc = description?.toString() ?? '';
     final wrkStr = workStarted?.toString() ?? '';
@@ -370,6 +390,313 @@ class _ApprovalTabState extends State<ApprovalTab> {
     );
   }
 
+  ({Color color, IconData icon, String name}) _getCategoryConfig(String category) {
+    switch (category) {
+      case 'preacher_appointment':
+        return (color: const Color(0xFF1D4ED8), icon: Icons.chat_bubble_outline, name: 'Appointment');
+      case 'accommodation':
+        return (color: const Color(0xFF9333EA), icon: Icons.hotel_outlined, name: 'Accommodation');
+      case 'residency_admission':
+        return (color: const Color(0xFF0D9488), icon: Icons.home_outlined, name: 'Residency');
+      case 'payment':
+        return (color: const Color(0xFFD97706), icon: Icons.currency_rupee, name: 'Payment');
+      default:
+        return (color: const Color(0xFF475569), icon: Icons.assignment_outlined, name: category.replaceAll('_', ' ').toUpperCase());
+    }
+  }
+
+  String _formatDateToDdMmYy(String dateStr) {
+    final s = dateStr.trim();
+    if (s.isEmpty) return '';
+    try {
+      final parsed = DateTime.parse(s);
+      return DateFormat('dd-MM-yy').format(parsed);
+    } catch (_) {
+      try {
+        final parsed = DateFormat('d MMM yyyy').parse(s);
+        return DateFormat('dd-MM-yy').format(parsed);
+      } catch (_) {
+        try {
+          final parsed = DateFormat('d MMM').parse(s);
+          return DateFormat('dd-MM-yy').format(DateTime(DateTime.now().year, parsed.month, parsed.day));
+        } catch (_) {
+          try {
+            final parts = s.split(' ')[0].split('-');
+            if (parts.length == 3 && parts[0].length == 4) {
+              final year = parts[0].substring(2);
+              return '${parts[2]}-${parts[1]}-$year';
+            }
+          } catch (_) {}
+          return s;
+        }
+      }
+    }
+  }
+
+  String _getSingleLineSummary(Map<String, dynamic> u) {
+    final cat = u['category'] ?? '';
+    final desc = (u['description'] ?? u['work_started'] ?? '').toString();
+
+    if (cat == 'preacher_appointment') {
+      final pDateRaw = (u['preferredDate'] ?? u['finalDate'] ?? u['date'] ?? '').toString();
+      final pDate = _formatDateToDdMmYy(pDateRaw);
+      final pTime = (u['preferredTime'] ?? u['finalTime'] ?? '').toString();
+      final parts = <String>[];
+      if (pDate.isNotEmpty) parts.add(pDate);
+      if (pTime.isNotEmpty) parts.add(pTime);
+      
+      String actualPurpose = (u['reason'] ?? u['purpose'] ?? '').toString().trim();
+      if (actualPurpose.isEmpty && desc.isNotEmpty) {
+        final lines = desc.split('\n');
+        for (var l in lines) {
+          final t = l.trim();
+          if (t.startsWith('Purpose:')) {
+            actualPurpose = t.substring('Purpose:'.length).trim();
+            break;
+          }
+        }
+        if (actualPurpose.isEmpty) {
+          final filtered = lines.where((l) {
+            final t = l.trim();
+            return !t.startsWith('Preacher:') && !t.startsWith('Date:') && !t.startsWith('Time:') && !t.startsWith('Appointment:');
+          }).join(' ').trim();
+          actualPurpose = filtered;
+        }
+      }
+      
+      if (actualPurpose.isNotEmpty) parts.add('Purpose: $actualPurpose');
+      
+      return parts.isNotEmpty ? parts.join(' • ') : 'Appointment Request';
+    }
+
+    if (cat == 'accommodation') {
+      final lines = desc.split('\n');
+      String arr = '', dep = '';
+      for (var l in lines) {
+        if (l.startsWith('Arrival: ')) arr = _formatDateToDdMmYy(l.replaceAll('Arrival: ', '').trim());
+        if (l.startsWith('Departure: ')) dep = _formatDateToDdMmYy(l.replaceAll('Departure: ', '').trim());
+      }
+      final parts = <String>[];
+      if (arr.isNotEmpty) parts.add('Arr: $arr');
+      if (dep.isNotEmpty) parts.add('Dep: $dep');
+      if (parts.isNotEmpty) {
+        return parts.join('  •  ');
+      }
+      return desc.replaceAll('\n', ' • ');
+    }
+
+    if (cat == 'payment') {
+      final wrkStr = (u['work_started'] ?? '').toString();
+      final pDesc = u['description'] ?? u['reason'] ?? '';
+      return 'Amount: ₹$wrkStr • Purpose: $pDesc'.replaceAll('\n', ' ');
+    }
+
+    return desc.isNotEmpty ? desc.replaceAll('\n', ' • ') : 'Request Details';
+  }
+
+  void _showFullDetailsBottomSheet(BuildContext context, Map<String, dynamic> u) {
+    final cat = u['category'] ?? '';
+    final studentName = u['worker_name'] ?? u['name'] ?? 'Disciple';
+    final desc = _cleanDescription(u['description'], cat, workStarted: u['work_started']);
+    final dateStr = u['created_at'] != null ? DateFormat('d MMM yyyy, h:mm a').format(DateTime.parse(u['created_at'])) : '---';
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(studentName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                _buildRoleBadge(u['worker_id']?.toString()),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text('Submitted on $dateStr', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+            const Divider(height: 24),
+            Text(desc, style: const TextStyle(fontSize: 13, height: 1.4)),
+            if (cat == 'residency_admission') ...[
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  try {
+                    final data = jsonDecode(u['description'].toString());
+                    await ResidencyPdfHelper.generateAndSharePdf(data);
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error generating PDF: $e'), backgroundColor: Colors.redAccent),
+                      );
+                    }
+                  }
+                },
+                icon: const Icon(Icons.picture_as_pdf, color: Colors.white, size: 16),
+                label: const Text('Download Form PDF', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0D9488), foregroundColor: Colors.white),
+              ),
+            ],
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleApprove(Map<String, dynamic> u) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final category = u['category'];
+      final updateId = (u['appointmentId'] ?? u['appointment_id'] ?? u['_id'] ?? u['id'])?.toString();
+
+      if (category == 'residency_admission') {
+        await ApiService.patch('/sadhana/updates/$updateId', {
+          'is_completed': true,
+        });
+        
+        final workerId = u['worker_id'];
+        if (workerId != null) {
+          try {
+            await ApiService.patch('/users/$workerId', {'role': 'residency'});
+          } catch (pe) {
+            debugPrint('Profile role update fallback failed: $pe');
+          }
+        }
+      } else if (category == 'accommodation') {
+        if (!context.mounted) return;
+        final roomController = TextEditingController();
+        final confirm = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Assign Room'),
+            content: TextField(
+              controller: roomController,
+              decoration: const InputDecoration(hintText: 'Enter room number or details'),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+              TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Approve')),
+            ],
+          ),
+        );
+        if (confirm != true) return;
+        
+        final roomNum = roomController.text.trim();
+
+        await ApiService.patch('/accommodations/$updateId/status', {
+          'status': 'APPROVED',
+          'assignedRoom': roomNum,
+        });
+      } else if (category == 'payment') {
+        await ApiService.patch('/payments/$updateId', {
+          'is_completed': true,
+          'work_completed': 'PAID',
+        });
+      } else if (category == 'preacher_appointment') {
+        final approvalData = await _showAppointmentApprovalDialog(context, Map<String, dynamic>.from(u));
+        if (approvalData == null) return;
+
+        debugPrint('📌 [PREACHER APPROVE APPOINTMENT REQUEST]: ID=$updateId, data=$approvalData');
+        final res = await ApiService.patch('/sadhana/updates/$updateId', {
+          'status': 'APPROVED',
+          'is_completed': true,
+          'work_completed': 'APPROVED',
+          'approvedDate': approvalData['approvedDate'],
+          'approvedTime': approvalData['approvedTime'],
+        });
+        debugPrint('📌 [PREACHER APPROVE APPOINTMENT RESPONSE]: $res');
+      } else {
+        await ApiService.patch('/sadhana/updates/$updateId', {'is_completed': true});
+      }
+     
+      await widget.onRefresh();
+      final workerId = u['worker_id'];
+      if (workerId != null) {
+        NotificationHelper.sendApprovalNotification(
+          studentId: workerId,
+          preacherName: widget.preacherProfile?['name'] ?? 'Preacher',
+          category: u['category'] ?? '',
+          approved: true,
+        ).catchError((_) {});
+      }
+      if (mounted) {
+        messenger.showSnackBar(const SnackBar(content: Text('Request Approved!')));
+      }
+    } catch (e) {
+      debugPrint('Error approving: $e');
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.redAccent,
+            content: Text('Approval failed: ${e.toString().replaceAll('ApiException', '').trim()}'),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleReject(Map<String, dynamic> u) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final category = u['category'];
+      final updateId = (u['appointmentId'] ?? u['appointment_id'] ?? u['_id'] ?? u['id'])?.toString();
+      if (category == 'residency_admission') {
+        await ApiService.patch('/sadhana/updates/$updateId', {
+          'is_completed': true,
+          'work_completed': 'REJECTED',
+        });
+      } else if (category == 'accommodation') {
+        await ApiService.patch('/accommodations/$updateId/status', {
+          'status': 'REJECTED',
+        });
+      } else if (category == 'payment') {
+        await ApiService.patch('/payments/$updateId', {
+          'is_completed': false,
+          'work_completed': 'PENDING',
+        });
+      } else if (category == 'preacher_appointment') {
+        debugPrint('📌 [PREACHER REJECT APPOINTMENT REQUEST]: ID=$updateId');
+        final res = await ApiService.patch('/sadhana/updates/$updateId', {
+          'status': 'REJECTED',
+          'is_completed': true,
+          'work_completed': 'REJECTED',
+        });
+        debugPrint('📌 [PREACHER REJECT APPOINTMENT RESPONSE]: $res');
+      } else {
+        await ApiService.delete('/sadhana/updates/$updateId');
+      }
+    
+      await widget.onRefresh();
+      final workerId = u['worker_id'];
+      if (workerId != null) {
+        NotificationHelper.sendApprovalNotification(
+          studentId: workerId,
+          preacherName: widget.preacherProfile?['name'] ?? 'Preacher',
+          category: u['category'] ?? '',
+          approved: false,
+        ).catchError((_) {});
+      }
+      if (mounted) {
+        messenger.showSnackBar(const SnackBar(content: Text('Request Rejected & Cleared')));
+      }
+    } catch (e) {
+      debugPrint('Error rejecting: $e');
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.redAccent,
+            content: Text('Rejection failed: ${e.toString().replaceAll('ApiException', '').trim()}'),
+          ),
+        );
+      }
+    }
+  }
+
   Widget _buildPendingTab(List<dynamic> pendingUpdates) {
     if (pendingUpdates.isEmpty) {
       return const Center(
@@ -385,239 +712,103 @@ class _ApprovalTabState extends State<ApprovalTab> {
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       itemCount: pendingUpdates.length,
       itemBuilder: (buildCtx, index) {
-        final u = pendingUpdates[index];
+        final u = Map<String, dynamic>.from(pendingUpdates[index]);
         final updateDate = u['created_at'] != null
-            ? DateFormat('d MMM yyyy').format(DateTime.parse(u['created_at']))
+            ? _formatDateToDdMmYy(u['created_at'].toString())
             : '---';
+        final cat = u['category'] ?? '';
+        final categoryConfig = _getCategoryConfig(cat);
+        final summaryText = _getSingleLineSummary(u);
 
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: Column(
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        return Container(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: () => _showFullDetailsBottomSheet(context, u),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              child: Row(
                 children: [
+                  CircleAvatar(
+                    radius: 14,
+                    backgroundColor: categoryConfig.color.withValues(alpha: 0.12),
+                    child: Icon(categoryConfig.icon, size: 14, color: categoryConfig.color),
+                  ),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Row(
                           children: [
                             Flexible(
                               child: Text(
                                 u['worker_name'] ?? 'Disciple',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black),
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            const SizedBox(width: 6),
+                            const SizedBox(width: 4),
                             _buildRoleBadge(u['worker_id']?.toString()),
+                            const SizedBox(width: 4),
+                            _buildCategoryBadge(cat),
+                            const SizedBox(width: 4),
+                            Text('• $updateDate', style: const TextStyle(fontSize: 10, color: Colors.black87, fontWeight: FontWeight.w500)),
                           ],
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Submitted on $updateDate',
-                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black87),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '"${_cleanDescription(u['description'], u['category'] ?? '', workStarted: u['work_started'])}"',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black),
+                          summaryText,
+                          style: const TextStyle(fontSize: 11, color: Colors.black, fontWeight: FontWeight.w500),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  SizedBox(
-                    width: 120,
-                    child: Column(
-                      children: [
-                        SizedBox(
-                          width: double.infinity,
-                          height: 34,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.black,
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            ),
-                            onPressed: () async {
-                              final messenger = ScaffoldMessenger.of(context);
-                              try {
-                                final category = u['category'];
-                                final updateId = (u['appointmentId'] ?? u['appointment_id'] ?? u['_id'] ?? u['id'])?.toString();
-
-                                if (category == 'residency_admission') {
-                                  await ApiService.patch('/sadhana/updates/$updateId', {
-                                    'is_completed': true,
-                                  });
-                                  
-                                  final workerId = u['worker_id'];
-                                  if (workerId != null) {
-                                    try {
-                                      await ApiService.patch('/users/$workerId', {'role': 'residency'});
-                                    } catch (pe) {
-                                      debugPrint('Profile role update fallback failed: $pe');
-                                    }
-                                  }
-                                } else if (category == 'accommodation') {
-                                  if (!context.mounted) return;
-                                  final roomController = TextEditingController();
-                                  final confirm = await showDialog<bool>(
-                                    context: context,
-                                    builder: (context) => AlertDialog(
-                                      title: const Text('Assign Room'),
-                                      content: TextField(
-                                        controller: roomController,
-                                        decoration: const InputDecoration(hintText: 'Enter room number or details'),
-                                      ),
-                                      actions: [
-                                        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-                                        TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Approve')),
-                                      ],
-                                    ),
-                                  );
-                                  if (confirm != true) return;
-                                  
-                                  final roomNum = roomController.text.trim();
-                                  final roomText = roomNum.isEmpty ? 'Approved' : 'Room $roomNum';
-
-                                  await ApiService.patch('/accommodations/$updateId/status', {
-                                    'status': 'APPROVED',
-                                    'assignedRoom': roomNum,
-                                  });
-                                } else if (category == 'payment') {
-                                  await ApiService.patch('/payments/$updateId', {
-                                    'is_completed': true,
-                                    'work_completed': 'PAID',
-                                  });
-                                } else if (category == 'preacher_appointment') {
-                                  final approvalData = await _showAppointmentApprovalDialog(context, Map<String, dynamic>.from(u));
-                                  if (approvalData == null) return;
-
-                                  debugPrint('📌 [PREACHER APPROVE APPOINTMENT REQUEST]: ID=$updateId, data=$approvalData');
-                                  final res = await ApiService.patch('/sadhana/updates/$updateId', {
-                                    'status': 'APPROVED',
-                                    'is_completed': true,
-                                    'work_completed': 'APPROVED',
-                                    'approvedDate': approvalData['approvedDate'],
-                                    'approvedTime': approvalData['approvedTime'],
-                                  });
-                                  debugPrint('📌 [PREACHER APPROVE APPOINTMENT RESPONSE]: $res');
-                                } else {
-                                  await ApiService.patch('/sadhana/updates/$updateId', {'is_completed': true});
-                                }
-                               
-                                await widget.onRefresh();
-                                final workerId = u['worker_id'];
-                                if (workerId != null) {
-                                  NotificationHelper.sendApprovalNotification(
-                                    studentId: workerId,
-                                    preacherName: widget.preacherProfile?['name'] ?? 'Preacher',
-                                    category: u['category'] ?? '',
-                                    approved: true,
-                                  ).catchError((_) {});
-                                }
-                                if (mounted) {
-                                  messenger.showSnackBar(const SnackBar(content: Text('Request Approved!')));
-                                }
-                              } catch (e) {
-                                debugPrint('Error approving: $e');
-                                if (mounted) {
-                                  messenger.showSnackBar(
-                                    SnackBar(
-                                      backgroundColor: Colors.redAccent,
-                                      content: Text('Approval failed: ${e.toString().replaceAll('ApiException', '').trim()}'),
-                                    ),
-                                  );
-                                }
-                              }
-                            },
-                            child: const Text('APPROVE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10)),
+                  const SizedBox(width: 6),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      InkWell(
+                        onTap: () => _handleApprove(u),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0F766E),
+                            borderRadius: BorderRadius.circular(6),
                           ),
+                          child: const Text('APPROVE', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 9)),
                         ),
-                        const SizedBox(height: 6),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 34,
-                          child: OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.redAccent,
-                              side: const BorderSide(color: Colors.redAccent),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            ),
-                            onPressed: () async {
-                              final messenger = ScaffoldMessenger.of(context);
-                              try {
-                                final category = u['category'];
-                                final updateId = (u['appointmentId'] ?? u['appointment_id'] ?? u['_id'] ?? u['id'])?.toString();
-                                if (category == 'residency_admission') {
-                                  await ApiService.patch('/sadhana/updates/$updateId', {
-                                    'is_completed': true,
-                                    'work_completed': 'REJECTED',
-                                  });
-                                } else if (category == 'accommodation') {
-                                  await ApiService.patch('/accommodations/$updateId/status', {
-                                    'status': 'REJECTED',
-                                  });
-                                } else if (category == 'payment') {
-                                  await ApiService.patch('/payments/$updateId', {
-                                    'is_completed': false,
-                                    'work_completed': 'PENDING',
-                                  });
-                                } else if (category == 'preacher_appointment') {
-                                  debugPrint('📌 [PREACHER REJECT APPOINTMENT REQUEST]: ID=$updateId');
-                                  final res = await ApiService.patch('/sadhana/updates/$updateId', {
-                                    'status': 'REJECTED',
-                                    'is_completed': true,
-                                    'work_completed': 'REJECTED',
-                                  });
-                                  debugPrint('📌 [PREACHER REJECT APPOINTMENT RESPONSE]: $res');
-                                } else {
-                                  await ApiService.delete('/sadhana/updates/$updateId');
-                                }
-                              
-                              await widget.onRefresh();
-                              final workerId = u['worker_id'];
-                              if (workerId != null) {
-                                NotificationHelper.sendApprovalNotification(
-                                  studentId: workerId,
-                                  preacherName: widget.preacherProfile?['name'] ?? 'Preacher',
-                                  category: u['category'] ?? '',
-                                  approved: false,
-                                ).catchError((_) {});
-                              }
-                              if (mounted) {
-                                messenger.showSnackBar(const SnackBar(content: Text('Request Rejected & Cleared')));
-                              }
-                            } catch (e) {
-                              debugPrint('Error rejecting: $e');
-                              if (mounted) {
-                                messenger.showSnackBar(
-                                  SnackBar(
-                                    backgroundColor: Colors.redAccent,
-                                    content: Text('Rejection failed: ${e.toString().replaceAll('ApiException', '').trim()}'),
-                                  ),
-                                );
-                              }
-                            }
-                          },
-                          child: const Text('REJECT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10)),
+                      ),
+                      const SizedBox(width: 4),
+                      InkWell(
+                        onTap: () => _handleReject(u),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFDC2626),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text('REJECT', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 9)),
                         ),
                       ),
                     ],
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-            const SizedBox(height: 10),
-            Divider(height: 1, color: Colors.grey[200]),
-          ],
-        ),
-      );
+          ),
+        );
       },
     );
   }
@@ -637,152 +828,114 @@ class _ApprovalTabState extends State<ApprovalTab> {
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       itemCount: completedUpdates.length,
       itemBuilder: (buildCtx, index) {
-        final u = completedUpdates[index];
+        final u = Map<String, dynamic>.from(completedUpdates[index]);
         final updateDate = u['created_at'] != null
-            ? DateFormat('d MMM yyyy').format(DateTime.parse(u['created_at']))
+            ? _formatDateToDdMmYy(u['created_at'].toString())
             : '---';
             
         final category = u['category'] ?? 'general';
-        
-        Color badgeColor;
-        Color textColor;
-        String categoryName;
-        IconData icon;
+        final categoryConfig = _getCategoryConfig(category);
+        final summaryText = _getSingleLineSummary(u);
+        final statusText = (u['work_completed'] ?? u['status'] ?? 'COMPLETED').toString();
+        final isRejected = statusText == 'REJECTED';
 
-        switch (category) {
-          case 'preacher_appointment':
-            badgeColor = const Color(0xFFEFF6FF);
-            textColor = const Color(0xFF1D4ED8);
-            categoryName = 'Preacher Appointment';
-            icon = Icons.chat_bubble_outline;
-            break;
-          case 'accommodation':
-            badgeColor = const Color(0xFFF3E8FF);
-            textColor = const Color(0xFF9333EA);
-            categoryName = 'Accommodation';
-            icon = Icons.hotel_outlined;
-            break;
-          case 'residency_admission':
-            badgeColor = const Color(0xFFF0FDFA);
-            textColor = const Color(0xFF0D9488);
-            categoryName = 'Residency Admission';
-            icon = Icons.home_outlined;
-            break;
-          case 'payment':
-            badgeColor = const Color(0xFFFEF3C7);
-            textColor = const Color(0xFFD97706);
-            categoryName = 'Payment';
-            icon = Icons.currency_rupee;
-            break;
-          default:
-            badgeColor = const Color(0xFFF1F5F9);
-            textColor = const Color(0xFF475569);
-            categoryName = category.toString().replaceAll('_', ' ').toUpperCase();
-            icon = Icons.assignment_outlined;
-        }
-
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
+        return Container(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: () => _showFullDetailsBottomSheet(context, u),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 14,
+                    backgroundColor: categoryConfig.color.withValues(alpha: 0.12),
+                    child: Icon(categoryConfig.icon, size: 14, color: categoryConfig.color),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        CircleAvatar(
-                          radius: 16,
-                          backgroundColor: textColor.withValues(alpha: 0.1),
-                          child: Icon(icon, size: 16, color: textColor),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: badgeColor,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            categoryName,
-                            style: TextStyle(
-                              color: textColor,
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                u['worker_name'] ?? 'Disciple',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                          ),
+                            const SizedBox(width: 4),
+                            _buildRoleBadge(u['worker_id']?.toString()),
+                            const SizedBox(width: 4),
+                            _buildCategoryBadge(category),
+                            const SizedBox(width: 4),
+                            Text('• $updateDate', style: const TextStyle(fontSize: 10, color: Colors.black87, fontWeight: FontWeight.w500)),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          summaryText,
+                          style: const TextStyle(fontSize: 11, color: Colors.black, fontWeight: FontWeight.w500),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),
-                    Text(
-                      updateDate,
-                      style: const TextStyle(fontSize: 10, color: Colors.black87, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Text(
-                      u['worker_name'] ?? 'Disciple',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black),
-                    ),
-                    const SizedBox(width: 6),
-                    _buildRoleBadge(u['worker_id']?.toString()),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
                   ),
-                  child: Text(
-                    _cleanDescription(u['description'], category, workStarted: u['work_started']),
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Colors.black,
-                      fontWeight: FontWeight.bold,
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: isRejected ? Colors.red[50] : const Color(0xFFF0FDFA),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: isRejected ? Colors.redAccent.withValues(alpha: 0.3) : const Color(0xFF99F6E4)),
+                    ),
+                    child: Text(
+                      statusText.toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                        color: isRejected ? Colors.redAccent : const Color(0xFF0D9488),
+                      ),
                     ),
                   ),
-                ),
-                if (category == 'residency_admission') ...[
-                  const SizedBox(height: 10),
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      final messenger = ScaffoldMessenger.of(context);
-                      try {
-                        final data = jsonDecode(u['description'].toString());
-                        await ResidencyPdfHelper.generateAndSharePdf(data);
-                      } catch (e) {
-                        if (mounted) {
-                          messenger.showSnackBar(
-                            SnackBar(content: Text('Error generating PDF: $e'), backgroundColor: Colors.redAccent),
-                          );
+                  if (category == 'residency_admission') ...[
+                    const SizedBox(width: 4),
+                    IconButton(
+                      icon: const Icon(Icons.picture_as_pdf, color: Color(0xFF0D9488), size: 18),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () async {
+                        final messenger = ScaffoldMessenger.of(context);
+                        try {
+                          final data = jsonDecode(u['description'].toString());
+                          await ResidencyPdfHelper.generateAndSharePdf(data);
+                        } catch (e) {
+                          if (mounted) {
+                            messenger.showSnackBar(
+                              SnackBar(content: Text('Error generating PDF: $e'), backgroundColor: Colors.redAccent),
+                            );
+                          }
                         }
-                      }
-                    },
-                    icon: const Icon(Icons.picture_as_pdf, color: Colors.white, size: 16),
-                    label: const Text(
-                      'Download Form PDF',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                      },
                     ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0D9488),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    ),
-                  ),
+                  ],
                 ],
-              ],
+              ),
             ),
+          ),
         );
       },
     );

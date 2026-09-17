@@ -10,12 +10,14 @@ import { Accommodation, AccommodationDocument } from '../database/schemas/accomm
 import { User, UserDocument } from '../database/schemas/users.schema';
 import { CreateAccommodationDto } from './dto/create-accommodation.dto';
 import { UpdateAccommodationStatusDto } from './dto/update-accommodation-status.dto';
+import { RealtimeService } from '../realtime/realtime.service';
 
 @Injectable()
 export class AccommodationsService {
   constructor(
     @InjectModel(Accommodation.name) private readonly accommodationModel: Model<AccommodationDocument>,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+    private readonly realtimeService: RealtimeService,
   ) {}
 
   async createRequest(user: any, dto: CreateAccommodationDto) {
@@ -43,6 +45,11 @@ export class AccommodationsService {
     });
 
     console.log(`📌 [ACCOMMODATION BOOKING CREATED]: BookingID=${accommodation._id}, StudentID=${user._id}, PreacherID=${preacherIdObj?.toString() || 'UNASSIGNED'}`);
+
+    this.realtimeService.emit('accommodation_update', 'create', accommodation, {
+      preacherId: preacherIdObj?.toString(),
+      studentId: user._id?.toString(),
+    });
 
     return accommodation;
   }
@@ -99,6 +106,11 @@ export class AccommodationsService {
     await item.save();
 
     console.log(`📌 [ACCOMMODATION STATUS UPDATED]: BookingID=${item._id}, PreacherID=${preacherId}, Status=${item.status}, AssignedRoom=${item.assignedRoom || 'NONE'}`);
+
+    this.realtimeService.emit('accommodation_update', 'update', item, {
+      preacherId: preacherId?.toString(),
+      studentId: item.userId?.toString(),
+    });
 
     return item;
   }

@@ -80,7 +80,8 @@ class NotificationHelper {
     }
   }
 
-  /// Sends a push notification to specific users.
+  /// Sends a push notification to specific users via the backend FCM service.
+  /// This is decoupled from OneSignal — the backend looks up FCM tokens by userId.
   static Future<void> sendNotification({
     required List<String> targetUserIds,
     required String title,
@@ -89,29 +90,24 @@ class NotificationHelper {
   }) async {
     if (targetUserIds.isEmpty) return;
 
+    if (sendAfter != null) {
+      debugPrint('[FCM] Scheduled notifications must be created by a server-side scheduler.');
+      return;
+    }
+
     try {
-      final keys = await _getKeys();
-      final appId = keys['appId']!;
-      if (appId.isEmpty || appId == 'YOUR_ONESIGNAL_APP_ID') {
-        debugPrint('NotificationHelper: OneSignal is not configured.');
-        return;
-      }
-
-      if (sendAfter != null) {
-        debugPrint('NotificationHelper: scheduled notifications must be created by a server-side scheduler.');
-        return;
-      }
-
-      await ApiService.post('/notifications/send', {
+      debugPrint('[FCM] Sending notification → targets: $targetUserIds, title: "$title"');
+      final response = await ApiService.post('/notifications/send', {
         'targetUserIds': targetUserIds,
         'title': title,
         'body': body,
       });
-      debugPrint('NotificationHelper: push notification requested for ${targetUserIds.length} users.');
+      debugPrint('[FCM] Notification send SUCCESS → response: $response');
     } catch (e) {
-      debugPrint('NotificationHelper: Error sending push notification: $e');
+      debugPrint('[FCM] Notification send FAILED → error: $e');
     }
   }
+
 
   /// Automatically notifies a student's preacher when they log any activity.
   static Future<void> sendUpdateNotification(Map<String, dynamic> update) async {
@@ -120,7 +116,11 @@ class NotificationHelper {
     final String description = update['description'] ?? update['work_started'] ?? '';
     
     String? preacherId = (update['preacher_id'] ?? update['preacherId'])?.toString();
-    if (preacherId == null || preacherId.isEmpty) return;
+    if (preacherId == null || preacherId.isEmpty) {
+      debugPrint('[FCM] sendUpdateNotification: No preacherId found in update — skipping');
+      return;
+    }
+    debugPrint('[FCM] sendUpdateNotification: category=$category, preacherId=$preacherId, student=$studentName');
 
     String title = 'New Student Activity';
     String body = '$studentName logged $category';

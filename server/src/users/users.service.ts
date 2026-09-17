@@ -4,6 +4,7 @@ import { Model } from 'mongoose';
 import { User, UserDocument } from '../database/schemas/users.schema';
 import { UpdateUserProfileDto } from './dto/update-user-profile.dto';
 import { FirebaseService } from '../firebase/firebase.service';
+import { RealtimeService } from '../realtime/realtime.service';
 
 @Injectable()
 export class UsersService {
@@ -12,6 +13,7 @@ export class UsersService {
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     private readonly firebaseService: FirebaseService,
+    private readonly realtimeService: RealtimeService,
   ) {}
 
   async getProfile(userId: string) {
@@ -51,6 +53,10 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException('User profile not found.');
     }
+    this.realtimeService.emit('student_update', 'profile_update', user, {
+      preacherId: (user.preacherId as any)?._id?.toString() ?? (user.preacherId as any)?.toString(),
+      studentId: userId,
+    });
     return user;
   }
 

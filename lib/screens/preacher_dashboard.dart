@@ -3,10 +3,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
 import '../services/cloudinary_service.dart';
+import '../services/realtime_service.dart';
+import '../utils/user_session.dart';
 
 // Import modular tab widgets
 import 'preacher/management_tab.dart';
@@ -38,7 +41,7 @@ class PreacherDashboard extends StatefulWidget {
   State<PreacherDashboard> createState() => _PreacherDashboardState();
 }
 
-class _PreacherDashboardState extends State<PreacherDashboard> {
+class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindingObserver {
   final _picker = ImagePicker();
 
   // Static in-memory cache for instant UI restoration (<1 sec) across screen re-opens
@@ -84,6 +87,11 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
   int _selectedIndex = 0;
   bool _initializedFromArgs = false;
 
+  // ── Real-time refresh: WebSocket event stream + FCM foreground + lifecycle ──
+  StreamSubscription<RealtimeEvent>? _realtimeSub;
+  StreamSubscription? _fcmForegroundSub;
+  bool _isSilentRefreshing = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -99,6 +107,8 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
     final currentUid = FirebaseAuth.instance.currentUser?.uid;
     if (_staticCacheUid != null && _staticCacheUid != currentUid) {
       clearStaticCache();
@@ -128,6 +138,80 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
     }
 
     _loadProfileAndData();
+    _startRealtimeRefresh();
+  }
+
+  @override
+  void dispose() {
+    _realtimeSub?.cancel();
+    _fcmForegroundSub?.cancel();
+    RealtimeService.instance.disconnect();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // ── Lifecycle: auto-refresh when app comes back to foreground ──
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      debugPrint('🔄 [PREACHER] App resumed → refreshing data');
+      _silentRefresh();
+    }
+  }
+
+  // ── Real-time refresh setup ──
+  void _startRealtimeRefresh() {
+    // 1. Connect to WebSocket Realtime Service (Event-driven)
+    RealtimeService.instance.connect();
+    _realtimeSub?.cancel();
+    _realtimeSub = RealtimeService.instance.eventStream.listen(_handleRealtimeEvent);
+
+    // 2. FCM foreground message listener
+    _fcmForegroundSub?.cancel();
+    _fcmForegroundSub = FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      debugPrint('🔔 [PREACHER] FCM foreground message: ${message.notification?.title ?? message.data.toString()}');
+      _silentRefresh();
+    });
+  }
+
+  void _handleRealtimeEvent(RealtimeEvent event) {
+    if (!mounted) return;
+    debugPrint('⚡ [PREACHER DASHBOARD] Live event received: ${event.type} (${event.action})');
+    switch (event.type) {
+      case 'sadhana_update':
+      case 'accommodation_update':
+      case 'appointment_update':
+      case 'payment_update':
+        _fetchAllUpdates();
+        break;
+      case 'student_update':
+        _fetchFolkBoys();
+        break;
+      case 'trip_update':
+      case 'event_update':
+        _fetchTripAndEventBookings();
+        break;
+      case 'announcement_update':
+        _fetchAnnouncements();
+        break;
+      default:
+        _silentRefresh();
+        break;
+    }
+  }
+
+  /// Silently re-fetch updates + accommodations without showing a loading spinner.
+  Future<void> _silentRefresh() async {
+    if (_isSilentRefreshing || !mounted) return;
+    _isSilentRefreshing = true;
+    debugPrint('🔄 [PREACHER] Silent refresh started');
+    try {
+      await _fetchAllUpdates();
+    } catch (e) {
+      debugPrint('🔄 [PREACHER] Silent refresh error: $e');
+    } finally {
+      _isSilentRefreshing = false;
+    }
   }
 
   Future<void> _loadProfileAndData({Map<String, dynamic>? initialProfile}) async {
@@ -168,6 +252,14 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
                 Navigator.pushReplacementNamed(context, '/home');
                 return;
               }
+              final uid = FirebaseAuth.instance.currentUser?.uid;
+              if (uid != null && uid.isNotEmpty) {
+                UserSession.saveSession(
+                  uid: uid,
+                  role: role,
+                  profileData: map,
+                );
+              }
               setState(() {
                 _profile = map;
                 _staticProfile = map;
@@ -199,6 +291,21 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
       if (_folkBoys.isEmpty && mounted) {
         setState(() => _isLoadingBoys = true);
       }
+
+      final user = FirebaseAuth.instance.currentUser;
+      final fbUid = user?.uid ?? 'NULL';
+      final fbEmail = user?.email ?? 'NULL';
+      final detectedRole = (_profile?['role'] ?? 'UNKNOWN').toString();
+      final cachedUid = ApiService.cachedUid ?? 'NONE';
+      final freshRequested = ApiService.wasFreshTokenRequested;
+
+      debugPrint('📌 [DEBUG /preacher/students CALL]:');
+      debugPrint('   1. Firebase UID: $fbUid');
+      debugPrint('   2. Firebase Email: $fbEmail');
+      debugPrint('   3. Detected Role: $detectedRole');
+      debugPrint('   4. Cached Token UID: $cachedUid');
+      debugPrint('   5. Fresh Token Requested: $freshRequested');
+
       final data = await ApiService.get('/preacher/students');
 
       List<dynamic> extractedStudents = [];
@@ -1125,9 +1232,9 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
                           label: 'Approvals',
                         ),
                         const NavigationDestination(
-                          icon: Icon(Icons.grid_view_outlined),
-                          selectedIcon: Icon(Icons.grid_view_rounded),
-                          label: 'Services',
+                          icon: Icon(Icons.explore_outlined),
+                          selectedIcon: Icon(Icons.explore_rounded),
+                          label: 'Explore',
                         ),
                         const NavigationDestination(
                           icon: Icon(Icons.person_outline),
@@ -1177,12 +1284,12 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
       return Column(
         children: [
           Container(
-            color: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            color: const Color(0xFFF8FAFC),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             child: Row(
               children: [
                 IconButton(
-                  icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black, size: 18),
+                  icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFF0F172A), size: 18),
                   onPressed: () {
                     setState(() {
                       _activeTab = null;
@@ -1205,7 +1312,7 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
                                           : _activeTab == 'festival'
                                               ? 'Festival Management'
                                               : _activeTab![0].toUpperCase() + _activeTab!.substring(1),
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF1E293B)),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0F172A)),
                 ),
               ],
             ),
@@ -1223,12 +1330,17 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Services Control Panel',
+            'Explore Control Panel',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
           ),
           const SizedBox(height: 12),
           Column(
             children: [
+              _buildServiceListItem(
+                title: 'Student List',
+                icon: Icons.people_outline_rounded,
+                onTap: () => setState(() => _activeTab = 'student_list'),
+              ),
               _buildServiceListItem(
                 title: 'Online Session',
                 icon: Icons.video_camera_back_outlined,
@@ -1284,11 +1396,6 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
                 title: 'Message',
                 icon: Icons.chat_bubble_outline_outlined,
                 onTap: () => setState(() => _activeTab = 'message'),
-              ),
-              _buildServiceListItem(
-                title: 'Student List',
-                icon: Icons.people_outline_rounded,
-                onTap: () => setState(() => _activeTab = 'student_list'),
               ),
               if (_isAdmin)
                 _buildServiceListItem(

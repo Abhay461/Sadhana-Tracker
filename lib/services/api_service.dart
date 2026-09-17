@@ -1,23 +1,42 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
 import '../utils/constants.dart';
 import '../utils/notification_helper.dart';
+import '../utils/user_session.dart';
 import '../screens/preacher_dashboard.dart';
+import 'realtime_service.dart';
 
 class ApiService {
   static String get baseUrl => Constants.apiBaseUrl;
 
+  // ── Shared HTTP client (one instance for the app lifetime) ──
+  static http.Client _httpClient = http.Client();
+
+  /// Call only when the app is permanently shutting down.
+  static void dispose() {
+    _httpClient.close();
+  }
+
+  static const Duration _requestTimeout = Duration(seconds: 30);
+
   static String? _cachedIdToken;
   static String? _cachedUid;
   static DateTime? _tokenFetchTime;
+  static bool wasFreshTokenRequested = false;
+
+  static String? get cachedUid => _cachedUid;
 
   static void clearTokenCache() {
     _cachedIdToken = null;
-    _cachedUid = null;
     _tokenFetchTime = null;
+    _cachedUid = null;
+    wasFreshTokenRequested = false;
     PreacherDashboard.clearStaticCache();
+    UserSession.clearSession();
+    RealtimeService.instance.disconnect();
   }
 
   static Future<void> logout() async {
@@ -31,12 +50,20 @@ class ApiService {
     String? idToken;
     if (user != null) {
       final now = DateTime.now();
+
+      // If user UID changed, clear stale token cache immediately
+      if (_cachedUid != null && _cachedUid != user.uid) {
+        clearTokenCache();
+      }
+
       if (_cachedIdToken != null &&
           _cachedUid == user.uid &&
           _tokenFetchTime != null &&
           now.difference(_tokenFetchTime!).inMinutes < 10) {
         idToken = _cachedIdToken;
+        wasFreshTokenRequested = false;
       } else {
+        wasFreshTokenRequested = true;
         try {
           idToken = await user.getIdToken(false).timeout(const Duration(seconds: 15));
           if (idToken != null && idToken.isNotEmpty) {
@@ -48,9 +75,11 @@ class ApiService {
           debugPrint('Firebase token refresh warning: $e');
           if (_cachedUid == user.uid && _cachedIdToken != null) {
             idToken = _cachedIdToken;
+            wasFreshTokenRequested = false;
           } else {
             clearTokenCache();
             try {
+              wasFreshTokenRequested = true;
               idToken = await user.getIdToken(true).timeout(const Duration(seconds: 15));
               if (idToken != null && idToken.isNotEmpty) {
                 _cachedIdToken = idToken;
@@ -75,12 +104,27 @@ class ApiService {
     };
   }
 
+  // ── Minimal request/response logging ──
+  static void _logStart(String method, String url) {
+    debugPrint('➡️ [API] $method $url → REQUEST START');
+  }
+
+  static void _logResponse(String method, String url, int statusCode, int durationMs) {
+    debugPrint('✅ [API] $method $url → $statusCode (${durationMs}ms)');
+  }
+
   static Future<dynamic> get(String endpoint) async {
+    final url = '$baseUrl$endpoint';
+    _logStart('GET', url);
+    final stopwatch = Stopwatch()..start();
     final headers = await _getHeaders();
-    final response = await http.get(
-      Uri.parse('$baseUrl$endpoint'),
+    debugPrint('⏳ [API] GET $url → HTTP AWAIT');
+    final response = await _httpClient.get(
+      Uri.parse(url),
       headers: headers,
-    );
+    ).timeout(_requestTimeout);
+    stopwatch.stop();
+    _logResponse('GET', url, response.statusCode, stopwatch.elapsedMilliseconds);
     return _processResponse(response);
   }
 
@@ -204,22 +248,34 @@ class ApiService {
       targetBody = Map<String, dynamic>.from(body);
     }
 
-    final response = await http.post(
-      Uri.parse('$baseUrl$targetEndpoint'),
+    final url = '$baseUrl$targetEndpoint';
+    _logStart('POST', url);
+    final stopwatch = Stopwatch()..start();
+    debugPrint('⏳ [API] POST $url → HTTP AWAIT');
+    final response = await _httpClient.post(
+      Uri.parse(url),
       headers: headers,
       body: jsonEncode(targetBody),
-    );
+    ).timeout(_requestTimeout);
+    stopwatch.stop();
+    _logResponse('POST', url, response.statusCode, stopwatch.elapsedMilliseconds);
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return _processResponse(response);
     }
 
     if (response.statusCode == 404 && targetEndpoint != '/sadhana') {
-      final fbResponse = await http.post(
-        Uri.parse('$baseUrl/sadhana'),
+      final fbUrl = '$baseUrl/sadhana';
+      _logStart('POST', fbUrl);
+      final fbStopwatch = Stopwatch()..start();
+      debugPrint('⏳ [API] POST $fbUrl → HTTP AWAIT (fallback)');
+      final fbResponse = await _httpClient.post(
+        Uri.parse(fbUrl),
         headers: headers,
         body: jsonEncode(_buildCleanSadhanaDto(body)),
-      );
+      ).timeout(_requestTimeout);
+      fbStopwatch.stop();
+      _logResponse('POST', fbUrl, fbResponse.statusCode, fbStopwatch.elapsedMilliseconds);
       if (fbResponse.statusCode >= 200 && fbResponse.statusCode < 300) {
         return _processResponse(fbResponse);
       }
@@ -229,27 +285,34 @@ class ApiService {
   }
 
   static Future<dynamic> patch(String endpoint, Map<String, dynamic> body) async {
-    final headers = await _getHeaders();
     final url = '$baseUrl$endpoint';
-    debugPrint('📌 [PATCH REQUEST URL]: $url');
-    debugPrint('📌 [PATCH REQUEST BODY]: ${jsonEncode(body)}');
-    final response = await http.patch(
+    _logStart('PATCH', url);
+    final stopwatch = Stopwatch()..start();
+    final headers = await _getHeaders();
+    debugPrint('⏳ [API] PATCH $url → HTTP AWAIT');
+    final response = await _httpClient.patch(
       Uri.parse(url),
       headers: headers,
       body: jsonEncode(body),
-    );
-    debugPrint('📌 [PATCH RESPONSE STATUS]: ${response.statusCode}');
-    debugPrint('📌 [PATCH RESPONSE BODY]: ${response.body}');
+    ).timeout(_requestTimeout);
+    stopwatch.stop();
+    _logResponse('PATCH', url, response.statusCode, stopwatch.elapsedMilliseconds);
     return _processResponse(response);
   }
 
   static Future<dynamic> delete(String endpoint, {Map<String, dynamic>? body}) async {
+    final url = '$baseUrl$endpoint';
+    _logStart('DELETE', url);
+    final stopwatch = Stopwatch()..start();
     final headers = await _getHeaders();
-    final response = await http.delete(
-      Uri.parse('$baseUrl$endpoint'),
+    debugPrint('⏳ [API] DELETE $url → HTTP AWAIT');
+    final response = await _httpClient.delete(
+      Uri.parse(url),
       headers: headers,
       body: body != null ? jsonEncode(body) : null,
-    );
+    ).timeout(_requestTimeout);
+    stopwatch.stop();
+    _logResponse('DELETE', url, response.statusCode, stopwatch.elapsedMilliseconds);
     if (response.statusCode == 404) {
       final id = endpoint.split('/').last;
       return {'success': true, 'id': id};
@@ -258,12 +321,11 @@ class ApiService {
   }
 
   static dynamic _processResponse(http.Response response) {
-    debugPrint('API [${response.statusCode}] -> ${response.request?.url}');
     if (response.statusCode >= 400) {
       debugPrint('🚨 [API ERROR LOG] Status: ${response.statusCode} | URL: ${response.request?.url}');
       debugPrint('🚨 [API ERROR RESPONSE BODY]: ${response.body}');
     }
-    
+
     final bodyStr = response.body;
     dynamic jsonBody;
     try {

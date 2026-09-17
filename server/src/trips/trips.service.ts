@@ -9,12 +9,14 @@ import { Trip, TripDocument } from '../database/schemas/trips.schema';
 import { TripRegistration, TripRegistrationDocument } from '../database/schemas/trip-registrations.schema';
 import { CreateTripDto } from './dto/create-trip.dto';
 import { RegisterTripDto } from './dto/register-trip.dto';
+import { RealtimeService } from '../realtime/realtime.service';
 
 @Injectable()
 export class TripsService {
   constructor(
     @InjectModel(Trip.name) private readonly tripModel: Model<TripDocument>,
     @InjectModel(TripRegistration.name) private readonly registrationModel: Model<TripRegistrationDocument>,
+    private readonly realtimeService: RealtimeService,
   ) {}
 
   async createTrip(creatorUser: any, dto: CreateTripDto) {
@@ -23,6 +25,7 @@ export class TripsService {
       createdBy: creatorUser._id,
       isActive: true,
     });
+    this.realtimeService.emit('trip_update', 'create', trip);
     return trip;
   }
 
@@ -50,10 +53,12 @@ export class TripsService {
       registeredAt: new Date(),
     });
 
-    return {
+    const result = {
       registration,
       registrationLink: trip.registrationLink,
     };
+    this.realtimeService.emit('trip_update', 'register', result, { studentId: userId });
+    return result;
   }
 
   async getTripRegistrations(tripId: string) {

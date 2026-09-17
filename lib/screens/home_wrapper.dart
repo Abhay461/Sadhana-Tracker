@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../services/api_service.dart';
 import '../services/fcm_service.dart';
 import '../utils/notification_helper.dart';
+import '../utils/user_session.dart';
 
 class HomeWrapper extends StatefulWidget {
   const HomeWrapper({super.key});
@@ -52,13 +53,39 @@ class _HomeWrapperState extends State<HomeWrapper> {
     try {
       // Sync or fetch user profile from NestJS API
       final response = await ApiService.get('/users/me').timeout(const Duration(seconds: 25));
-      final rawRole = (response is Map ? response['role'] : null) ?? 'folk_boy';
-
-      if (mounted) {
-        _navigateToRole(rawRole.toString(), profile: response is Map<String, dynamic> ? response : null);
+      if (response is Map) {
+        final profileMap = Map<String, dynamic>.from(response);
+        final rawRole = (profileMap['role'] ?? '').toString();
+        if (rawRole.isNotEmpty) {
+          await UserSession.saveSession(
+            uid: user.uid,
+            role: rawRole,
+            profileData: profileMap,
+          );
+          if (mounted) {
+            _navigateToRole(rawRole, profile: profileMap);
+          }
+          return;
+        }
       }
+      throw Exception('Invalid profile payload');
     } catch (e) {
-      debugPrint('HOME_WRAPPER API Error: $e');
+      final errStr = e.toString();
+      debugPrint('HOME_WRAPPER API Error: $errStr');
+
+      final cachedSession = await UserSession.getSession(user.uid);
+      final cachedRole = cachedSession?['role']?.toString();
+      final cachedProfile = cachedSession?['profile'] as Map<String, dynamic>?;
+
+      if (cachedRole != null && cachedRole.isNotEmpty) {
+        debugPrint('HOME_WRAPPER Fallback: Using verified cached role "$cachedRole" for UID ${user.uid}');
+        if (mounted) {
+          _navigateToRole(cachedRole, profile: cachedProfile);
+        }
+        return;
+      }
+
+      debugPrint('HOME_WRAPPER Blocked: No reliable cached role for UID ${user.uid}. Redirecting to login.');
       if (mounted) {
         Navigator.pushReplacementNamed(context, '/login');
       }

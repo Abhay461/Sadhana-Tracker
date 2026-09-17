@@ -9,11 +9,13 @@ import { Model } from 'mongoose';
 import { Payment, PaymentDocument } from '../database/schemas/payments.schema';
 import { SubmitPaymentDto } from './dto/submit-payment.dto';
 import { ApprovePaymentDto } from './dto/approve-payment.dto';
+import { RealtimeService } from '../realtime/realtime.service';
 
 @Injectable()
 export class PaymentsService {
   constructor(
     @InjectModel(Payment.name) private readonly paymentModel: Model<PaymentDocument>,
+    private readonly realtimeService: RealtimeService,
   ) {}
 
   async submitPayment(user: any, dto: SubmitPaymentDto) {
@@ -29,6 +31,11 @@ export class PaymentsService {
       proofUrl: dto.proofUrl || '',
       remarks: dto.remarks || '',
       status: 'SUBMITTED',
+    });
+
+    this.realtimeService.emit('payment_update', 'create', payment, {
+      preacherId: user.preacherId?.toString(),
+      studentId: user._id?.toString(),
     });
 
     return payment;
@@ -61,6 +68,11 @@ export class PaymentsService {
       payment.remarks = dto.remarks;
     }
     await payment.save();
+
+    this.realtimeService.emit('payment_update', 'update', payment, {
+      preacherId: preacherId.toString(),
+      studentId: payment.userId?.toString(),
+    });
 
     return payment;
   }

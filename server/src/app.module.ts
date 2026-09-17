@@ -24,6 +24,7 @@ import { DailyDarshanModule } from './daily-darshan/daily-darshan.module';
 import { DailyQuotesModule } from './daily-quotes/daily-quotes.module';
 import { CoursesModule } from './courses/courses.module';
 import { FestivalsModule } from './festivals/festivals.module';
+import { RealtimeModule } from './realtime/realtime.module';
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { FestivalsModule } from './festivals/festivals.module';
     DailyQuotesModule,
     CoursesModule,
     FestivalsModule,
+    RealtimeModule,
   ],
 })
 export class AppModule {}

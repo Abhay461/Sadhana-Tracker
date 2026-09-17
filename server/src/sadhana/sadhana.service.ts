@@ -9,6 +9,7 @@ import { User, UserDocument } from '../database/schemas/users.schema';
 import { Appointment, AppointmentDocument } from '../database/schemas/appointments.schema';
 import { LogSadhanaDto } from './dto/log-sadhana.dto';
 import { LockDayDto } from './dto/lock-day.dto';
+import { RealtimeService } from '../realtime/realtime.service';
 
 @Injectable()
 export class SadhanaService {
@@ -16,6 +17,7 @@ export class SadhanaService {
     @InjectModel(SadhanaEntry.name) private readonly sadhanaModel: Model<SadhanaEntryDocument>,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(Appointment.name) private readonly appointmentModel: Model<AppointmentDocument>,
+    private readonly realtimeService: RealtimeService,
   ) {}
 
   private calculatePoints(activities: any): number {
@@ -101,6 +103,7 @@ export class SadhanaService {
       { new: true, upsert: true, runValidators: false },
     );
 
+    this.realtimeService.emit('sadhana_update', 'create', updatedEntry, { studentId: userId });
     return updatedEntry;
   }
 
@@ -171,11 +174,15 @@ export class SadhanaService {
         preacherId: preacherIdRaw,
         response: responsePayload,
       }));
+      this.realtimeService.emit('appointment_update', 'create', responsePayload, {
+        preacherId: preacherIdRaw,
+        studentId: userId,
+      });
       return responsePayload;
     }
 
     if (category === 'accommodation' || category === 'residency_admission' || category === 'payment') {
-      return {
+      const payload = {
         _id: Date.now().toString(),
         id: Date.now().toString(),
         worker_id: userId,
@@ -190,6 +197,10 @@ export class SadhanaService {
         points: points,
         created_at: new Date().toISOString(),
       };
+
+      const eventType = category === 'accommodation' ? 'accommodation_update' : (category === 'payment' ? 'payment_update' : 'sadhana_update');
+      this.realtimeService.emit(eventType, 'create', payload, { studentId: userId });
+      return payload;
     }
 
     const newAct: any = {};
@@ -533,12 +544,13 @@ export class SadhanaService {
           ...body,
         };
         console.log(`📌 [APPOINTMENT APPROVE/REJECT RESPONSE]:`, JSON.stringify(response));
+        this.realtimeService.emit('appointment_update', 'update', response);
         return response;
       }
     }
 
     console.log(`📌 [UPDATE SESSIONS FALLBACK]: ID=${id}`);
-    return {
+    const fallbackRes = {
       _id: id,
       id,
       ...body,
@@ -546,6 +558,8 @@ export class SadhanaService {
       work_completed: status,
       is_completed: true,
     };
+    this.realtimeService.emit('sadhana_update', 'update', fallbackRes);
+    return fallbackRes;
   }
 
   async deleteUpdate(id: string, label?: string, activityKey?: string) {
@@ -636,7 +650,9 @@ export class SadhanaService {
       await this.sadhanaModel.deleteOne({ _id: entry._id });
       deleted = true;
     }
-    return { success: true, id, deleted };
+    const delResult = { success: true, id, deleted };
+    this.realtimeService.emit('sadhana_update', 'delete', delResult);
+    return delResult;
   }
 
   private determineActivityKeyFromLabel(label: string): string | null {
@@ -694,6 +710,7 @@ export class SadhanaService {
       },
       { new: true, upsert: true },
     );
+    this.realtimeService.emit('sadhana_update', 'update', entry, { studentId: dto.userId });
     return entry;
   }
 }

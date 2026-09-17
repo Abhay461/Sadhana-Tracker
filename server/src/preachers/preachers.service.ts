@@ -8,12 +8,14 @@ import { Model } from 'mongoose';
 import { User, UserDocument } from '../database/schemas/users.schema';
 import { SadhanaEntry, SadhanaEntryDocument } from '../database/schemas/sadhana-entries.schema';
 import { ApproveStudentDto } from './dto/approve-student.dto';
+import { RealtimeService } from '../realtime/realtime.service';
 
 @Injectable()
 export class PreachersService {
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(SadhanaEntry.name) private readonly sadhanaModel: Model<SadhanaEntryDocument>,
+    private readonly realtimeService: RealtimeService,
   ) {}
 
   async getMyStudents(preacherId: string) {
@@ -45,11 +47,13 @@ export class PreachersService {
     student.status = dto.status;
     await student.save();
 
-    return {
+    const res = {
       id: student._id,
       name: student.name,
       status: student.status,
     };
+    this.realtimeService.emit('student_update', 'update', res, { preacherId, studentId });
+    return res;
   }
 
   async getStudentProgress(preacherId: string, studentId: string) {

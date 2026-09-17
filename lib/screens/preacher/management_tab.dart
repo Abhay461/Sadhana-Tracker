@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../services/api_service.dart';
+import '../../widgets/student_sadhana_excel_grid.dart';
 
 class ManagementTab extends StatefulWidget {
   final List<dynamic> folkBoys;
@@ -29,6 +30,9 @@ class _ManagementTabState extends State<ManagementTab> {
   String _selectedRoleFilter = 'All'; // 'All', 'folk_boy', 'residency'
   Map<String, dynamic>? _selectedBoy;
   final Set<String> _expandedScreenTimeIds = {};
+  Map<String, dynamic>? _todayFestival;
+  bool _showExcelGridInManagement = true;
+
 
   @override
   void initState() {
@@ -38,6 +42,125 @@ class _ManagementTabState extends State<ManagementTab> {
         _managementSearchTerm = _managementSearchController.text.trim();
       });
     });
+    _fetchTodayFestival();
+  }
+
+  static String _getOptimizedFestivalImageUrl(String url) {
+    if (url.isEmpty) return '';
+    if (url.contains('cloudinary.com') && url.contains('/upload/')) {
+      if (!url.contains('/q_auto')) {
+        return url.replaceFirst('/upload/', '/upload/w_500,c_limit,q_auto:eco,f_auto/');
+      }
+    }
+    return url;
+  }
+
+  Future<void> _fetchTodayFestival() async {
+    try {
+      final response = await ApiService.get('/festivals/today').timeout(const Duration(seconds: 15));
+      if (response != null && response is Map<String, dynamic>) {
+        final img = (response['imageUrl'] as String? ?? '').trim();
+        if (img.isNotEmpty && mounted) {
+          final optUrl = _getOptimizedFestivalImageUrl(img);
+          precacheImage(NetworkImage(optUrl), context).catchError((_) {});
+        }
+        if (mounted) {
+          setState(() {
+            _todayFestival = response;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _todayFestival = null;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching today festival: $e');
+      if (mounted) {
+        setState(() {
+          _todayFestival = null;
+        });
+      }
+    }
+  }
+
+  Widget _buildTodayFestivalCard() {
+    final bool hasFestival = _todayFestival != null && (_todayFestival!['title'] as String? ?? '').trim().isNotEmpty;
+
+    if (!hasFestival) return const SizedBox.shrink();
+
+    final festivalTitle = (_todayFestival!['title'] as String? ?? '').trim();
+    final rawImageUrl = (_todayFestival!['imageUrl'] as String? ?? '');
+    final imageUrl = _getOptimizedFestivalImageUrl(rawImageUrl);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: const [
+              Text(
+                "Today's Festival",
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              if (imageUrl.isNotEmpty) ...[
+                ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxHeight: 85,
+                    maxWidth: 90,
+                  ),
+                  child: Image.network(
+                    imageUrl,
+                    fit: BoxFit.contain,
+                    gaplessPlayback: true,
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return const SizedBox(
+                        width: 50,
+                        height: 50,
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Color(0xFFD97706),
+                          ),
+                        ),
+                      );
+                    },
+                    errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+                  ),
+                ),
+                const SizedBox(width: 16),
+              ],
+              Expanded(
+                child: Text(
+                  festivalTitle,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0F172A),
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -395,11 +518,43 @@ class _ManagementTabState extends State<ManagementTab> {
     );
   }
 
+  List<dynamic> _getAllUpdatesForBoy(Map<String, dynamic> boy) {
+    final sId = (boy['id'] ?? boy['_id'] ?? boy['userId'] ?? boy['user_id'] ?? (boy['user'] is Map ? boy['user']['_id'] ?? boy['user']['id'] : null) ?? '').toString();
+    final sName = (boy['name'] ?? boy['student_name'] ?? boy['studentName'] ?? boy['userName'] ?? (boy['user'] is Map ? boy['user']['name'] : null) ?? '').toString().trim().toLowerCase();
+
+    final List<dynamic> candidateLogs = [
+      ...?widget.allUpdates[sId],
+      ...?widget.allUpdates[sName],
+      ...?widget.allUpdates[boy['id']?.toString()],
+      ...?widget.allUpdates[boy['_id']?.toString()],
+      ...?widget.allUpdates[boy['name']?.toString()],
+      ...widget.allUpdates.values.expand((x) => x).where((u) {
+        if (u is! Map<String, dynamic>) return false;
+        final uId = (u['worker_id'] ?? u['workerId'] ?? u['user_id'] ?? u['userId'] ?? u['student_id'] ?? u['studentId'] ?? u['createdBy'] ?? u['created_by'] ?? (u['user'] is Map ? u['user']['_id'] ?? u['user']['id'] : u['user']) ?? '').toString();
+        final uName = (u['worker_name'] ?? u['workerName'] ?? u['name'] ?? u['student_name'] ?? u['studentName'] ?? u['userName'] ?? u['user_name'] ?? (u['user'] is Map ? u['user']['name'] : null) ?? '').toString().trim().toLowerCase();
+
+        if (sId.isNotEmpty && uId.isNotEmpty && sId == uId) return true;
+        if (sName.isNotEmpty && uName.isNotEmpty) {
+          if (sName == uName) return true;
+          if (sName.length >= 3 && uName.length >= 3 && (sName.contains(uName) || uName.contains(sName))) return true;
+        }
+        return false;
+      }),
+    ];
+
+    final Map<String, dynamic> uniqueLogsMap = {};
+    for (var u in candidateLogs) {
+      if (u is Map<String, dynamic>) {
+        final uIdKey = (u['id'] ?? u['_id'] ?? '${u['date']}_${u['work_started']}_${u['category']}').toString();
+        uniqueLogsMap[uIdKey] = u;
+      }
+    }
+
+    return uniqueLogsMap.values.toList();
+  }
+
   Widget _buildBoyDetailView() {
-    final boyId = _selectedBoy!['id'].toString();
-    final boyUpdates = (widget.allUpdates[boyId] ?? [])
-        .where((u) => u['category'] != 'screen_time')
-        .toList();
+    final allBoyUpdates = _getAllUpdatesForBoy(_selectedBoy!);
 
     return Column(
       children: [
@@ -504,148 +659,17 @@ class _ManagementTabState extends State<ManagementTab> {
                     child: const Text('Back', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10)),
                   )
                 ],
-              )
+              ),
             ],
           ),
         ),
         const Divider(height: 1),
         Expanded(
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              _buildSadhanaCardWidget(
-                sadhanaLogs: boyUpdates,
-                studentName: _selectedBoy!['name'],
-              ),
-              if (boyUpdates.isNotEmpty) ...[
-                const Padding(
-                  padding: EdgeInsets.only(left: 4, bottom: 12, top: 4),
-                  child: Text(
-                    'All Student Logs & Activity Feed',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF3F1200)),
-                  ),
-                ),
-                ...boyUpdates.map((u) {
-                  final date = u['date'] ?? '';
-                  final isCompleted = u['is_completed'] ?? false;
-                  final isScreenTime = u['category'] == 'screen_time';
-                  final updateId = u['id']?.toString() ?? '';
-                  final isExpanded = _expandedScreenTimeIds.contains(updateId);
-
-                  return Card(
-                    color: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18),
-                      side: BorderSide(color: Colors.grey[200]!),
-                    ),
-                    margin: const EdgeInsets.only(bottom: 12),
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: isScreenTime
-                            ? const Color(0xFFFCE7F3)
-                            : (isCompleted ? const Color(0xFFD1FAE5) : const Color(0xFFFEF3C7)),
-                        child: Icon(
-                          isScreenTime
-                              ? Icons.smartphone_outlined
-                              : (isCompleted ? Icons.check_circle : Icons.timer),
-                          color: isScreenTime
-                              ? const Color(0xFFDB2777)
-                              : (isCompleted ? const Color(0xFF059669) : const Color(0xFFD97706)),
-                        ),
-                      ),
-                      title: Text(u['work_started'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            isScreenTime
-                                ? 'Date: $date • Screen Time Log'
-                                : 'Date: $date • Points: ${u['points'] ?? 0}',
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey),
-                          ),
-                          if (isScreenTime && u['description'] != null) ...[
-                            const SizedBox(height: 6),
-                            InkWell(
-                              onTap: () {
-                                setState(() {
-                                  if (isExpanded) {
-                                    _expandedScreenTimeIds.remove(updateId);
-                                  } else {
-                                    _expandedScreenTimeIds.add(updateId);
-                                  }
-                                });
-                              },
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 4.0),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                                      size: 16,
-                                      color: const Color(0xFFDB2777),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      isExpanded ? 'Hide Screen Time Details' : 'Show Screen Time Details',
-                                      style: const TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                        color: Color(0xFFDB2777),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            if (isExpanded) ...[
-                              const SizedBox(height: 8),
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFFDF2F8),
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(color: const Color(0xFFFCE7F3)),
-                                ),
-                                child: Text(
-                                  u['description'] as String,
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    height: 1.4,
-                                    color: Color(0xFF9D174D),
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ]
-                        ],
-                      ),
-                      trailing: u['photo_url'] != null
-                          ? IconButton(
-                              icon: const Icon(Icons.image_outlined, color: Colors.indigo),
-                              onPressed: () {
-                                showDialog(
-                                  context: context,
-                                  builder: (context) => Dialog(
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(20),
-                                      child: Image.network(u['photo_url']),
-                                    ),
-                                  ),
-                                );
-                              },
-                            )
-                          : null,
-                    ),
-                  );
-                }),
-              ],
-            ],
+          child: StudentSadhanaExcelGrid(
+            studentUpdates: allBoyUpdates,
+            studentName: _selectedBoy!['name'] ?? 'Student',
           ),
-        )
+        ),
       ],
     );
   }
@@ -1293,13 +1317,14 @@ class _ManagementTabState extends State<ManagementTab> {
     }
 
     // MAIN DASHBOARD MATRIX TABLE (MULTIPLE STUDENTS SIDE-BY-SIDE)
-    final List<Map<String, dynamic>> studentsToDisplay = [];
+    final List<Map<String, dynamic>> rawCandidates = [];
+    final Set<String> seenCandidateIds = {};
     if (widget.folkBoys.isNotEmpty) {
       for (var b in widget.folkBoys) {
-        if (b is Map<String, dynamic>) {
-          studentsToDisplay.add(b);
-        } else if (b is Map) {
-          studentsToDisplay.add(Map<String, dynamic>.from(b));
+        final map = b is Map<String, dynamic> ? b : Map<String, dynamic>.from(b as Map);
+        final id = (map['id'] ?? map['_id'] ?? map['userId'] ?? map['user_id'] ?? '').toString();
+        if (id.isEmpty || seenCandidateIds.add(id)) {
+          rawCandidates.add(map);
         }
       }
     } else {
@@ -1310,7 +1335,34 @@ class _ManagementTabState extends State<ManagementTab> {
         if (id.isNotEmpty) uniqueNames[id] = name;
       }
       for (var entry in uniqueNames.entries) {
-        studentsToDisplay.add({'id': entry.key, 'name': entry.value});
+        if (seenCandidateIds.add(entry.key)) {
+          rawCandidates.add({'id': entry.key, 'name': entry.value});
+        }
+      }
+    }
+
+    // Filter rawCandidates based on actual Sadhana records for the selected/active date
+    final List<Map<String, dynamic>> studentsToDisplay = [];
+    for (var student in rawCandidates) {
+      final studentId = (student['id'] ?? student['_id'] ?? student['userId'] ?? student['user_id'] ?? (student['user'] is Map ? student['user']['_id'] ?? student['user']['id'] : null) ?? '').toString();
+      final studentNameStr = (student['name'] ?? student['student_name'] ?? student['studentName'] ?? student['userName'] ?? (student['user'] is Map ? student['user']['name'] : null) ?? '').toString().trim().toLowerCase();
+
+      final List<dynamic> candidateLogs = [
+        ...?(widget.allUpdates[studentId]),
+        ...?(widget.allUpdates[studentNameStr]),
+        ...sadhanaLogs.where((u) => isSameStudent(student, u)),
+        ...widget.allUpdates.values.expand((x) => x).where((u) => isSameStudent(student, u)),
+      ];
+
+      final Map<String, dynamic> uniqueBoyLogsMap = {};
+      for (var u in candidateLogs) {
+        final uIdKey = (u['id'] ?? u['_id'] ?? '${u['date']}_${u['work_started']}').toString();
+        uniqueBoyLogsMap[uIdKey] = u;
+      }
+
+      final boyLogs = uniqueBoyLogsMap.values.where((u) => matchesLogDate(u)).toList();
+      if (boyLogs.isNotEmpty) {
+        studentsToDisplay.add(student);
       }
     }
 
@@ -1439,8 +1491,33 @@ class _ManagementTabState extends State<ManagementTab> {
             ],
           ),
         ),
-        Container(
-          margin: const EdgeInsets.only(bottom: 12),
+        if (studentsToDisplay.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(24),
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: const Center(
+              child: Column(
+                children: [
+                  Icon(Icons.assignment_outlined, size: 36, color: Colors.grey),
+                  SizedBox(height: 8),
+                  Text(
+                    'No disciples have submitted sadhana for this date.',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
           constraints: BoxConstraints(
             maxHeight: studentsToDisplay.length > 6 ? 288.0 : double.infinity,
           ),
@@ -1705,11 +1782,19 @@ class _ManagementTabState extends State<ManagementTab> {
     return Column(
       children: [
         Expanded(
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              _buildSadhanaCardWidget(sadhanaLogs: sadhanaTasks),
-            ],
+          child: RefreshIndicator(
+            onRefresh: () async {
+              await _fetchTodayFestival();
+              await widget.onRefresh();
+            },
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                _buildTodayFestivalCard(),
+                _buildSadhanaCardWidget(sadhanaLogs: sadhanaTasks),
+              ],
+            ),
           ),
         ),
       ],

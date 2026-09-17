@@ -9,12 +9,14 @@ import { Event, EventDocument } from '../database/schemas/events.schema';
 import { EventRegistration, EventRegistrationDocument } from '../database/schemas/event-registrations.schema';
 import { CreateEventDto } from './dto/create-event.dto';
 import { RegisterEventDto } from './dto/register-event.dto';
+import { RealtimeService } from '../realtime/realtime.service';
 
 @Injectable()
 export class EventsService {
   constructor(
     @InjectModel(Event.name) private readonly eventModel: Model<EventDocument>,
     @InjectModel(EventRegistration.name) private readonly registrationModel: Model<EventRegistrationDocument>,
+    private readonly realtimeService: RealtimeService,
   ) {}
 
   async createEvent(creatorUser: any, dto: CreateEventDto) {
@@ -23,6 +25,7 @@ export class EventsService {
       createdBy: creatorUser._id,
       isActive: true,
     });
+    this.realtimeService.emit('event_update', 'create', event);
     return event;
   }
 
@@ -50,10 +53,12 @@ export class EventsService {
       registeredAt: new Date(),
     });
 
-    return {
+    const result = {
       registration,
       registrationLink: event.registrationLink,
     };
+    this.realtimeService.emit('event_update', 'register', result, { studentId: userId });
+    return result;
   }
 
   async getEventRegistrations(eventId: string) {

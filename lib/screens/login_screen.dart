@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/api_service.dart';
 import '../utils/notification_helper.dart';
+import '../utils/user_session.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -97,6 +98,14 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
         final rawRole = (profileData?['role'] ?? 'folk_boy').toString().toLowerCase();
         final role = rawRole.replaceAll('pending_', '');
+
+        if (profileData != null) {
+          UserSession.saveSession(
+            uid: credential.user!.uid,
+            role: rawRole,
+            profileData: profileData,
+          );
+        }
 
         if (mounted) {
           NotificationHelper.loginUser(credential.user!.uid).catchError((_) {});

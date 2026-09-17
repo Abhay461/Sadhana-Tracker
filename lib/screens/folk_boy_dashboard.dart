@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show File, Platform, Directory;
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
@@ -346,6 +347,110 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     }
   }
 
+  List<String> _birthdayStudentNames = [];
+
+  DateTime? _parseStudentDob(Map<String, dynamic>? profile) {
+    if (profile == null) return null;
+    dynamic rawVal = profile['dob'] ?? profile['date_of_birth'] ?? profile['dateOfBirth'];
+    String rawDob = rawVal != null ? rawVal.toString().trim() : '';
+
+    final whatsapp = (profile['whatsapp_number'] ?? profile['whatsapp'] ?? profile['phoneNumber'] ?? '').toString();
+    if ((rawDob.isEmpty || rawDob == 'N/A') && whatsapp.contains('DOB:')) {
+      for (var part in whatsapp.split('|')) {
+        final p = part.trim();
+        if (p.startsWith('DOB:')) {
+          rawDob = p.replaceAll('DOB:', '').trim();
+          break;
+        }
+      }
+    }
+
+    if (rawDob.isEmpty || rawDob == 'N/A') return null;
+
+    try {
+      final cleanStr = rawDob.split('T')[0].split(' ')[0].trim();
+      final parsed = DateTime.tryParse(cleanStr) ?? DateTime.tryParse(rawDob);
+      if (parsed != null) {
+        return parsed;
+      }
+
+      String delimiter = '';
+      if (cleanStr.contains('-')) {
+        delimiter = '-';
+      } else if (cleanStr.contains('/')) {
+        delimiter = '/';
+      } else if (cleanStr.contains('.')) {
+        delimiter = '.';
+      }
+
+      if (delimiter.isNotEmpty) {
+        final parts = cleanStr.split(delimiter);
+        if (parts.length == 3) {
+          int p0 = int.parse(parts[0]);
+          int p1 = int.parse(parts[1]);
+          int p2 = int.parse(parts[2]);
+
+          if (parts[0].length == 4) {
+            return DateTime(p0, p1, p2);
+          } else if (parts[2].length == 4) {
+            return DateTime(p2, p1, p0);
+          } else if (parts[2].length == 2) {
+            int year = p2 > 50 ? 1900 + p2 : 2000 + p2;
+            return DateTime(year, p1, p0);
+          } else {
+            int year = p2 < 100 ? 2000 + p2 : p2;
+            return DateTime(year, p1, p0);
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  bool _isStudentBirthdayToday(Map<String, dynamic>? profile) {
+    if (profile == null) return false;
+    final name = (profile['name'] ?? profile['displayName'] ?? 'Devotee').toString().trim();
+
+    dynamic rawVal = profile['dob'] ?? profile['date_of_birth'] ?? profile['dateOfBirth'];
+    String rawDob = rawVal != null ? rawVal.toString().trim() : '';
+    final whatsapp = (profile['whatsapp_number'] ?? profile['whatsapp'] ?? profile['phoneNumber'] ?? '').toString();
+    if ((rawDob.isEmpty || rawDob == 'N/A') && whatsapp.contains('DOB:')) {
+      for (var part in whatsapp.split('|')) {
+        final p = part.trim();
+        if (p.startsWith('DOB:')) {
+          rawDob = p.replaceAll('DOB:', '').trim();
+          break;
+        }
+      }
+    }
+
+    final dob = _parseStudentDob(profile);
+    final now = DateTime.now();
+    final bool matched = (dob != null) && (dob.month == now.month) && (dob.day == now.day);
+
+    debugPrint('[Birthday Debug] Student name: $name');
+    debugPrint('[Birthday Debug] Birthday field value from API: $rawDob');
+    debugPrint('[Birthday Debug] Parsed birthday month/day: ${dob != null ? "${dob.month}/${dob.day}" : "null"}');
+    debugPrint('[Birthday Debug] Today month/day: ${now.month}/${now.day}');
+    debugPrint('[Birthday Debug] Birthday matched: $matched');
+
+    return matched;
+  }
+
+  Future<void> _fetchBirthdayStudents() async {
+    final Set<String> todayNames = {};
+    if (_profile != null && _isStudentBirthdayToday(_profile)) {
+      final name = (_profile!['name'] ?? 'Devotee').toString().trim();
+      if (name.isNotEmpty) todayNames.add(name);
+    }
+
+    if (mounted) {
+      setState(() {
+        _birthdayStudentNames = todayNames.toList();
+      });
+    }
+  }
+
   @override
   void dispose() {
     try {
@@ -418,6 +523,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       }
 
       _fetchUpdates();
+      _fetchBirthdayStudents();
 
       Map<String, dynamic>? resolvedPreacher;
       if (profileData['preacher'] is Map) {
@@ -1788,10 +1894,13 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   }
 
   Widget _buildTodayFestivalCard() {
-    if (_todayFestival == null) return const SizedBox.shrink();
+    final bool hasBirthday = _profile != null && _isStudentBirthdayToday(_profile);
+    final bool hasFestival = _todayFestival != null && (_todayFestival!['title'] as String? ?? '').trim().isNotEmpty;
 
-    final title = _todayFestival!['title'] as String? ?? 'Today\'s Festival';
-    final rawImageUrl = _todayFestival!['imageUrl'] as String? ?? '';
+    if (!hasFestival && !hasBirthday) return const SizedBox.shrink();
+
+    final festivalTitle = hasFestival ? (_todayFestival!['title'] as String? ?? '').trim() : '';
+    final rawImageUrl = hasFestival ? (_todayFestival!['imageUrl'] as String? ?? '') : '';
     final imageUrl = _getOptimizedFestivalImageUrl(rawImageUrl);
 
     return Container(
@@ -1799,58 +1908,85 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            "Today's Festival",
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF0F172A),
-            ),
-          ),
-          const SizedBox(height: 10),
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              if (imageUrl.isNotEmpty)
-                ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    maxHeight: 85,
-                    maxWidth: 90,
-                  ),
-                  child: Image.network(
-                    imageUrl,
-                    fit: BoxFit.contain,
-                    gaplessPlayback: true,
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return const SizedBox(
-                        width: 50,
-                        height: 50,
-                        child: Center(
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Color(0xFFD97706),
-                          ),
-                        ),
-                      );
-                    },
-                    errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
-                  ),
-                ),
-              if (imageUrl.isNotEmpty) const SizedBox(width: 16),
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F172A),
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+              Text(
+                hasFestival ? "Today's Festival" : "",
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0F172A),
                 ),
               ),
+              if (hasBirthday)
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(
+                      Icons.cake_rounded,
+                      color: Color(0xFFEC4899),
+                      size: 24,
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Happy Birthday',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFEC4899),
+                      ),
+                    ),
+                  ],
+                ),
             ],
           ),
+          if (hasFestival) const SizedBox(height: 10),
+          if (hasFestival)
+            Row(
+              children: [
+                if (imageUrl.isNotEmpty) ...[
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      maxHeight: 85,
+                      maxWidth: 90,
+                    ),
+                    child: Image.network(
+                      imageUrl,
+                      fit: BoxFit.contain,
+                      gaplessPlayback: true,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return const SizedBox(
+                          width: 50,
+                          height: 50,
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Color(0xFFD97706),
+                            ),
+                          ),
+                        );
+                      },
+                      errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                ],
+                Expanded(
+                  child: Text(
+                    festivalTitle,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0F172A),
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );
@@ -1864,6 +2000,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         await _fetchDailyDarshan();
         await _fetchDailyQuote();
         await _fetchTodayFestival();
+        await _fetchBirthdayStudents();
       },
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
