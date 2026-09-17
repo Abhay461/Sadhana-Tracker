@@ -51,7 +51,7 @@ class _HomeWrapperState extends State<HomeWrapper> {
 
     try {
       // Sync or fetch user profile from NestJS API
-      final response = await ApiService.get('/users/me').timeout(const Duration(seconds: 4));
+      final response = await ApiService.get('/users/me').timeout(const Duration(seconds: 25));
       final rawRole = (response is Map ? response['role'] : null) ?? 'folk_boy';
 
       if (mounted) {

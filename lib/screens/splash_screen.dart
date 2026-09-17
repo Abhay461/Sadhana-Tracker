@@ -62,7 +62,7 @@ class _SplashScreenState extends State<SplashScreen> {
     FcmService.initialize().catchError((_) {});
 
     try {
-      final response = await ApiService.get('/users/me').timeout(const Duration(seconds: 12));
+      final response = await ApiService.get('/users/me').timeout(const Duration(seconds: 30));
       final profileData = response is Map ? Map<String, dynamic>.from(response) : null;
       final rawRole = (profileData?['role'] ?? 'folk_boy').toString().toLowerCase();
 

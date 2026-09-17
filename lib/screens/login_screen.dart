@@ -77,7 +77,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           if (syncRes is Map) {
             profileData = Map<String, dynamic>.from(syncRes);
           }
-        } catch (_) {}
+        } catch (syncErr) {
+          debugPrint('Login /auth/sync error: $syncErr');
+        }
 
         if (profileData == null) {
           try {
@@ -85,7 +87,12 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             if (meRes is Map) {
               profileData = Map<String, dynamic>.from(meRes);
             }
-          } catch (_) {}
+          } catch (meErr) {
+            debugPrint('Login /users/me error: $meErr');
+            if (profileData == null) {
+              throw meErr;
+            }
+          }
         }
 
         final rawRole = (profileData?['role'] ?? 'folk_boy').toString().toLowerCase();
@@ -105,12 +112,15 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     } catch (e) {
       if (!mounted) return;
       final String rawErr = e.toString();
+      debugPrint('LOGIN ERROR HANDLED: $rawErr');
       setState(() {
         _isLoading = false;
         if (rawErr.contains('invalid-credential') || rawErr.contains('user-not-found') || rawErr.contains('wrong-password')) {
           _errorMessage = 'Account not found or invalid credentials. Please click "Create Account" below to register.';
+        } else if (rawErr.contains('TimeoutException') || rawErr.contains('timeout')) {
+          _errorMessage = 'Server is waking up (Render Cold Start). Please wait a few seconds and try again.';
         } else {
-          _errorMessage = rawErr.replaceAll('Exception: ', '');
+          _errorMessage = rawErr.replaceAll('ApiException', '').replaceAll('Exception:', '').trim();
         }
       });
     } finally {

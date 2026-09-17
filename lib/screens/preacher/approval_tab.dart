@@ -280,22 +280,33 @@ class _ApprovalTabState extends State<ApprovalTab> {
   Widget build(BuildContext context) {
     final pendingUpdates = [];
     final completedUpdates = [];
+    final Set<String> seenPendingIds = {};
+    final Set<String> seenCompletedIds = {};
 
     for (var list in widget.allUpdates.values) {
       for (var u in list) {
         final cat = u['category'];
+        final id = (u['_id'] ?? u['id'] ?? u['appointmentId'] ?? '').toString();
         if (cat == 'preacher_appointment' || cat == 'accommodation' || cat == 'residency_admission') {
           if (u['is_completed'] == false) {
-            pendingUpdates.add(u);
+            if (id.isEmpty || seenPendingIds.add(id)) {
+              pendingUpdates.add(u);
+            }
           } else {
-            completedUpdates.add(u);
+            if (id.isEmpty || seenCompletedIds.add(id)) {
+              completedUpdates.add(u);
+            }
           }
         } else if (cat == 'payment') {
           final workCompleted = u['work_completed'] ?? '';
           if (u['is_completed'] == false && (workCompleted == 'SUBMITTED' || workCompleted == 'WAITING_APPROVAL')) {
-            pendingUpdates.add(u);
+            if (id.isEmpty || seenPendingIds.add(id)) {
+              pendingUpdates.add(u);
+            }
           } else if (u['is_completed'] == true && workCompleted == 'PAID') {
-            completedUpdates.add(u);
+            if (id.isEmpty || seenCompletedIds.add(id)) {
+              completedUpdates.add(u);
+            }
           }
         }
       }
@@ -303,25 +314,21 @@ class _ApprovalTabState extends State<ApprovalTab> {
     pendingUpdates.sort((a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''));
     completedUpdates.sort((a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''));
 
-    final pendingAccounts = widget.folkBoys.where((b) {
-      final role = b['role'] as String? ?? '';
-      return role.startsWith('pending_');
-    }).toList();
-
     return DefaultTabController(
-      length: 3,
+      length: 2,
       child: Column(
         children: [
           Container(
-            color: Colors.white,
+            color: Colors.transparent,
             child: const TabBar(
+              dividerColor: Colors.transparent,
+              dividerHeight: 0,
               indicatorColor: Color(0xFF0F766E),
               labelColor: Color(0xFF0F766E),
               unselectedLabelColor: Colors.grey,
               labelStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
               indicatorSize: TabBarIndicatorSize.tab,
               tabs: [
-                Tab(text: 'NEW ACCOUNTS'),
                 Tab(text: 'PENDING REQUESTS'),
                 Tab(text: 'APPROVAL HISTORY'),
               ],
@@ -330,7 +337,6 @@ class _ApprovalTabState extends State<ApprovalTab> {
           Expanded(
             child: TabBarView(
               children: [
-                _buildPendingAccountsTab(pendingAccounts),
                 _buildPendingTab(pendingUpdates),
                 _buildHistoryTab(completedUpdates),
               ],
@@ -338,260 +344,6 @@ class _ApprovalTabState extends State<ApprovalTab> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildPendingAccountsTab(List<dynamic> pendingAccounts) {
-    if (pendingAccounts.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.people_outline, size: 50, color: Colors.grey),
-            SizedBox(height: 12),
-            Text(
-              'No pending account approvals.',
-              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: pendingAccounts.length,
-      itemBuilder: (buildCtx, index) {
-        final account = pendingAccounts[index];
-        final name = account['name'] ?? 'User';
-        final email = account['email'] ?? 'No email';
-        final rawRole = account['role'] as String? ?? 'pending_folk_boy';
-        final targetRoleDisplay = rawRole.replaceAll('pending_', '').replaceAll('_', ' ').toUpperCase();
-        
-        // Extract WhatsApp and dates
-        final whatsappStr = account['whatsapp_number'] ?? '';
-        String phone = whatsappStr;
-        String dob = 'N/A';
-        String joinDate = 'N/A';
-        if (whatsappStr.contains('|')) {
-          final parts = whatsappStr.split('|');
-          phone = parts[0].trim();
-          for (var part in parts) {
-            if (part.contains('DOB:')) {
-              dob = part.replaceAll('DOB:', '').trim();
-            } else if (part.contains('JOIN:')) {
-              joinDate = part.replaceAll('JOIN:', '').trim();
-            }
-          }
-        }
-
-        return Card(
-          color: Colors.white,
-          margin: const EdgeInsets.only(bottom: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-            side: BorderSide(color: Colors.grey[200]!),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    CircleAvatar(
-                      backgroundColor: Colors.indigo[50],
-                      child: Text(
-                        name[0].toUpperCase(),
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  name,
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFEEF2F6),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(color: const Color(0xFFCBD5E1), width: 0.5),
-                                ),
-                                child: Text(
-                                  'PENDING $targetRoleDisplay',
-                                  style: const TextStyle(
-                                    fontSize: 8,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF475569),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            email,
-                            style: const TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                
-                // Details Row/Grid
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildInfoItem('WhatsApp', phone, Icons.phone_android),
-                    ),
-                    Expanded(
-                      child: _buildInfoItem('DOB', dob, Icons.cake_outlined),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildInfoItem('Joining Date', joinDate, Icons.flag_outlined),
-                    ),
-                    const Spacer(),
-                  ],
-                ),
-                const SizedBox(height: 20),
-
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF10B981),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: () async {
-                          final messenger = ScaffoldMessenger.of(context);
-                          try {
-                            final targetRole = rawRole.replaceFirst('pending_', '');
-                            await ApiService.patch('/users/${account['id'] ?? account['_id']}', {
-                              'role': targetRole,
-                            });
-
-                            await widget.onRefresh();
-                            
-                            final preacherName = widget.preacherProfile?['name'] ?? 'Preacher';
-                            NotificationHelper.sendSignupApprovalNotification(
-                              studentId: account['id'],
-                              preacherName: preacherName,
-                              newRole: targetRole,
-                            ).catchError((_) {});
-
-                            if (mounted) {
-                              messenger.showSnackBar(
-                                SnackBar(content: Text('Account approved as $targetRoleDisplay!')),
-                              );
-                            }
-                            
-                            // Launch WhatsApp with prefilled message
-                            await _launchWhatsApp(phone, name, targetRoleDisplay);
-                          } catch (e) {
-                            debugPrint('Error approving account: $e');
-                            if (mounted) {
-                              messenger.showSnackBar(
-                                SnackBar(
-                                  backgroundColor: Colors.redAccent,
-                                  content: Text('Approval failed: $e'),
-                                ),
-                              );
-                            }
-                          }
-                        },
-                        child: const Text(
-                          'APPROVE ENTRY',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.redAccent,
-                          side: const BorderSide(color: Colors.redAccent),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: () async {
-                          final messenger = ScaffoldMessenger.of(context);
-                          final confirm = await showDialog<bool>(
-                            context: context,
-                            builder: (context) => AlertDialog(
-                              title: const Text('Reject Registration'),
-                              content: Text('Are you sure you want to reject and delete $name\'s registration request?'),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context, false),
-                                  child: const Text('Cancel'),
-                                ),
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context, true),
-                                  child: const Text('Reject & Delete', style: TextStyle(color: Colors.red)),
-                                ),
-                              ],
-                            ),
-                          );
-                          if (confirm != true) return;
-
-                          try {
-                            await ApiService.delete('/users/${account['id'] ?? account['_id']}');
-
-                            await widget.onRefresh();
-                            if (mounted) {
-                              messenger.showSnackBar(
-                                const SnackBar(content: Text('Registration request rejected.')),
-                              );
-                            }
-                          } catch (e) {
-                            debugPrint('Error rejecting account: $e');
-                            if (mounted) {
-                              messenger.showSnackBar(
-                                SnackBar(
-                                  backgroundColor: Colors.redAccent,
-                                  content: Text('Rejection failed: $e'),
-                                ),
-                              );
-                            }
-                          }
-                        },
-                        child: const Text(
-                          'REJECT',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
 
@@ -640,223 +392,232 @@ class _ApprovalTabState extends State<ApprovalTab> {
             ? DateFormat('d MMM yyyy').format(DateTime.parse(u['created_at']))
             : '---';
 
-        return Card(
-          color: Colors.white,
-          margin: const EdgeInsets.only(bottom: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24), side: BorderSide(color: Colors.grey[200]!)),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    CircleAvatar(
-                      backgroundColor: Colors.teal[50],
-                      child: Text((u['worker_name'] ?? 'M')[0].toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Text(u['worker_name'] ?? 'Disciple', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                              const SizedBox(width: 8),
-                              _buildRoleBadge(u['worker_id']?.toString()),
-                            ],
-                          ),
-                          Text('Submitted on $updateDate', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
-                        ],
-                      ),
-                    )
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  '"${_cleanDescription(u['description'], u['category'] ?? '', workStarted: u['work_started'])}"',
-                  style: const TextStyle(fontStyle: FontStyle.italic, fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF0F766E),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Column(
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                u['worker_name'] ?? 'Disciple',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            _buildRoleBadge(u['worker_id']?.toString()),
+                          ],
                         ),
-                        onPressed: () async {
-                          final messenger = ScaffoldMessenger.of(context);
-                          try {
-                            final category = u['category'];
-                            final updateId = (u['appointmentId'] ?? u['appointment_id'] ?? u['_id'] ?? u['id'])?.toString();
+                        const SizedBox(height: 2),
+                        Text(
+                          'Submitted on $updateDate',
+                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black87),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '"${_cleanDescription(u['description'], u['category'] ?? '', workStarted: u['work_started'])}"',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 120,
+                    child: Column(
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          height: 34,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.black,
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            onPressed: () async {
+                              final messenger = ScaffoldMessenger.of(context);
+                              try {
+                                final category = u['category'];
+                                final updateId = (u['appointmentId'] ?? u['appointment_id'] ?? u['_id'] ?? u['id'])?.toString();
 
-                            if (category == 'residency_admission') {
-                              await ApiService.patch('/sadhana/updates/$updateId', {
-                                'is_completed': true,
-                              });
-                              
-                              final workerId = u['worker_id'];
-                              if (workerId != null) {
-                                try {
-                                  await ApiService.patch('/users/$workerId', {'role': 'residency'});
-                                } catch (pe) {
-                                  debugPrint('Profile role update fallback failed: $pe');
+                                if (category == 'residency_admission') {
+                                  await ApiService.patch('/sadhana/updates/$updateId', {
+                                    'is_completed': true,
+                                  });
+                                  
+                                  final workerId = u['worker_id'];
+                                  if (workerId != null) {
+                                    try {
+                                      await ApiService.patch('/users/$workerId', {'role': 'residency'});
+                                    } catch (pe) {
+                                      debugPrint('Profile role update fallback failed: $pe');
+                                    }
+                                  }
+                                } else if (category == 'accommodation') {
+                                  if (!context.mounted) return;
+                                  final roomController = TextEditingController();
+                                  final confirm = await showDialog<bool>(
+                                    context: context,
+                                    builder: (context) => AlertDialog(
+                                      title: const Text('Assign Room'),
+                                      content: TextField(
+                                        controller: roomController,
+                                        decoration: const InputDecoration(hintText: 'Enter room number or details'),
+                                      ),
+                                      actions: [
+                                        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+                                        TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Approve')),
+                                      ],
+                                    ),
+                                  );
+                                  if (confirm != true) return;
+                                  
+                                  final roomNum = roomController.text.trim();
+                                  final roomText = roomNum.isEmpty ? 'Approved' : 'Room $roomNum';
+
+                                  await ApiService.patch('/sadhana/updates/$updateId', {
+                                    'is_completed': true,
+                                    'work_completed': roomText,
+                                  });
+                                } else if (category == 'payment') {
+                                  await ApiService.patch('/payments/$updateId', {
+                                    'is_completed': true,
+                                    'work_completed': 'PAID',
+                                  });
+                                } else if (category == 'preacher_appointment') {
+                                  final approvalData = await _showAppointmentApprovalDialog(context, Map<String, dynamic>.from(u));
+                                  if (approvalData == null) return;
+
+                                  debugPrint('📌 [PREACHER APPROVE APPOINTMENT REQUEST]: ID=$updateId, data=$approvalData');
+                                  final res = await ApiService.patch('/sadhana/updates/$updateId', {
+                                    'status': 'APPROVED',
+                                    'is_completed': true,
+                                    'work_completed': 'APPROVED',
+                                    'approvedDate': approvalData['approvedDate'],
+                                    'approvedTime': approvalData['approvedTime'],
+                                  });
+                                  debugPrint('📌 [PREACHER APPROVE APPOINTMENT RESPONSE]: $res');
+                                } else {
+                                  await ApiService.patch('/sadhana/updates/$updateId', {'is_completed': true});
+                                }
+                               
+                                await widget.onRefresh();
+                                final workerId = u['worker_id'];
+                                if (workerId != null) {
+                                  NotificationHelper.sendApprovalNotification(
+                                    studentId: workerId,
+                                    preacherName: widget.preacherProfile?['name'] ?? 'Preacher',
+                                    category: u['category'] ?? '',
+                                    approved: true,
+                                  ).catchError((_) {});
+                                }
+                                if (mounted) {
+                                  messenger.showSnackBar(const SnackBar(content: Text('Request Approved!')));
+                                }
+                              } catch (e) {
+                                debugPrint('Error approving: $e');
+                                if (mounted) {
+                                  messenger.showSnackBar(
+                                    SnackBar(
+                                      backgroundColor: Colors.redAccent,
+                                      content: Text('Approval failed: ${e.toString().replaceAll('ApiException', '').trim()}'),
+                                    ),
+                                  );
                                 }
                               }
-                            } else if (category == 'accommodation') {
-                              if (!context.mounted) return;
-                              final roomController = TextEditingController();
-                              final confirm = await showDialog<bool>(
-                                context: context,
-                                builder: (context) => AlertDialog(
-                                  title: const Text('Assign Room'),
-                                  content: TextField(
-                                    controller: roomController,
-                                    decoration: const InputDecoration(hintText: 'Enter room number or details'),
-                                  ),
-                                  actions: [
-                                    TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-                                    TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Approve')),
-                                  ],
-                                ),
-                              );
-                              if (confirm != true) return;
+                            },
+                            child: const Text('APPROVE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10)),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 34,
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.redAccent,
+                              side: const BorderSide(color: Colors.redAccent),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            onPressed: () async {
+                              final messenger = ScaffoldMessenger.of(context);
+                              try {
+                                final category = u['category'];
+                                final updateId = (u['appointmentId'] ?? u['appointment_id'] ?? u['_id'] ?? u['id'])?.toString();
+                                if (category == 'residency_admission') {
+                                  await ApiService.patch('/sadhana/updates/$updateId', {
+                                    'is_completed': true,
+                                    'work_completed': 'REJECTED',
+                                  });
+                                } else if (category == 'accommodation') {
+                                  await ApiService.patch('/sadhana/updates/$updateId', {
+                                    'is_completed': true,
+                                    'work_completed': 'REJECTED',
+                                  });
+                                } else if (category == 'payment') {
+                                  await ApiService.patch('/payments/$updateId', {
+                                    'is_completed': false,
+                                    'work_completed': 'PENDING',
+                                  });
+                                } else if (category == 'preacher_appointment') {
+                                  debugPrint('📌 [PREACHER REJECT APPOINTMENT REQUEST]: ID=$updateId');
+                                  final res = await ApiService.patch('/sadhana/updates/$updateId', {
+                                    'status': 'REJECTED',
+                                    'is_completed': true,
+                                    'work_completed': 'REJECTED',
+                                  });
+                                  debugPrint('📌 [PREACHER REJECT APPOINTMENT RESPONSE]: $res');
+                                } else {
+                                  await ApiService.delete('/sadhana/updates/$updateId');
+                                }
                               
-                              final roomNum = roomController.text.trim();
-                              final roomText = roomNum.isEmpty ? 'Approved' : 'Room $roomNum';
-
-                              await ApiService.patch('/sadhana/updates/$updateId', {
-                                'is_completed': true,
-                                'work_completed': roomText,
-                              });
-                            } else if (category == 'payment') {
-                              await ApiService.patch('/payments/$updateId', {
-                                'is_completed': true,
-                                'work_completed': 'PAID',
-                              });
-                            } else if (category == 'preacher_appointment') {
-                              final approvalData = await _showAppointmentApprovalDialog(context, Map<String, dynamic>.from(u));
-                              if (approvalData == null) return;
-
-                              debugPrint('📌 [PREACHER APPROVE APPOINTMENT REQUEST]: ID=$updateId, data=$approvalData');
-                              final res = await ApiService.patch('/sadhana/updates/$updateId', {
-                                'status': 'APPROVED',
-                                'is_completed': true,
-                                'work_completed': 'APPROVED',
-                                'approvedDate': approvalData['approvedDate'],
-                                'approvedTime': approvalData['approvedTime'],
-                              });
-                              debugPrint('📌 [PREACHER APPROVE APPOINTMENT RESPONSE]: $res');
-                            } else {
-                              await ApiService.patch('/sadhana/updates/$updateId', {'is_completed': true});
+                              await widget.onRefresh();
+                              final workerId = u['worker_id'];
+                              if (workerId != null) {
+                                NotificationHelper.sendApprovalNotification(
+                                  studentId: workerId,
+                                  preacherName: widget.preacherProfile?['name'] ?? 'Preacher',
+                                  category: u['category'] ?? '',
+                                  approved: false,
+                                ).catchError((_) {});
+                              }
+                              if (mounted) {
+                                messenger.showSnackBar(const SnackBar(content: Text('Request Rejected & Cleared')));
+                              }
+                            } catch (e) {
+                              debugPrint('Error rejecting: $e');
+                              if (mounted) {
+                                messenger.showSnackBar(
+                                  SnackBar(
+                                    backgroundColor: Colors.redAccent,
+                                    content: Text('Rejection failed: ${e.toString().replaceAll('ApiException', '').trim()}'),
+                                  ),
+                                );
+                              }
                             }
-                           
-                            await widget.onRefresh();
-                            final workerId = u['worker_id'];
-                            if (workerId != null) {
-                              NotificationHelper.sendApprovalNotification(
-                                studentId: workerId,
-                                preacherName: widget.preacherProfile?['name'] ?? 'Preacher',
-                                category: u['category'] ?? '',
-                                approved: true,
-                              ).catchError((_) {});
-                            }
-                            if (mounted) {
-                              messenger.showSnackBar(const SnackBar(content: Text('Request Approved!')));
-                            }
-                          } catch (e) {
-                            debugPrint('Error approving: $e');
-                            if (mounted) {
-                              messenger.showSnackBar(
-                                SnackBar(
-                                  backgroundColor: Colors.redAccent,
-                                  content: Text('Approval failed: ${e.toString().replaceAll('ApiException', '').trim()}'),
-                                ),
-                              );
-                            }
-                          }
-                        },
-                          child: const Text('APPROVE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                          },
+                          child: const Text('REJECT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10)),
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.redAccent,
-                            side: const BorderSide(color: Colors.redAccent),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          onPressed: () async {
-                            final messenger = ScaffoldMessenger.of(context);
-                            try {
-                              final category = u['category'];
-                              final updateId = (u['appointmentId'] ?? u['appointment_id'] ?? u['_id'] ?? u['id'])?.toString();
-                              if (category == 'residency_admission') {
-                                await ApiService.patch('/sadhana/updates/$updateId', {
-                                  'is_completed': true,
-                                  'work_completed': 'REJECTED',
-                                });
-                              } else if (category == 'accommodation') {
-                                await ApiService.patch('/sadhana/updates/$updateId', {
-                                  'is_completed': true,
-                                  'work_completed': 'REJECTED',
-                                });
-                              } else if (category == 'payment') {
-                                await ApiService.patch('/payments/$updateId', {
-                                  'is_completed': false,
-                                  'work_completed': 'PENDING',
-                                });
-                              } else if (category == 'preacher_appointment') {
-                                debugPrint('📌 [PREACHER REJECT APPOINTMENT REQUEST]: ID=$updateId');
-                                final res = await ApiService.patch('/sadhana/updates/$updateId', {
-                                  'status': 'REJECTED',
-                                  'is_completed': true,
-                                  'work_completed': 'REJECTED',
-                                });
-                                debugPrint('📌 [PREACHER REJECT APPOINTMENT RESPONSE]: $res');
-                              } else {
-                                await ApiService.delete('/sadhana/updates/$updateId');
-                              }
-                            
-                            await widget.onRefresh();
-                            final workerId = u['worker_id'];
-                            if (workerId != null) {
-                              NotificationHelper.sendApprovalNotification(
-                                studentId: workerId,
-                                preacherName: widget.preacherProfile?['name'] ?? 'Preacher',
-                                category: u['category'] ?? '',
-                                approved: false,
-                              ).catchError((_) {});
-                            }
-                            if (mounted) {
-                              messenger.showSnackBar(const SnackBar(content: Text('Request Rejected & Cleared')));
-                            }
-                          } catch (e) {
-                            debugPrint('Error rejecting: $e');
-                            if (mounted) {
-                              messenger.showSnackBar(
-                                SnackBar(
-                                  backgroundColor: Colors.redAccent,
-                                  content: Text('Rejection failed: ${e.toString().replaceAll('ApiException', '').trim()}'),
-                                ),
-                              );
-                            }
-                          }
-                        },
-                        child: const Text('REJECT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                      ),
-                    ),
-                  ],
-                )
+                    ],
+                  ),
+                ),
               ],
             ),
-          ),
-        );
+            const SizedBox(height: 10),
+            Divider(height: 1, color: Colors.grey[200]),
+          ],
+        ),
+      );
       },
     );
   }
@@ -923,15 +684,11 @@ class _ApprovalTabState extends State<ApprovalTab> {
             icon = Icons.assignment_outlined;
         }
 
-        return Card(
-          color: Colors.white,
-          margin: const EdgeInsets.only(bottom: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: Colors.grey[100]!)),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -962,34 +719,19 @@ class _ApprovalTabState extends State<ApprovalTab> {
                     ),
                     Text(
                       updateDate,
-                      style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold),
+                      style: const TextStyle(fontSize: 10, color: Colors.black87, fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    CircleAvatar(
-                      radius: 14,
-                      backgroundColor: Colors.teal[50],
-                      child: Text((u['worker_name'] ?? 'M')[0].toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.teal)),
+                    Text(
+                      u['worker_name'] ?? 'Disciple',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black),
                     ),
-                    const SizedBox(width: 10),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text(
-                              u['worker_name'] ?? 'Disciple',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E293B)),
-                            ),
-                            const SizedBox(width: 6),
-                            _buildRoleBadge(u['worker_id']?.toString()),
-                          ],
-                        ),
-                      ],
-                    ),
+                    const SizedBox(width: 6),
+                    _buildRoleBadge(u['worker_id']?.toString()),
                   ],
                 ),
                 const SizedBox(height: 10),
@@ -1005,8 +747,8 @@ class _ApprovalTabState extends State<ApprovalTab> {
                     _cleanDescription(u['description'], category, workStarted: u['work_started']),
                     style: const TextStyle(
                       fontSize: 12,
-                      color: Color(0xFF475569),
-                      fontWeight: FontWeight.w500,
+                      color: Colors.black,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
@@ -1041,7 +783,6 @@ class _ApprovalTabState extends State<ApprovalTab> {
                 ],
               ],
             ),
-          ),
         );
       },
     );

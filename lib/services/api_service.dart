@@ -38,7 +38,7 @@ class ApiService {
         idToken = _cachedIdToken;
       } else {
         try {
-          idToken = await user.getIdToken(false).timeout(const Duration(seconds: 4));
+          idToken = await user.getIdToken(false).timeout(const Duration(seconds: 15));
           if (idToken != null && idToken.isNotEmpty) {
             _cachedIdToken = idToken;
             _cachedUid = user.uid;
@@ -46,10 +46,18 @@ class ApiService {
           }
         } catch (e) {
           debugPrint('Firebase token refresh warning: $e');
-          if (_cachedUid == user.uid) {
+          if (_cachedUid == user.uid && _cachedIdToken != null) {
             idToken = _cachedIdToken;
           } else {
             clearTokenCache();
+            try {
+              idToken = await user.getIdToken(true).timeout(const Duration(seconds: 15));
+              if (idToken != null && idToken.isNotEmpty) {
+                _cachedIdToken = idToken;
+                _cachedUid = user.uid;
+                _tokenFetchTime = DateTime.now();
+              }
+            } catch (_) {}
           }
         }
       }

@@ -718,7 +718,20 @@ class _PreacherDashboardState extends State<PreacherDashboard> {
         debugPrint('Sample raw update record #0: ${rawUpdates.first}');
       }
 
-      final List<dynamic> processedUpdates = _normalizeSadhanaItems(rawUpdates);
+      final Set<String> seenRawIds = {};
+      final List<dynamic> uniqueRawUpdates = [];
+      for (var item in rawUpdates) {
+        if (item is Map) {
+          final itemId = (item['_id'] ?? item['id'] ?? item['appointmentId'] ?? '').toString();
+          if (itemId.isNotEmpty) {
+            if (seenRawIds.contains(itemId)) continue;
+            seenRawIds.add(itemId);
+          }
+        }
+        uniqueRawUpdates.add(item);
+      }
+
+      final List<dynamic> processedUpdates = _normalizeSadhanaItems(uniqueRawUpdates);
       debugPrint('Total processed updates count: ${processedUpdates.length}');
 
       // Process signals in-memory
