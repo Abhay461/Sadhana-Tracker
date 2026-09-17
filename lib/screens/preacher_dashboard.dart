@@ -176,7 +176,7 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
 
   void _handleRealtimeEvent(RealtimeEvent event) {
     if (!mounted) return;
-    debugPrint('⚡ [PREACHER DASHBOARD] Live event received: ${event.type} (${event.action})');
+    debugPrint('[REALTIME] Event received: ${event.type}:${event.action}');
     switch (event.type) {
       case 'sadhana_update':
       case 'accommodation_update':

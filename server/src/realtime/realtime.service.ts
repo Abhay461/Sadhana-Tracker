@@ -89,6 +89,7 @@ export class RealtimeService implements OnModuleInit {
       }
     }
 
-    this.logger.log(`⚡ [REALTIME] Broadcasted event "${event}:${action}" to ${sentCount} client(s)`);
+    console.log(`[REALTIME] Event emitted: ${event}:${action}`);
+    this.logger.log(`[REALTIME] Event emitted: ${event}:${action}`);
   }
 }

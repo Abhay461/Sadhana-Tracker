@@ -105,7 +105,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
 
   void _handleRealtimeEvent(RealtimeEvent event) {
     if (!mounted) return;
-    debugPrint('⚡ [STUDENT DASHBOARD] Live event received: ${event.type} (${event.action})');
+    debugPrint('[REALTIME] Event received: ${event.type}:${event.action}');
     switch (event.type) {
       case 'sadhana_update':
       case 'accommodation_update':

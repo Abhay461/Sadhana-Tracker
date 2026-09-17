@@ -130,7 +130,7 @@ class RealtimeService {
         final parsed = jsonDecode(data);
         if (parsed is Map<String, dynamic>) {
           final event = RealtimeEvent.fromJson(parsed);
-          debugPrint('⚡ [REALTIME] Received event: ${event.type}:${event.action}');
+          debugPrint('[REALTIME] Event received: ${event.type}:${event.action}');
           _eventController.add(event);
         }
       } catch (e) {
