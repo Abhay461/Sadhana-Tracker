@@ -19,6 +19,7 @@ class _InlineYouTubePlayerCardState extends State<InlineYouTubePlayerCard> with 
   YoutubePlayerController? _controller;
   String? _videoId;
   bool _hasError = false;
+  bool _isPlayingInline = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -59,17 +60,14 @@ class _InlineYouTubePlayerCardState extends State<InlineYouTubePlayerCard> with 
         _videoId = id;
         _controller = YoutubePlayerController.fromVideoId(
           videoId: id,
-          autoPlay: false,
+          autoPlay: true,
           params: const YoutubePlayerParams(
             showControls: true,
             showFullscreenButton: true,
             mute: false,
           ),
         );
-
-        debugPrint('YoutubePlayerController (IFrame) initialized for video ID: $id');
       } else {
-        debugPrint('Failed to extract valid YouTube video ID from URL: ${widget.videoUrl}');
         _hasError = true;
       }
     } catch (e) {
@@ -101,7 +99,7 @@ class _InlineYouTubePlayerCardState extends State<InlineYouTubePlayerCard> with 
   Widget build(BuildContext context) {
     super.build(context);
 
-    if (_hasError || _controller == null || _videoId == null) {
+    if (_hasError || _videoId == null) {
       return Container(
         decoration: BoxDecoration(
           color: const Color(0xFF1E293B),
@@ -135,23 +133,105 @@ class _InlineYouTubePlayerCardState extends State<InlineYouTubePlayerCard> with 
       );
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.black,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.12),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+    if (_isPlayingInline && _controller != null) {
+      return Container(
+        decoration: BoxDecoration(
+          color: Colors.black,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.12),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          clipBehavior: Clip.hardEdge,
+          borderRadius: BorderRadius.circular(16),
+          child: AspectRatio(
+            aspectRatio: 16 / 9,
+            child: YoutubePlayer(
+              controller: _controller!,
+              aspectRatio: 16 / 9,
+            ),
           ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: YoutubePlayer(
-          controller: _controller!,
-          aspectRatio: 16 / 9,
+        ),
+      );
+    }
+
+    final thumbnailUrl = 'https://img.youtube.com/vi/$_videoId/hqdefault.jpg';
+
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _isPlayingInline = true;
+        });
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.black,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.12),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: AspectRatio(
+            aspectRatio: 16 / 9,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Image.network(
+                  thumbnailUrl,
+                  width: double.infinity,
+                  height: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    color: const Color(0xFF1E293B),
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Text(
+                          widget.title,
+                          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Container(
+                  color: Colors.black.withValues(alpha: 0.25),
+                ),
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFF0000),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black26,
+                        blurRadius: 8,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.play_arrow_rounded,
+                    color: Colors.white,
+                    size: 38,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

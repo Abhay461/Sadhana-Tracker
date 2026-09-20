@@ -24,10 +24,19 @@ export class Announcement {
   bannerUrl: string;
 
   @Prop({ type: String, default: '' })
+  banner_url: string;
+
+  @Prop({ type: String, default: '' })
   externalLink: string;
 
   @Prop({ type: String, default: '' })
+  link: string;
+
+  @Prop({ type: String, default: '' })
   sessionTime: string;
+
+  @Prop({ type: String, default: '' })
+  session_time: string;
 
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: false })
   createdBy: MongooseSchema.Types.ObjectId;

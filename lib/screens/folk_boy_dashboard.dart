@@ -1827,15 +1827,17 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
           centerTitle: true,
           title: _buildHeaderLogo(),
         ),
-        body: IndexedStack(
-          index: _selectedIndex > 4 ? 0 : _selectedIndex,
-          children: [
-            _buildHomeTab(),
-            _buildEventsTab(),
-            _buildCoursesTab(),
-            _buildServicesTab(),
-            _buildProfileTab(),
-          ],
+        body: ClipRect(
+          child: IndexedStack(
+            index: _selectedIndex > 4 ? 0 : _selectedIndex,
+            children: [
+              _buildHomeTab(),
+              _buildEventsTab(),
+              _buildCoursesTab(),
+              _buildServicesTab(),
+              _buildProfileTab(),
+            ],
+          ),
         ),
         bottomNavigationBar: Container(
           decoration: const BoxDecoration(
@@ -2034,7 +2036,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         await _fetchBirthdayStudents();
       },
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 90.0),
         physics: const AlwaysScrollableScrollPhysics(),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -5614,6 +5616,208 @@ class _SadhanaLogSheet extends StatefulWidget {
 }
 
 class _SadhanaLogSheetState extends State<_SadhanaLogSheet> {
+  static const List<String> _prabhupadaBooks = [
+    'Bhagavad Gita As It Is',
+    'Srimad Bhagavatam — Canto 1, Part 1',
+    'Srimad Bhagavatam — Canto 1, Part 2',
+    'Srimad Bhagavatam — Canto 1, Part 3',
+    'Srimad Bhagavatam — Canto 2, Part 1',
+    'Srimad Bhagavatam — Canto 2, Part 2',
+    'Srimad Bhagavatam — Canto 3, Part 1',
+    'Srimad Bhagavatam — Canto 3, Part 2',
+    'Srimad Bhagavatam — Canto 3, Part 3',
+    'Srimad Bhagavatam — Canto 4, Part 1',
+    'Srimad Bhagavatam — Canto 4, Part 2',
+    'Srimad Bhagavatam — Canto 4, Part 3',
+    'Srimad Bhagavatam — Canto 5, Part 1',
+    'Srimad Bhagavatam — Canto 5, Part 2',
+    'Srimad Bhagavatam — Canto 6, Part 1',
+    'Srimad Bhagavatam — Canto 6, Part 2',
+    'Srimad Bhagavatam — Canto 7, Part 1',
+    'Srimad Bhagavatam — Canto 7, Part 2',
+    'Srimad Bhagavatam — Canto 8, Part 1',
+    'Srimad Bhagavatam — Canto 8, Part 2',
+    'Srimad Bhagavatam — Canto 9, Part 1',
+    'Srimad Bhagavatam — Canto 9, Part 2',
+    'Srimad Bhagavatam — Canto 10, Part 1',
+    'Srimad Bhagavatam — Canto 10, Part 2',
+    'Srimad Bhagavatam — Canto 10, Part 3',
+    'Srimad Bhagavatam — Canto 10, Part 4',
+    'Srimad Bhagavatam — Canto 11, Part 1',
+    'Srimad Bhagavatam — Canto 11, Part 2',
+    'Srimad Bhagavatam — Canto 11, Part 3',
+    'Srimad Bhagavatam — Canto 12, Part 1',
+    'Srimad Bhagavatam — Canto 12, Part 2',
+    'Caitanya Caritamrita — Adi Lila, Part 1',
+    'Caitanya Caritamrita — Adi Lila, Part 2',
+    'Caitanya Caritamrita — Adi Lila, Part 3',
+    'Caitanya Caritamrita — Adi Lila, Part 4',
+    'Caitanya Caritamrita — Adi Lila, Part 5',
+    'Caitanya Caritamrita — Madhya Lila, Part 1',
+    'Caitanya Caritamrita — Madhya Lila, Part 2',
+    'Caitanya Caritamrita — Madhya Lila, Part 3',
+    'Caitanya Caritamrita — Madhya Lila, Part 4',
+    'Caitanya Caritamrita — Madhya Lila, Part 5',
+    'Caitanya Caritamrita — Madhya Lila, Part 6',
+    'Caitanya Caritamrita — Madhya Lila, Part 7',
+    'Caitanya Caritamrita — Madhya Lila, Part 8',
+    'Caitanya Caritamrita — Madhya Lila, Part 9',
+    'Caitanya Caritamrita — Antya Lila, Part 1',
+    'Caitanya Caritamrita — Antya Lila, Part 2',
+    'Caitanya Caritamrita — Antya Lila, Part 3',
+    'Caitanya Caritamrita — Antya Lila, Part 4',
+    'Caitanya Caritamrita — Antya Lila, Part 5',
+    'Nectar of Devotion',
+    'Nectar of Instruction',
+    'Sri Isopanisad',
+    'Easy Journey to Other Planets',
+    'Krishna Consciousness: The Topmost Yoga System',
+    'Perfect Questions Perfect Answers',
+    'Beyond Birth and Death',
+    'The Path of Perfection',
+    'Light of the Bhagavata',
+    'Journey of Self-Discovery',
+    'Coming Back: The Science of Reincarnation',
+    'Higher Taste',
+    'Laws of Nature: An Infallible Justice',
+    'Civilization and Transcendence',
+    'Teachings of Lord Caitanya',
+    'Teachings of Queen Kunti',
+    'Teachings of Lord Kapila',
+    'Krishna Book',
+    'Renunciation Through Wisdom',
+    'The Science of Self-Realization',
+    'Mukunda Mala Stotra',
+    'Message of Godhead',
+    'Raja Vidya: The King of Knowledge',
+    'Elevation to Krishna Consciousness',
+    'Search for Liberation',
+    'On Chanting Hare Krishna',
+    'Krsna, the Reservoir of Pleasure',
+    'Narada Bhakti Sutra',
+    'Gita Mahatmya',
+  ];
+
+  void _showBookPicker(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        String searchQuery = '';
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            final filteredBooks = _prabhupadaBooks.where((b) {
+              return b.toLowerCase().contains(searchQuery.toLowerCase());
+            }).toList();
+
+            return Container(
+              height: MediaQuery.of(ctx).size.height * 0.75,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const Text(
+                    'Select Book Name',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0F172A),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    autofocus: false,
+                    decoration: InputDecoration(
+                      hintText: 'Search book (e.g. Gita, Bhagavatam, Nectar...)',
+                      prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF3F1200)),
+                      suffixIcon: searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear_rounded),
+                              onPressed: () {
+                                setSheetState(() {
+                                  searchQuery = '';
+                                });
+                              },
+                            )
+                          : null,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    ),
+                    onChanged: (val) {
+                      setSheetState(() {
+                        searchQuery = val;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: filteredBooks.isEmpty
+                        ? const Center(
+                            child: Text(
+                              'No matching books found',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          )
+                        : ListView.separated(
+                            itemCount: filteredBooks.length,
+                            separatorBuilder: (_, __) => const Divider(height: 1),
+                            itemBuilder: (ctx, index) {
+                              final book = filteredBooks[index];
+                              final isSelected = _bookController.text == book;
+                              return ListTile(
+                                dense: true,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                leading: Icon(
+                                  Icons.menu_book_rounded,
+                                  color: isSelected ? const Color(0xFFD97706) : const Color(0xFF64748B),
+                                  size: 20,
+                                ),
+                                title: Text(
+                                  book,
+                                  style: TextStyle(
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                    color: isSelected ? const Color(0xFFD97706) : const Color(0xFF1E293B),
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                trailing: isSelected
+                                    ? const Icon(Icons.check_circle_rounded, color: Color(0xFFD97706), size: 20)
+                                    : null,
+                                onTap: () {
+                                  setState(() {
+                                    _bookController.text = book;
+                                  });
+                                  Navigator.pop(ctx);
+                                },
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
   String? _selectedSubOption;
   bool _isLoading = false;
 
@@ -5961,9 +6165,28 @@ class _SadhanaLogSheetState extends State<_SadhanaLogSheet> {
                   ],
                 ),
               ] else if (_selectedSubOption == 'Book Reading') ...[
-                TextField(
-                  controller: _bookController,
-                  decoration: const InputDecoration(labelText: 'Book Name', border: OutlineInputBorder()),
+                InkWell(
+                  onTap: () => _showBookPicker(context),
+                  borderRadius: BorderRadius.circular(8),
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Book Name',
+                      hintText: 'Tap to select book from list',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.menu_book_rounded, color: Color(0xFF3F1200)),
+                      suffixIcon: Icon(Icons.arrow_drop_down_rounded, size: 28),
+                    ),
+                    child: Text(
+                      _bookController.text.isNotEmpty ? _bookController.text : 'Tap to select book',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: _bookController.text.isNotEmpty ? FontWeight.bold : FontWeight.normal,
+                        color: _bookController.text.isNotEmpty ? const Color(0xFF0F172A) : Colors.grey[600],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 Row(

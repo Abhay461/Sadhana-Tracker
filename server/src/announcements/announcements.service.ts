@@ -19,9 +19,22 @@ export class AnnouncementsService {
     const title = dto.title || (rawContent.length > 0 ? rawContent.split('\n')[0] : 'Announcement');
     const createdBy = creatorUser?._id || creatorUser?.id || null;
 
+    const bannerUrl = dto.bannerUrl || dto.banner_url || '';
+    const banner_url = dto.banner_url || dto.bannerUrl || '';
+    const externalLink = dto.externalLink || dto.link || '';
+    const link = dto.link || dto.externalLink || '';
+    const sessionTime = dto.sessionTime || dto.session_time || '';
+    const session_time = dto.session_time || dto.sessionTime || '';
+
     const res = await this.announcementModel.create({
       ...dto,
       title: title,
+      bannerUrl: bannerUrl,
+      banner_url: banner_url,
+      externalLink: externalLink,
+      link: link,
+      sessionTime: sessionTime,
+      session_time: session_time,
       createdBy: createdBy,
       isActive: true,
     });
