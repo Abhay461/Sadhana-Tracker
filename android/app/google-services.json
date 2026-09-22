@@ -9,6 +9,43 @@
       "client_info": {
         "mobilesdk_app_id": "1:257202442254:android:69d5dade4e79b50ad16c5f",
         "android_client_info": {
+          "package_name": "com.sadhanatracker.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "257202442254-kca7u91ru1i3mn9i82rg909qttm48j9t.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sadhanatracker.app",
+            "certificate_hash": "25d624a1105b55afc7157adfd1048a97df38a52e"
+          }
+        },
+        {
+          "client_id": "257202442254-vdm9eg3jr5nvh4g5g7r633j0cfl70h8s.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAsVvaviG66Gg6velZFZJpzyShuD6oghTI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "257202442254-vdm9eg3jr5nvh4g5g7r633j0cfl70h8s.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:257202442254:android:69d5dade4e79b50ad16c5f",
+        "android_client_info": {
           "package_name": "com.sadhana.tracker"
         }
       },

@@ -5204,39 +5204,34 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       // 2. Perform network sync asynchronously in the background
       Future(() async {
         try {
-          await ApiService.post('/sadhana', updateData);
+          await ApiService.post('/sadhana', {
+            'dateString': targetDate,
+            'timezoneOffsetMinutes': DateTime.now().timeZoneOffset.inMinutes,
+            'activities': {
+              if (activity == 'Morning' || activity == 'Morning Wake-Up') 'wakeUpTime': workCompletedVal,
+              if (activity == 'Sleep' || activity == 'Sleep Time') 'sleepTime': workCompletedVal,
+              if (activity == 'Mangla Arti') 'manglaArti': {'attended': true, 'time': workCompletedVal},
+              if (activity == 'Chanting') 'chanting': {'rounds': int.tryParse(_roundsController.text) ?? 16},
+              if (activity == 'Online Session') 'onlineSession': {'attended': true, 'timeSpan': workCompletedVal},
+              if (activity == 'Book Reading') 'bookReading': {'bookName': _bookController.text.trim().isEmpty ? 'Book' : _bookController.text.trim()},
+              if (activity == 'Service') 'service': {'serviceName': _serviceNameController.text.trim().isEmpty ? 'Service' : _serviceNameController.text.trim()},
+              if (activity == 'Temple Visit') 'templeVisit': {'visited': true},
+              if (activity == 'Srimad Bhagavatam Class') 'srimadBhagavatamClass': {'attended': true, 'timeSpan': workCompletedVal},
+              if (activity == 'Bhagavad Gita Class') 'bhagavadGitaClass': {'attended': true, 'timeSpan': workCompletedVal},
+              if (activity == 'Ekadashi Fasting') 'ekadashiFasting': {'fastingType': _ekadashiFastingType.isNotEmpty ? _ekadashiFastingType : 'Fasting'},
+            },
+          });
+          await ApiService.post('/sadhana/updates', updateData).catchError((_) {});
           await _fetchUpdates();
         } catch (err) {
           debugPrint('🚨 [SADHANA SYNC ERROR LOG]: $err');
-          try {
-            await ApiService.post('/sadhana', {
-              'dateString': targetDate,
-              'timezoneOffsetMinutes': DateTime.now().timeZoneOffset.inMinutes,
-              'activities': {
-                if (activity == 'Morning' || activity == 'Morning Wake-Up') 'wakeUpTime': workCompletedVal,
-                if (activity == 'Sleep' || activity == 'Sleep Time') 'sleepTime': workCompletedVal,
-                if (activity == 'Mangla Arti') 'manglaArti': {'attended': true, 'time': workCompletedVal},
-                if (activity == 'Chanting') 'chanting': {'rounds': 16},
-                if (activity == 'Online Session') 'onlineSession': {'attended': true, 'timeSpan': workCompletedVal},
-                if (activity == 'Book Reading') 'bookReading': {'bookName': _bookController.text.trim().isEmpty ? 'Book' : _bookController.text.trim()},
-                if (activity == 'Service') 'service': {'serviceName': _serviceNameController.text.trim().isEmpty ? 'Service' : _serviceNameController.text.trim()},
-                if (activity == 'Temple Visit') 'templeVisit': {'visited': true},
-                if (activity == 'Srimad Bhagavatam Class') 'srimadBhagavatamClass': {'attended': true, 'timeSpan': workCompletedVal},
-                if (activity == 'Bhagavad Gita Class') 'bhagavadGitaClass': {'attended': true, 'timeSpan': workCompletedVal},
-                if (activity == 'Ekadashi Fasting') 'ekadashiFasting': {'fastingType': _ekadashiFastingType.isNotEmpty ? _ekadashiFastingType : 'Fasting'},
-              },
-            });
-            await _fetchUpdates();
-          } catch (fallbackErr) {
-            debugPrint('🚨 [SADHANA FALLBACK SYNC ERROR LOG]: $fallbackErr');
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('⚠️ Sadhana Sync Error: ${fallbackErr.toString()}'),
-                  backgroundColor: Colors.redAccent,
-                ),
-              );
-            }
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('⚠️ Sadhana Sync Error: ${err.toString()}'),
+                backgroundColor: Colors.redAccent,
+              ),
+            );
           }
         }
         NotificationHelper.sendUpdateNotification(updateData).catchError((_) {});
@@ -6036,7 +6031,42 @@ class _SadhanaLogSheetState extends State<_SadhanaLogSheet> {
         'points': points,
         'photo_url': photoUrl,
       };
-      await ApiService.post('/sadhana', updateData);
+
+      Map<String, dynamic> activitiesPayload = {};
+      if (_selectedSubOption == 'Morning' || _selectedSubOption == 'Morning Wake-Up') {
+        activitiesPayload['wakeUpTime'] = workCompletedVal;
+      } else if (_selectedSubOption == 'Sleep' || _selectedSubOption == 'Sleep Time') {
+        activitiesPayload['sleepTime'] = workCompletedVal;
+      } else if (_selectedSubOption == 'Mangla Arti') {
+        activitiesPayload['manglaArti'] = {'attended': true, 'time': workCompletedVal};
+      } else if (_selectedSubOption == 'Chanting') {
+        activitiesPayload['chanting'] = {'rounds': _rounds};
+      } else if (_selectedSubOption == 'Online Session') {
+        activitiesPayload['onlineSession'] = {'attended': true, 'timeSpan': workCompletedVal};
+      } else if (_selectedSubOption == 'Book Reading') {
+        final bName = _bookController.text.trim().isEmpty ? 'Book' : _bookController.text.trim();
+        final pVal = _readingValueController.text.trim().isEmpty ? '1 Page' : '${_readingValueController.text.trim()} $_readingUnit';
+        activitiesPayload['bookReading'] = {'bookName': bName, 'pagesOrMinutes': pVal};
+      } else if (_selectedSubOption == 'Service') {
+        final sName = _serviceNameController.text.trim().isEmpty ? 'Service' : _serviceNameController.text.trim();
+        final durMins = int.tryParse(_serviceMinutesController.text.trim()) ?? 30;
+        activitiesPayload['service'] = {'serviceName': sName, 'durationMinutes': durMins};
+      } else if (_selectedSubOption == 'Temple Visit') {
+        activitiesPayload['templeVisit'] = {'visited': true};
+      } else if (_selectedSubOption == 'Srimad Bhagavatam Class') {
+        activitiesPayload['srimadBhagavatamClass'] = {'attended': true, 'timeSpan': workCompletedVal};
+      } else if (_selectedSubOption == 'Bhagavad Gita Class') {
+        activitiesPayload['bhagavadGitaClass'] = {'attended': true, 'timeSpan': workCompletedVal};
+      } else if (_selectedSubOption == 'Ekadashi Fasting') {
+        activitiesPayload['ekadashiFasting'] = {'fastingType': _ekadashiFastingType.isNotEmpty ? _ekadashiFastingType : 'Fasting'};
+      }
+
+      await ApiService.post('/sadhana', {
+        'dateString': targetDate,
+        'timezoneOffsetMinutes': DateTime.now().timeZoneOffset.inMinutes,
+        'activities': activitiesPayload,
+      });
+      await ApiService.post('/sadhana/updates', updateData).catchError((_) {});
       NotificationHelper.sendUpdateNotification(updateData).catchError((_) {});
 
       if (mounted) Navigator.pop(context);

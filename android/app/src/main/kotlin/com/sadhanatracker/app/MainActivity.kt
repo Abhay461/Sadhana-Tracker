@@ -1,0 +1,396 @@
+package com.sadhanatracker.app
+
+import android.app.AppOpsManager
+import android.app.usage.UsageEvents
+import android.app.usage.UsageStats
+import android.app.usage.UsageStatsManager
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Process
+import android.provider.Settings
+import android.util.Log
+import android.content.ContentValues
+import android.os.Environment
+import android.provider.MediaStore
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodChannel
+import java.util.Calendar
+
+class MainActivity : FlutterActivity() {
+    private val CHANNEL = "com.example.mobile_app/screen_time"
+    private val DOWNLOAD_CHANNEL = "com.example.mobile_app/media_download"
+    private val TAG = "ScreenTimeNative"
+
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+        try {
+            io.flutter.plugins.GeneratedPluginRegistrant.registerWith(flutterEngine)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error registering plugins: ${e.message}", e)
+        }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DOWNLOAD_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "saveImageToGallery" -> {
+                    try {
+                        val bytes = call.argument<ByteArray>("bytes")
+                        val fileName = call.argument<String>("fileName") ?: "image_${System.currentTimeMillis()}.jpg"
+                        if (bytes != null) {
+                            val saved = saveImageToGallery(bytes, fileName)
+                            if (saved) {
+                                showDownloadNotification()
+                            }
+                            result.success(saved)
+                        } else {
+                            result.error("INVALID_ARGS", "Bytes cannot be null", null)
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error in saveImageToGallery: ${e.message}", e)
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "checkPermission" -> {
+                    result.success(hasUsagePermission())
+                }
+                "requestPermission" -> {
+                    try {
+                        startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+                        result.success(true)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error opening usage settings: ${e.message}")
+                        result.success(false)
+                    }
+                }
+                "getScreenTime" -> {
+                    if (!hasUsagePermission()) {
+                        result.error("NO_PERMISSION", "Usage access permission not granted", null)
+                        return@setMethodCallHandler
+                    }
+                    try {
+                        val data = getTodayScreenTime()
+                        result.success(data)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error getting screen time: ${e.message}", e)
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    private fun saveImageToGallery(bytes: ByteArray, fileName: String): Boolean {
+        return try {
+            val resolver = contentResolver
+            val contentValues = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/SadhanaTracker")
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+            }
+
+            val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+                ?: return false
+
+            resolver.openOutputStream(uri)?.use { os ->
+                os.write(bytes)
+                os.flush()
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                contentValues.clear()
+                contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                resolver.update(uri, contentValues, null, null)
+            }
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving image via MediaStore: ${e.message}", e)
+            false
+        }
+    }
+
+    private fun showDownloadNotification() {
+        try {
+            val channelId = "sadhana_downloads"
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(
+                    channelId,
+                    "Downloads",
+                    NotificationManager.IMPORTANCE_DEFAULT
+                ).apply {
+                    description = "Download notifications"
+                }
+                notificationManager.createNotificationChannel(channel)
+            }
+
+            val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                android.app.Notification.Builder(this, channelId)
+            } else {
+                @Suppress("DEPRECATION")
+                android.app.Notification.Builder(this)
+            }
+
+            builder.setSmallIcon(android.R.drawable.stat_sys_download_done)
+                .setContentTitle("Downloaded")
+                .setContentText("Image saved to Gallery")
+                .setAutoCancel(true)
+
+            notificationManager.notify((System.currentTimeMillis() % 10000).toInt(), builder.build())
+        } catch (e: Exception) {
+            Log.e(TAG, "Error showing download notification: ${e.message}", e)
+        }
+    }
+
+    private fun hasUsagePermission(): Boolean {
+        val appOps = getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            appOps.unsafeCheckOpNoThrow(
+                AppOpsManager.OPSTR_GET_USAGE_STATS,
+                Process.myUid(),
+                packageName
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            appOps.checkOpNoThrow(
+                AppOpsManager.OPSTR_GET_USAGE_STATS,
+                Process.myUid(),
+                packageName
+            )
+        }
+        return mode == AppOpsManager.MODE_ALLOWED
+    }
+
+    private fun getAppName(packageName: String): String {
+        return try {
+            val pm = applicationContext.packageManager
+            val appInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                pm.getApplicationInfo(packageName, PackageManager.ApplicationInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                pm.getApplicationInfo(packageName, 0)
+            }
+            pm.getApplicationLabel(appInfo).toString()
+        } catch (e: Exception) {
+            val parts = packageName.split(".").filter {
+                it != "com" && it != "google" && it != "android" && it != "apps" && it != "app"
+            }
+            val last = parts.lastOrNull() ?: packageName
+            last.replaceFirstChar { it.uppercase() }
+        }
+    }
+
+    private fun isSystemPackage(pkg: String): Boolean {
+        val lowerPkg = pkg.lowercase()
+        val systemPkgs = setOf(
+            "com.android.systemui",
+            "android",
+            "com.google.android.inputmethod.latin",
+            "com.sec.android.inputmethod",
+            "com.samsung.android.honeyboard",
+            "com.android.providers.media",
+            "com.google.android.permissioncontroller",
+            "com.android.settings",
+            "com.android.packageinstaller",
+            "com.miui.securitycenter",
+            "com.miui.home",
+            "com.android.vending",
+            "com.google.android.apps.wellbeing",
+            "com.google.android.apps.parentalcontrols"
+        )
+        return systemPkgs.contains(lowerPkg) ||
+            lowerPkg.contains("launcher") ||
+            lowerPkg.contains("theme") ||
+            lowerPkg.endsWith(".home") ||
+            lowerPkg.contains("inputmethod") ||
+            lowerPkg.contains("keyboard") ||
+            lowerPkg.contains("wallpaper") ||
+            lowerPkg.contains("setupwizard")
+    }
+
+    private fun getTodayScreenTime(): Map<String, Any> {
+        val usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+        val debugLog = mutableListOf<String>()
+
+        val cal = Calendar.getInstance()
+        cal.set(Calendar.HOUR_OF_DAY, 0)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        val todayStartMs = cal.timeInMillis
+        val nowMs = System.currentTimeMillis()
+        val maxPossibleMs = nowMs - todayStartMs
+
+        debugLog.add("Device: ${Build.MANUFACTURER} ${Build.MODEL}")
+        debugLog.add("Android: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})")
+        debugLog.add("Package: $packageName")
+        debugLog.add("Permission: ${hasUsagePermission()}")
+        debugLog.add("Max possible: ${maxPossibleMs / 1000 / 60} min since midnight")
+
+        var appUsageMs = mutableMapOf<String, Long>()
+        var method = "none"
+
+        try {
+            val usageEvents = usageStatsManager.queryEvents(todayStartMs, nowMs)
+
+            val activeActivities = mutableMapOf<String, MutableSet<String>>()
+            val lastResumeTime = mutableMapOf<String, Long>()
+            
+            var eventCount = 0
+            var resumeCount = 0
+            var pauseCount = 0
+
+            val event = UsageEvents.Event()
+            while (usageEvents.hasNextEvent()) {
+                usageEvents.getNextEvent(event)
+                eventCount++
+                val pkg = event.packageName ?: continue
+                val timestamp = event.timeStamp
+                val className = event.className ?: ""
+
+                when (event.eventType) {
+                    UsageEvents.Event.ACTIVITY_RESUMED -> {
+                        val classes = activeActivities.getOrPut(pkg) { mutableSetOf() }
+                        if (classes.isEmpty()) {
+                            lastResumeTime[pkg] = timestamp
+                        }
+                        classes.add(className)
+                        resumeCount++
+                    }
+                    UsageEvents.Event.ACTIVITY_PAUSED, UsageEvents.Event.ACTIVITY_STOPPED -> {
+                        val classes = activeActivities[pkg]
+                        if (classes != null) {
+                            classes.remove(className)
+                            if (classes.isEmpty()) {
+                                val resumeTime = lastResumeTime.remove(pkg)
+                                if (resumeTime != null && timestamp > resumeTime) {
+                                    val duration = timestamp - resumeTime
+                                    if (duration > 0 && duration <= maxPossibleMs) {
+                                        appUsageMs[pkg] = (appUsageMs[pkg] ?: 0L) + duration
+                                    }
+                                }
+                            }
+                        }
+                        pauseCount++
+                    }
+                }
+            }
+
+            for ((pkg, resumeTime) in lastResumeTime) {
+                if (nowMs > resumeTime) {
+                    val duration = nowMs - resumeTime
+                    if (duration > 0 && duration <= maxPossibleMs) {
+                        appUsageMs[pkg] = (appUsageMs[pkg] ?: 0L) + duration
+                    }
+                }
+            }
+
+            debugLog.add("Method1 queryEvents: $eventCount events (R:$resumeCount P:$pauseCount), ${appUsageMs.size} apps")
+            if (appUsageMs.values.sum() > 0) {
+                method = "queryEvents_refCount"
+            }
+        } catch (e: Exception) {
+            debugLog.add("Method1 ERROR: ${e.message}")
+        }
+
+        if (appUsageMs.values.sum() == 0L) {
+            try {
+                val stats: List<UsageStats> = usageStatsManager.queryUsageStats(
+                    UsageStatsManager.INTERVAL_DAILY, todayStartMs, nowMs
+                )
+                debugLog.add("Method2 INTERVAL_DAILY: ${stats.size} entries")
+
+                for (stat in stats) {
+                    val pkg = stat.packageName ?: continue
+                    val fg = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        stat.totalTimeVisible
+                    } else {
+                        stat.totalTimeInForeground
+                    }
+                    if (fg > 0) {
+                        val cappedFg = minOf(fg, maxPossibleMs)
+                        appUsageMs[pkg] = maxOf(appUsageMs[pkg] ?: 0L, cappedFg)
+                    }
+                }
+                debugLog.add("Method2 apps with fg>0: ${appUsageMs.size}")
+
+                if (appUsageMs.values.sum() > 0L) {
+                    method = "queryUsageStats_DAILY_visible"
+                }
+            } catch (e: Exception) {
+                debugLog.add("Method2 ERROR: ${e.message}")
+            }
+        }
+
+        debugLog.add("Final method used: $method")
+
+        val filtered = appUsageMs.filter { (pkg, ms) ->
+            ms > 0 && !isSystemPackage(pkg)
+        }.mapValues { (_, ms) ->
+            minOf(ms, maxPossibleMs)
+        }
+
+        val sorted = filtered.entries.sortedByDescending { it.value }
+
+        var totalMs = 0L
+        val appList = mutableListOf<Map<String, Any>>()
+        for (entry in sorted) {
+            totalMs += entry.value
+            val mins = (entry.value / 1000 / 60).toInt()
+            val appName = getAppName(entry.key)
+            if (mins > 0) {
+                val h = mins / 60
+                val m = mins % 60
+                val label = if (h > 0) "${h}h ${m}m" else "${m}m"
+                appList.add(mapOf(
+                    "package" to entry.key,
+                    "name" to appName,
+                    "duration" to label,
+                    "ms" to entry.value
+                ))
+                debugLog.add("  $appName: ${label} (${entry.key})")
+            } else if (entry.value > 10000) {
+                val secs = (entry.value / 1000).toInt()
+                appList.add(mapOf(
+                    "package" to entry.key,
+                    "name" to appName,
+                    "duration" to "${secs}s",
+                    "ms" to entry.value
+                ))
+            }
+        }
+
+        totalMs = minOf(totalMs, maxPossibleMs)
+
+        val totalMins = (totalMs / 1000 / 60).toInt()
+        val totalH = totalMins / 60
+        val totalM = totalMins % 60
+        val totalLabel = if (totalH > 0) "${totalH}h ${totalM}m" else "${totalM}m"
+
+        debugLog.add("Total: $totalLabel ($totalMs ms), Apps: ${appList.size}")
+
+        Log.d(TAG, debugLog.joinToString("\n"))
+
+        return mapOf(
+            "totalMs" to totalMs,
+            "totalLabel" to totalLabel,
+            "apps" to appList,
+            "method" to method,
+            "debug" to debugLog
+        )
+    }
+}

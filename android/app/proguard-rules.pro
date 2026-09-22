@@ -25,3 +25,16 @@
     @com.google.gson.annotations.SerializedName <fields>;
 }
 -keep class com.google.gson.** { *; }
+
+# 5. Keep App Package & Native Activity
+-keep class com.sadhanatracker.app.** { *; }
+-keep class com.sadhana.tracker.** { *; }
+
+# 6. Keep Plugins (Razorpay, OneSignal, Firebase)
+-keep class com.razorpay.** { *; }
+-dontwarn com.razorpay.**
+-keep class com.onesignal.** { *; }
+-dontwarn com.onesignal.**
+-keep class com.google.firebase.** { *; }
+-dontwarn com.google.firebase.**
+

@@ -18,7 +18,7 @@
             android:value="sadhana_tracker_notifications" />
 
         <activity
-            android:name=".MainActivity"
+            android:name="com.sadhanatracker.app.MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""
