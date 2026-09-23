@@ -39,6 +39,12 @@ export class User {
   @Prop({ type: String, uppercase: true, trim: true, sparse: true, index: true, default: null })
   preacherCode: string;
 
+  @Prop({ type: Boolean, default: false, index: true })
+  canViewAllStudents: boolean;
+
+  @Prop({ type: Boolean, default: false, index: true })
+  isHeadPreacher: boolean;
+
   @Prop({ type: String, default: null })
   photoUrl: string;
 

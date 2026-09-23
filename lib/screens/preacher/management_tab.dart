@@ -8,6 +8,10 @@ class ManagementTab extends StatefulWidget {
   final Map<String, List<dynamic>> allUpdates;
   final Map<String, dynamic>? preacherProfile;
   final Future<void> Function() onRefresh;
+  final bool canViewAllStudents;
+  final List<dynamic> availablePreachers;
+  final String selectedPreacherId;
+  final Function(String)? onPreacherSelected;
 
   const ManagementTab({
     super.key,
@@ -15,6 +19,10 @@ class ManagementTab extends StatefulWidget {
     required this.allUpdates,
     required this.preacherProfile,
     required this.onRefresh,
+    this.canViewAllStudents = false,
+    this.availablePreachers = const [],
+    this.selectedPreacherId = 'all',
+    this.onPreacherSelected,
   });
 
   @override
@@ -1734,6 +1742,106 @@ class _ManagementTabState extends State<ManagementTab> {
   );
   }
 
+  Widget _buildPreacherDropdownHeader() {
+    if (!widget.canViewAllStudents || widget.availablePreachers.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF3F1200).withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.supervisor_account_rounded, color: Color(0xFF3F1200), size: 20),
+          ),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Preacher Group Filter',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+                Text(
+                  'Switch to view students of other preachers',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    color: Color(0xFF64748B),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFCBD5E1)),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: widget.availablePreachers.any((p) => (p['_id'] ?? p['id']).toString() == widget.selectedPreacherId) || widget.selectedPreacherId == 'all'
+                    ? widget.selectedPreacherId
+                    : 'all',
+                icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF3F1200)),
+                elevation: 4,
+                borderRadius: BorderRadius.circular(12),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12.5,
+                  color: Color(0xFF3F1200),
+                ),
+                onChanged: (String? newValue) {
+                  if (newValue != null && widget.onPreacherSelected != null) {
+                    widget.onPreacherSelected!(newValue);
+                  }
+                },
+                items: [
+                  const DropdownMenuItem<String>(
+                    value: 'all',
+                    child: Text('🌐 All Preachers'),
+                  ),
+                  ...widget.availablePreachers.map((p) {
+                    final pId = (p['_id'] ?? p['id'] ?? '').toString();
+                    final pName = (p['name'] ?? 'Preacher').toString();
+                    return DropdownMenuItem<String>(
+                      value: pId,
+                      child: Text('🙏 $pName'),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_selectedBoy != null) {
@@ -1792,6 +1900,7 @@ class _ManagementTabState extends State<ManagementTab> {
               padding: const EdgeInsets.all(16),
               physics: const AlwaysScrollableScrollPhysics(),
               children: [
+                _buildPreacherDropdownHeader(),
                 _buildTodayFestivalCard(),
                 _buildSadhanaCardWidget(sadhanaLogs: sadhanaTasks),
               ],

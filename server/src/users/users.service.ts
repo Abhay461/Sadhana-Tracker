@@ -48,6 +48,8 @@ export class UsersService {
     if (dto.college) updateData.college = dto.college;
     if (dto.courseYear) updateData.courseYear = dto.courseYear;
     if (dto.city) updateData.city = dto.city;
+    if (typeof dto.canViewAllStudents === 'boolean') updateData.canViewAllStudents = dto.canViewAllStudents;
+    if (typeof dto.isHeadPreacher === 'boolean') updateData.isHeadPreacher = dto.isHeadPreacher;
 
     const user = await this.userModel.findByIdAndUpdate(userId, { $set: updateData }, { new: true }).populate('preacherId', 'name email photoUrl phoneNumber whatsapp_number');
     if (!user) {

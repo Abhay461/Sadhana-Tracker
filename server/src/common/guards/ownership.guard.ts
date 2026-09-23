@@ -43,9 +43,13 @@ export class OwnershipGuard implements CanActivate {
       return true;
     }
 
-    // 2. Preachers can access their assigned students or themselves
+    // 2. Preachers can access their assigned students, themselves, or any student if authorized as Head Preacher
     if (currentUser.role === 'preacher') {
       if (targetUserIdStr === currentUserIdStr) {
+        return true;
+      }
+
+      if (currentUser.canViewAllStudents || currentUser.isHeadPreacher) {
         return true;
       }
 

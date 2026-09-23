@@ -71,4 +71,12 @@ export class UpdateUserProfileDto {
   @IsOptional()
   @IsString()
   city?: string;
+
+  @ApiProperty({ description: 'Allow viewing students under all preachers', required: false })
+  @IsOptional()
+  canViewAllStudents?: boolean;
+
+  @ApiProperty({ description: 'Head Preacher flag', required: false })
+  @IsOptional()
+  isHeadPreacher?: boolean;
 }

@@ -76,7 +76,16 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
     return role == 'admin' || isAdminFlag || isSuperAdminEmail;
   }
 
+  bool get _canViewAllStudents {
+    if (_profile == null) return false;
+    final canView = _profile!['canViewAllStudents'] == true;
+    final isHead = _profile!['isHeadPreacher'] == true;
+    return canView || isHead || _isAdmin;
+  }
+
   List<dynamic> _folkBoys = [];
+  List<dynamic> _availablePreachers = [];
+  String _selectedPreacherId = 'all';
   Map<String, List<dynamic>> _allUpdates = {}; // userId -> list of updates
   List<dynamic> _announcements = [];
   List<dynamic> _tripBookings = [];
@@ -286,29 +295,25 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
     }
   }
 
-  Future<void> _fetchFolkBoys() async {
+  Future<void> _fetchFolkBoys({String? preacherId}) async {
     try {
       if (_folkBoys.isEmpty && mounted) {
         setState(() => _isLoadingBoys = true);
       }
 
-      final user = FirebaseAuth.instance.currentUser;
-      final fbUid = user?.uid ?? 'NULL';
-      final fbEmail = user?.email ?? 'NULL';
-      final detectedRole = (_profile?['role'] ?? 'UNKNOWN').toString();
-      final cachedUid = ApiService.cachedUid ?? 'NONE';
-      final freshRequested = ApiService.wasFreshTokenRequested;
+      final targetId = preacherId ?? _selectedPreacherId;
+      String url = '/preacher/students';
+      if (_canViewAllStudents && targetId.isNotEmpty && targetId != 'all') {
+        url = '/preacher/students?preacherId=$targetId';
+      } else if (_canViewAllStudents) {
+        url = '/preacher/students?preacherId=all';
+      }
 
-      debugPrint('📌 [DEBUG /preacher/students CALL]:');
-      debugPrint('   1. Firebase UID: $fbUid');
-      debugPrint('   2. Firebase Email: $fbEmail');
-      debugPrint('   3. Detected Role: $detectedRole');
-      debugPrint('   4. Cached Token UID: $cachedUid');
-      debugPrint('   5. Fresh Token Requested: $freshRequested');
-
-      final data = await ApiService.get('/preacher/students');
+      final data = await ApiService.get(url);
 
       List<dynamic> extractedStudents = [];
+      List<dynamic> extractedPreachers = [];
+
       if (data is List) {
         extractedStudents = List.from(data);
       } else if (data is Map) {
@@ -318,12 +323,18 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
             break;
           }
         }
+        if (data['availablePreachers'] is List) {
+          extractedPreachers = List.from(data['availablePreachers']);
+        }
       }
 
       if (mounted) {
         setState(() {
           _folkBoys = extractedStudents;
           _staticFolkBoys = extractedStudents;
+          if (extractedPreachers.isNotEmpty) {
+            _availablePreachers = extractedPreachers;
+          }
           _isLoadingBoys = false;
         });
       }
@@ -331,6 +342,14 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
       debugPrint('Error fetching folk boys: $e');
       if (mounted) setState(() => _isLoadingBoys = false);
     }
+  }
+
+  void _onPreacherSelected(String preacherId) {
+    setState(() {
+      _selectedPreacherId = preacherId;
+      _isLoadingBoys = true;
+    });
+    _fetchFolkBoys(preacherId: preacherId);
   }
 
   Future<void> _fetchTripAndEventBookings() async {
@@ -1257,6 +1276,10 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
       allUpdates: _allUpdates,
       preacherProfile: _profile,
       onRefresh: _loadProfileAndData,
+      canViewAllStudents: _canViewAllStudents,
+      availablePreachers: _availablePreachers,
+      selectedPreacherId: _selectedPreacherId,
+      onPreacherSelected: _onPreacherSelected,
     );
   }
 
