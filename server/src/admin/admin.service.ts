@@ -207,4 +207,26 @@ export class AdminService {
 
     return { message: `Preacher ${preacher.name} successfully deleted and unassigned.` };
   }
+
+  async updatePreacherPermissions(preacherId: string, body: { canViewAllStudents?: boolean; isHeadPreacher?: boolean }) {
+    const preacher = await this.userModel.findById(preacherId);
+    if (!preacher) {
+      throw new NotFoundException('Preacher profile not found.');
+    }
+
+    if (typeof body.canViewAllStudents === 'boolean') {
+      preacher.canViewAllStudents = body.canViewAllStudents;
+    }
+    if (typeof body.isHeadPreacher === 'boolean') {
+      preacher.isHeadPreacher = body.isHeadPreacher;
+    }
+
+    await preacher.save();
+    return {
+      id: preacher._id,
+      name: preacher.name,
+      canViewAllStudents: preacher.canViewAllStudents,
+      isHeadPreacher: preacher.isHeadPreacher,
+    };
+  }
 }

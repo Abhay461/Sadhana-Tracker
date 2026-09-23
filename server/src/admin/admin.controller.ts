@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { CreatePreacherDto } from './dto/create-preacher.dto';
@@ -19,6 +19,15 @@ export class AdminController {
   @ApiOperation({ summary: 'List all preachers and their assigned students' })
   async getAllPreachers() {
     return this.adminService.getAllPreachers();
+  }
+
+  @Patch('preachers/:id/permissions')
+  @ApiOperation({ summary: 'Update preacher permissions (canViewAllStudents / isHeadPreacher)' })
+  async updatePreacherPermissions(
+    @Param('id') id: string,
+    @Body() body: { canViewAllStudents?: boolean; isHeadPreacher?: boolean },
+  ) {
+    return this.adminService.updatePreacherPermissions(id, body);
   }
 
   @Delete('preachers/:id')
