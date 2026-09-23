@@ -314,12 +314,15 @@ export class SadhanaService {
 
     const role = (currentUser?.role || '').toLowerCase();
     const isAdmin = role === 'admin' || currentUser?.isAdmin === true || currentUser?.is_admin === true;
+    const canViewAll = Boolean(
+      isAdmin || currentUser?.canViewAllStudents || currentUser?.isHeadPreacher
+    );
     const isPreacher = role === 'preacher' || isAdmin;
 
     let entries: any[] = [];
 
-    if (isAdmin) {
-      entries = await this.sadhanaModel.find({}).sort({ logicalDate: -1, createdAt: -1 }).limit(500).lean();
+    if (canViewAll) {
+      entries = await this.sadhanaModel.find({}).sort({ logicalDate: -1, createdAt: -1 }).limit(1000).lean();
     } else if (isPreacher) {
       const assignedStudents = await this.userModel
         .find({
@@ -376,8 +379,8 @@ export class SadhanaService {
       userOrIdConditions.push({ preacherId: currentUser._id });
     }
 
-    if (isAdmin) {
-      userAppointments = await this.appointmentModel.find({}).sort({ createdAt: -1 }).limit(500).lean();
+    if (canViewAll) {
+      userAppointments = await this.appointmentModel.find({}).sort({ createdAt: -1 }).limit(1000).lean();
     } else if (isPreacher) {
       const assignedStudents = await this.userModel
         .find({

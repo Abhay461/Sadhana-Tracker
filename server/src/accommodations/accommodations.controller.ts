@@ -43,7 +43,7 @@ export class AccommodationsController {
   @Roles('preacher', 'admin')
   @ApiOperation({ summary: 'Get preacher accommodation requests queue' })
   async getPreacherQueue(@CurrentUser() preacher: any) {
-    return this.accommodationsService.getPreacherQueue(preacher._id);
+    return this.accommodationsService.getPreacherQueue(preacher);
   }
 
   @Patch(':id/status')
@@ -54,6 +54,6 @@ export class AccommodationsController {
     @Param('id') id: string,
     @Body() dto: UpdateAccommodationStatusDto,
   ) {
-    return this.accommodationsService.updateStatus(preacher._id, id, dto);
+    return this.accommodationsService.updateStatus(preacher, id, dto);
   }
 }

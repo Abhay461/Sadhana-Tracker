@@ -61,7 +61,19 @@ export class AccommodationsService {
     return items;
   }
 
-  async getPreacherQueue(preacherId: string) {
+  async getPreacherQueue(preacher: any) {
+    const preacherId = preacher._id ? preacher._id.toString() : preacher.toString();
+    const canViewAll = Boolean(
+      preacher.canViewAllStudents || preacher.isHeadPreacher || preacher.role === 'admin'
+    );
+
+    if (canViewAll) {
+      return this.accommodationModel
+        .find({})
+        .populate('userId', 'name email phoneNumber photoUrl')
+        .sort({ createdAt: -1 });
+    }
+
     const preacherIdObj = Types.ObjectId.isValid(preacherId) ? new Types.ObjectId(preacherId) : preacherId;
     const assignedStudents = await this.userModel.find({ preacherId: preacherIdObj }).select('_id').lean();
     const studentIds: any[] = assignedStudents.map((s) => s._id);
@@ -79,22 +91,24 @@ export class AccommodationsService {
       .populate('userId', 'name email phoneNumber photoUrl')
       .sort({ createdAt: -1 });
 
-    console.log(`📌 [ACCOMMODATION QUEUE RETRIEVED]: PreacherID=${preacherId}, Count=${items.length}, Items=`,
-      items.map((i) => ({ bookingId: i._id.toString(), studentId: (i.userId as any)?._id?.toString() || i.userId?.toString(), preacherId: i.preacherId?.toString() || 'UNASSIGNED', status: i.status }))
-    );
-
+    console.log(`📌 [ACCOMMODATION QUEUE RETRIEVED]: PreacherID=${preacherId}, Count=${items.length}`);
     return items;
   }
 
-  async updateStatus(preacherId: string, id: string, dto: UpdateAccommodationStatusDto) {
+  async updateStatus(preacher: any, id: string, dto: UpdateAccommodationStatusDto) {
     const item = await this.accommodationModel.findById(id);
     if (!item) {
       throw new NotFoundException('Accommodation request not found.');
     }
 
-    if (item.preacherId && item.preacherId.toString() !== preacherId.toString()) {
+    const preacherId = preacher._id ? preacher._id.toString() : preacher.toString();
+    const canViewAll = Boolean(
+      preacher.canViewAllStudents || preacher.isHeadPreacher || preacher.role === 'admin'
+    );
+
+    if (!canViewAll && item.preacherId && item.preacherId.toString() !== preacherId) {
       const student = await this.userModel.findById(item.userId).select('preacherId').lean();
-      if (!student || !student.preacherId || student.preacherId.toString() !== preacherId.toString()) {
+      if (!student || !student.preacherId || student.preacherId.toString() !== preacherId) {
         throw new ForbiddenException('Access denied: Request is assigned to another preacher queue.');
       }
     }

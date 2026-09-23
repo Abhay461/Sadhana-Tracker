@@ -92,9 +92,17 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
   List<dynamic> _eventBookings = [];
 
   // Active View Tab identifier
+  // Active View Tab identifier
   String? _activeTab;
   int _selectedIndex = 0;
   bool _initializedFromArgs = false;
+
+  // ── Single-flight in-flight request guards to eliminate duplicate API requests ──
+  bool _isLoadingProfileAndData = false;
+  bool _isFetchingFolkBoys = false;
+  bool _isFetchingAllUpdates = false;
+  bool _isFetchingAnnouncements = false;
+  bool _isFetchingTripsAndEvents = false;
 
   // ── Real-time refresh: WebSocket event stream + FCM foreground + lifecycle ──
   StreamSubscription<RealtimeEvent>? _realtimeSub;
@@ -107,9 +115,8 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
     if (!_initializedFromArgs) {
       _initializedFromArgs = true;
       final args = ModalRoute.of(context)?.settings.arguments;
-      if (args is Map<String, dynamic>) {
-        _loadProfileAndData(initialProfile: args);
-      }
+      final initialProfile = args is Map<String, dynamic> ? args : null;
+      _loadProfileAndData(initialProfile: initialProfile);
     }
   }
 
@@ -146,7 +153,6 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
       _eventBookings = List.from(_staticEventBookings!);
     }
 
-    _loadProfileAndData();
     _startRealtimeRefresh();
   }
 
@@ -163,6 +169,10 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      if (_isLoadingProfileAndData || _isSilentRefreshing) {
+        debugPrint('⏭️ [PREACHER] App resumed but refresh already in-flight, skipping duplicate app-resume refresh.');
+        return;
+      }
       debugPrint('🔄 [PREACHER] App resumed → refreshing data');
       _silentRefresh();
     }
@@ -191,17 +201,17 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
       case 'accommodation_update':
       case 'appointment_update':
       case 'payment_update':
-        _fetchAllUpdates();
+        _fetchAllUpdates(force: true);
         break;
       case 'student_update':
-        _fetchFolkBoys();
+        _fetchFolkBoys(force: true);
         break;
       case 'trip_update':
       case 'event_update':
-        _fetchTripAndEventBookings();
+        _fetchTripAndEventBookings(force: true);
         break;
       case 'announcement_update':
-        _fetchAnnouncements();
+        _fetchAnnouncements(force: true);
         break;
       default:
         _silentRefresh();
@@ -211,11 +221,14 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
 
   /// Silently re-fetch updates + accommodations without showing a loading spinner.
   Future<void> _silentRefresh() async {
-    if (_isSilentRefreshing || !mounted) return;
+    if (_isSilentRefreshing || _isLoadingProfileAndData || !mounted) {
+      debugPrint('⏭️ [PREACHER] Silent refresh skipped (already in-flight or dashboard loading).');
+      return;
+    }
     _isSilentRefreshing = true;
     debugPrint('🔄 [PREACHER] Silent refresh started');
     try {
-      await _fetchAllUpdates();
+      await _fetchAllUpdates(force: true);
     } catch (e) {
       debugPrint('🔄 [PREACHER] Silent refresh error: $e');
     } finally {
@@ -223,33 +236,39 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
     }
   }
 
-  Future<void> _loadProfileAndData({Map<String, dynamic>? initialProfile}) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    if (_staticCacheUid != null && _staticCacheUid != user.uid) {
-      clearStaticCache();
+  Future<void> _loadProfileAndData({Map<String, dynamic>? initialProfile, bool force = false}) async {
+    if (_isLoadingProfileAndData && !force) {
+      debugPrint('⏭️ [PREACHER] _loadProfileAndData already in-flight, skipping duplicate request.');
+      return;
     }
-    _staticCacheUid = user.uid;
-
-    if (initialProfile != null) {
-      _profile = initialProfile;
-      _staticProfile = initialProfile;
-      _isLoadingProfile = false;
-    } else if (_staticProfile != null) {
-      _profile = _staticProfile;
-      _isLoadingProfile = false;
-    }
-
-    if (_staticFolkBoys != null && _staticFolkBoys!.isNotEmpty) {
-      _folkBoys = List.from(_staticFolkBoys!);
-      _isLoadingBoys = false;
-    }
-    if (_staticAllUpdates != null && _staticAllUpdates!.isNotEmpty) {
-      _allUpdates = Map.from(_staticAllUpdates!);
-    }
+    _isLoadingProfileAndData = true;
 
     try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      if (_staticCacheUid != null && _staticCacheUid != user.uid) {
+        clearStaticCache();
+      }
+      _staticCacheUid = user.uid;
+
+      if (initialProfile != null) {
+        _profile = initialProfile;
+        _staticProfile = initialProfile;
+        _isLoadingProfile = false;
+      } else if (_staticProfile != null) {
+        _profile = _staticProfile;
+        _isLoadingProfile = false;
+      }
+
+      if (_staticFolkBoys != null && _staticFolkBoys!.isNotEmpty) {
+        _folkBoys = List.from(_staticFolkBoys!);
+        _isLoadingBoys = false;
+      }
+      if (_staticAllUpdates != null && _staticAllUpdates!.isNotEmpty) {
+        _allUpdates = Map.from(_staticAllUpdates!);
+      }
+
       // Fire parallel requests concurrently to avoid waterfall latency
       await Future.wait([
         if (_profile == null)
@@ -279,10 +298,10 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
             debugPrint('Error loading preacher profile: $e');
             if (mounted) setState(() => _isLoadingProfile = false);
           }),
-        _fetchFolkBoys(),
-        _fetchAllUpdates(),
-        _fetchAnnouncements(),
-        _fetchTripAndEventBookings(),
+        _fetchFolkBoys(force: force),
+        _fetchAllUpdates(force: force),
+        _fetchAnnouncements(force: force),
+        _fetchTripAndEventBookings(force: force),
       ]);
     } catch (e) {
       debugPrint('Error loading preacher profile and data: $e');
@@ -292,10 +311,18 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
           _isLoadingBoys = false;
         });
       }
+    } finally {
+      _isLoadingProfileAndData = false;
     }
   }
 
-  Future<void> _fetchFolkBoys({String? preacherId}) async {
+  Future<void> _fetchFolkBoys({String? preacherId, bool force = false}) async {
+    if (_isFetchingFolkBoys && !force) {
+      debugPrint('⏭️ [PREACHER] _fetchFolkBoys already in-flight, skipping duplicate request.');
+      return;
+    }
+    _isFetchingFolkBoys = true;
+
     try {
       if (_folkBoys.isEmpty && mounted) {
         setState(() => _isLoadingBoys = true);
@@ -341,6 +368,8 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
     } catch (e) {
       debugPrint('Error fetching folk boys: $e');
       if (mounted) setState(() => _isLoadingBoys = false);
+    } finally {
+      _isFetchingFolkBoys = false;
     }
   }
 
@@ -349,10 +378,16 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
       _selectedPreacherId = preacherId;
       _isLoadingBoys = true;
     });
-    _fetchFolkBoys(preacherId: preacherId);
+    _fetchFolkBoys(preacherId: preacherId, force: true);
   }
 
-  Future<void> _fetchTripAndEventBookings() async {
+  Future<void> _fetchTripAndEventBookings({bool force = false}) async {
+    if (_isFetchingTripsAndEvents && !force) {
+      debugPrint('⏭️ [PREACHER] _fetchTripAndEventBookings already in-flight, skipping duplicate request.');
+      return;
+    }
+    _isFetchingTripsAndEvents = true;
+
     try {
       final results = await Future.wait([
         ApiService.get('/trips').catchError((e) => []),
@@ -371,6 +406,8 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
       }
     } catch (e) {
       debugPrint('Error fetching trip/event bookings: $e');
+    } finally {
+      _isFetchingTripsAndEvents = false;
     }
   }
 
@@ -813,7 +850,13 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
     return result;
   }
 
-  Future<void> _fetchAllUpdates() async {
+  Future<void> _fetchAllUpdates({bool force = false}) async {
+    if (_isFetchingAllUpdates && !force) {
+      debugPrint('⏭️ [PREACHER] _fetchAllUpdates already in-flight, skipping duplicate request.');
+      return;
+    }
+    _isFetchingAllUpdates = true;
+
     try {
       final fetchResults = await Future.wait([
         ApiService.get('/sadhana/updates').catchError((e) => []),
@@ -992,10 +1035,18 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
       }
     } catch (e) {
       debugPrint('Error fetching all updates: $e');
+    } finally {
+      _isFetchingAllUpdates = false;
     }
   }
 
-  Future<void> _fetchAnnouncements() async {
+  Future<void> _fetchAnnouncements({bool force = false}) async {
+    if (_isFetchingAnnouncements && !force) {
+      debugPrint('⏭️ [PREACHER] _fetchAnnouncements already in-flight, skipping duplicate request.');
+      return;
+    }
+    _isFetchingAnnouncements = true;
+
     try {
       final data = await ApiService.get('/announcements');
       if (mounted) {
@@ -1006,6 +1057,8 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
       }
     } catch (e) {
       debugPrint('Error fetching announcements: $e');
+    } finally {
+      _isFetchingAnnouncements = false;
     }
   }
 

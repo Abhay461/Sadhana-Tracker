@@ -40,6 +40,7 @@ class _ManagementTabState extends State<ManagementTab> {
   final Set<String> _expandedScreenTimeIds = {};
   Map<String, dynamic>? _todayFestival;
   bool _showExcelGridInManagement = true;
+  bool _isFetchingFestival = false;
 
 
   @override
@@ -63,7 +64,13 @@ class _ManagementTabState extends State<ManagementTab> {
     return url;
   }
 
-  Future<void> _fetchTodayFestival() async {
+  Future<void> _fetchTodayFestival({bool force = false}) async {
+    if (_isFetchingFestival && !force) {
+      debugPrint('⏭️ [MANAGEMENT_TAB] _fetchTodayFestival already in-flight, skipping duplicate request.');
+      return;
+    }
+    _isFetchingFestival = true;
+
     try {
       final response = await ApiService.get('/festivals/today').timeout(const Duration(seconds: 15));
       if (response != null && response is Map<String, dynamic>) {
@@ -91,6 +98,8 @@ class _ManagementTabState extends State<ManagementTab> {
           _todayFestival = null;
         });
       }
+    } finally {
+      _isFetchingFestival = false;
     }
   }
 
