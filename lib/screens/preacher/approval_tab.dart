@@ -115,7 +115,37 @@ class _ApprovalTabState extends State<ApprovalTab> {
     return '';
   }
 
-  Widget _buildRoleBadge(String? workerId) {
+  String _getDiscipleName(Map<String, dynamic> u) {
+    final rawName = (u['worker_name'] ?? u['name'] ?? u['userName'] ?? u['student_name'] ?? '').toString().trim();
+    if (rawName.isNotEmpty && rawName.toLowerCase() != 'student' && rawName.toLowerCase() != 'disciple') {
+      return rawName;
+    }
+
+    final userObj = u['userId'] ?? u['user'] ?? u['student'] ?? u['worker'];
+    if (userObj is Map && userObj['name'] != null) {
+      final nameStr = userObj['name'].toString().trim();
+      if (nameStr.isNotEmpty && nameStr.toLowerCase() != 'student' && nameStr.toLowerCase() != 'disciple') {
+        return nameStr;
+      }
+    }
+
+    final workerId = (u['worker_id'] ?? (userObj is Map ? (userObj['_id'] ?? userObj['id']) : userObj) ?? u['userId'])?.toString();
+    if (workerId != null && workerId.isNotEmpty) {
+      for (final boy in widget.folkBoys) {
+        if (boy is Map && (boy['id'] ?? boy['_id'])?.toString() == workerId) {
+          final bName = (boy['name'] ?? boy['worker_name'])?.toString().trim() ?? '';
+          if (bName.isNotEmpty && bName.toLowerCase() != 'student' && bName.toLowerCase() != 'disciple') {
+            return bName;
+          }
+        }
+      }
+    }
+
+    return rawName.isNotEmpty ? rawName : 'Student';
+  }
+
+  Widget _buildRoleBadge(String? workerId, {String? category}) {
+    if (category == 'accommodation') return const SizedBox.shrink();
     final role = _getDiscipleRole(workerId);
     if (role.isEmpty) return const SizedBox.shrink();
     
@@ -188,7 +218,7 @@ class _ApprovalTabState extends State<ApprovalTab> {
   }
 
   Future<Map<String, String>?> _showAppointmentApprovalDialog(BuildContext context, Map<String, dynamic> u) async {
-    final studentName = u['worker_name'] ?? u['student_name'] ?? 'Student';
+    final studentName = _getDiscipleName(u);
     final preferredDate = (u['preferredDate'] ?? u['date'] ?? '').toString();
     final preferredTime = (u['preferredTime'] ?? '').toString();
     
@@ -542,7 +572,7 @@ class _ApprovalTabState extends State<ApprovalTab> {
 
   void _showFullDetailsBottomSheet(BuildContext context, Map<String, dynamic> u) {
     final cat = u['category'] ?? '';
-    final studentName = u['worker_name'] ?? u['name'] ?? 'Disciple';
+    final studentName = _getDiscipleName(u);
     final desc = _cleanDescription(u['description'], cat, workStarted: u['work_started']);
     final dateStr = u['created_at'] != null ? DateFormat('d MMM yyyy, h:mm a').format(DateTime.parse(u['created_at'])) : '---';
 
@@ -559,7 +589,7 @@ class _ApprovalTabState extends State<ApprovalTab> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(studentName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                _buildRoleBadge(u['worker_id']?.toString()),
+                _buildRoleBadge(u['worker_id']?.toString(), category: cat),
               ],
             ),
             const SizedBox(height: 4),
@@ -798,13 +828,13 @@ class _ApprovalTabState extends State<ApprovalTab> {
                           children: [
                             Flexible(
                               child: Text(
-                                u['worker_name'] ?? 'Disciple',
+                                _getDiscipleName(u),
                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
                             const SizedBox(width: 4),
-                            _buildRoleBadge(u['worker_id']?.toString()),
+                            _buildRoleBadge(u['worker_id']?.toString(), category: cat),
                             const SizedBox(width: 4),
                             _buildCategoryBadge(cat),
                             const SizedBox(width: 4),
@@ -917,13 +947,13 @@ class _ApprovalTabState extends State<ApprovalTab> {
                           children: [
                             Flexible(
                               child: Text(
-                                u['worker_name'] ?? 'Disciple',
+                                _getDiscipleName(u),
                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
                             const SizedBox(width: 4),
-                            _buildRoleBadge(u['worker_id']?.toString()),
+                            _buildRoleBadge(u['worker_id']?.toString(), category: category),
                             const SizedBox(width: 4),
                             _buildCategoryBadge(category),
                             const SizedBox(width: 4),

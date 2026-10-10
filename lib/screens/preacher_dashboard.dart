@@ -992,9 +992,44 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
         for (var acc in extractList(accData)) {
           if (acc is Map) {
             final reqDetails = (acc['requestDetails'] ?? acc['description'] ?? '').toString();
-            final userObj = acc['user'] ?? acc['student'] ?? acc['worker'];
-            final wId = userObj is Map ? (userObj['_id'] ?? userObj['id']) : (acc['worker_id'] ?? acc['userId'] ?? acc['studentId']);
-            final wName = userObj is Map ? userObj['name'] : (acc['worker_name'] ?? acc['userName'] ?? acc['studentName'] ?? 'Student');
+            final userObj = acc['userId'] ?? acc['user'] ?? acc['student'] ?? acc['worker'];
+            final wId = (userObj is Map
+                    ? (userObj['_id'] ?? userObj['id'])
+                    : (acc['worker_id'] ?? acc['userId'] ?? acc['studentId']))
+                ?.toString() ?? '';
+
+            String wName = '';
+            if (userObj is Map && userObj['name'] != null && userObj['name'].toString().trim().isNotEmpty) {
+              wName = userObj['name'].toString().trim();
+            } else if (acc['name'] != null && acc['name'].toString().trim().isNotEmpty) {
+              wName = acc['name'].toString().trim();
+            } else if (acc['worker_name'] != null && acc['worker_name'].toString().trim().isNotEmpty) {
+              wName = acc['worker_name'].toString().trim();
+            } else if (acc['userName'] != null && acc['userName'].toString().trim().isNotEmpty) {
+              wName = acc['userName'].toString().trim();
+            } else if (acc['studentName'] != null && acc['studentName'].toString().trim().isNotEmpty) {
+              wName = acc['studentName'].toString().trim();
+            }
+
+            if (wName.isEmpty || wName.toLowerCase() == 'student' || wName.toLowerCase() == 'disciple') {
+              for (var boy in _folkBoys) {
+                if (boy is Map) {
+                  final bId = (boy['id'] ?? boy['_id'] ?? '').toString();
+                  if (bId.isNotEmpty && bId == wId) {
+                    final bName = (boy['name'] ?? boy['worker_name'] ?? '').toString().trim();
+                    if (bName.isNotEmpty && bName.toLowerCase() != 'student' && bName.toLowerCase() != 'disciple') {
+                      wName = bName;
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+
+            if (wName.isEmpty) {
+              wName = 'Student';
+            }
+
             final status = (acc['status'] ?? '').toString().toUpperCase();
             final isDone = status == 'APPROVED' || status == 'REJECTED' || acc['is_completed'] == true;
             final room = acc['assignedRoom'] ?? acc['work_completed'] ?? '';
@@ -1003,6 +1038,7 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
               'id': acc['id'] ?? acc['_id'],
               'worker_id': wId,
               'worker_name': wName,
+              'userId': userObj,
               'category': 'accommodation',
               'work_started': 'Accommodation Booking',
               'description': reqDetails,
