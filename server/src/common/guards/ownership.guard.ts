@@ -5,7 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { User, UserDocument } from '../../database/schemas/users.schema';
 
 @Injectable()
@@ -33,11 +33,12 @@ export class OwnershipGuard implements CanActivate {
     }
 
     const targetUserIdStr = targetUserId.toString();
-    const currentUserIdStr = currentUser._id.toString();
+    const currentUserIdStr = currentUser._id?.toString() || '';
+    const currentUserFirebaseUid = currentUser.firebaseUid?.toString();
 
     // 1. Students can only access their own data
     if (currentUser.role === 'folk_boy' || currentUser.role === 'residency') {
-      if (targetUserIdStr !== currentUserIdStr) {
+      if (targetUserIdStr !== currentUserIdStr && (!currentUserFirebaseUid || targetUserIdStr !== currentUserFirebaseUid)) {
         throw new ForbiddenException('Access denied: You can only view or modify your own records.');
       }
       return true;
@@ -45,7 +46,7 @@ export class OwnershipGuard implements CanActivate {
 
     // 2. Preachers can access their assigned students, themselves, or any student if authorized as Head Preacher
     if (currentUser.role === 'preacher') {
-      if (targetUserIdStr === currentUserIdStr) {
+      if (targetUserIdStr === currentUserIdStr || (currentUserFirebaseUid && targetUserIdStr === currentUserFirebaseUid)) {
         return true;
       }
 
@@ -53,13 +54,22 @@ export class OwnershipGuard implements CanActivate {
         return true;
       }
 
-      const targetStudent = await this.userModel.findById(targetUserIdStr);
+      let targetStudent: any = null;
+      if (Types.ObjectId.isValid(targetUserIdStr)) {
+        targetStudent = await this.userModel.findById(targetUserIdStr);
+      } else {
+        targetStudent = await this.userModel.findOne({ firebaseUid: targetUserIdStr });
+      }
+
       if (!targetStudent) {
         throw new ForbiddenException('Target user record not found.');
       }
 
       const assignedPreacherIdStr = targetStudent.preacherId?.toString();
-      if (assignedPreacherIdStr !== currentUserIdStr) {
+      if (
+        assignedPreacherIdStr !== currentUserIdStr &&
+        (!currentUserFirebaseUid || assignedPreacherIdStr !== currentUserFirebaseUid)
+      ) {
         throw new ForbiddenException('Access denied: This student is not assigned to your group.');
       }
       return true;

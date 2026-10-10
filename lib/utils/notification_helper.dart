@@ -4,48 +4,23 @@ import '../services/api_service.dart';
 import 'constants.dart';
 
 class NotificationHelper {
-  static String? _cachedAppId;
+  static bool _isInitialized = false;
 
-  /// Fetches OneSignal keys from Constants.
-  static Future<Map<String, String>> _getKeys() async {
-    if (_cachedAppId != null) {
-      return {
-        'appId': _cachedAppId!,
-      };
-    }
-
-    String appId = Constants.oneSignalAppId;
-
-    _cachedAppId = appId;
-
-    return {
-      'appId': appId,
-    };
-  }
-
-  /// Initializes the OneSignal SDK.
+  /// Initializes the OneSignal SDK safely in the background when configured.
   static Future<void> initialize() async {
+    if (!Constants.isOneSignalConfigured) {
+      debugPrint('ℹ️ [NotificationHelper] OneSignal is optional/not configured. Firebase FCM handles push notifications.');
+      return;
+    }
+    if (_isInitialized) return;
+
     try {
-      final keys = await _getKeys();
-      final appId = keys['appId']!;
-      
-      if (appId.isEmpty || appId == 'YOUR_ONESIGNAL_APP_ID') {
-        debugPrint('NotificationHelper: OneSignal App ID is not configured.');
-        return;
-      }
+      final appId = Constants.oneSignalAppId.trim();
 
       // Initialize OneSignal
       OneSignal.Debug.setLogLevel(OSLogLevel.none);
       OneSignal.initialize(appId);
-      
-      // Request permission
-      await OneSignal.Notifications.requestPermission(true).timeout(
-        const Duration(seconds: 2),
-        onTimeout: () {
-          debugPrint('NotificationHelper: OneSignal permission request timed out (normal on emulators).');
-          return false;
-        },
-      );
+      _isInitialized = true;
       debugPrint('NotificationHelper: OneSignal initialized successfully.');
     } catch (e) {
       debugPrint('NotificationHelper: Failed to initialize OneSignal: $e');
@@ -54,11 +29,8 @@ class NotificationHelper {
 
   /// Log in current user to OneSignal using their User ID.
   static Future<void> loginUser(String userId) async {
+    if (!Constants.isOneSignalConfigured || !_isInitialized) return;
     try {
-      final keys = await _getKeys();
-      final appId = keys['appId']!;
-      if (appId.isEmpty || appId == 'YOUR_ONESIGNAL_APP_ID') return;
-
       await OneSignal.login(userId);
       debugPrint('NotificationHelper: Associated OneSignal user: $userId');
     } catch (e) {
@@ -68,11 +40,8 @@ class NotificationHelper {
 
   /// Log out current user from OneSignal.
   static Future<void> logoutUser() async {
+    if (!Constants.isOneSignalConfigured || !_isInitialized) return;
     try {
-      final keys = await _getKeys();
-      final appId = keys['appId']!;
-      if (appId.isEmpty || appId == 'YOUR_ONESIGNAL_APP_ID') return;
-
       await OneSignal.logout();
       debugPrint('NotificationHelper: Disassociated user from OneSignal.');
     } catch (e) {

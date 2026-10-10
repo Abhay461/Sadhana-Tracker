@@ -36,14 +36,16 @@ void main() async {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
+  static final ThemeData _theme = ThemeData(
+    colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
+    useMaterial3: true,
+  );
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Sadhana Tracker',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
-        useMaterial3: true,
-      ),
+      theme: _theme,
       initialRoute: '/',
       routes: {
         '/': (context) => const SplashScreen(),

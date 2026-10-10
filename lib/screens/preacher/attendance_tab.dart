@@ -34,7 +34,7 @@ class _AttendanceTabState extends State<AttendanceTab> {
     return list;
   }
 
-  Future<void> _markAttendance(Map<String, dynamic> boy) async {
+  Future<void> _markAttendance(dynamic boy) async {
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
     try {
       await ApiService.post('/sadhana', {
@@ -64,6 +64,7 @@ class _AttendanceTabState extends State<AttendanceTab> {
             padding: const EdgeInsets.all(16),
             itemCount: widget.folkBoys.length,
             itemBuilder: (context, index) {
+              final boy = widget.folkBoys[index];
               final boyId = (boy['id'] ?? boy['_id'] ?? '').toString();
               final isPresent = todayUpdateList.any((u) => u['worker_id']?.toString() == boyId && u['category'] == 'attendance' && u['date'] == today);
 
@@ -78,7 +79,13 @@ class _AttendanceTabState extends State<AttendanceTab> {
                     children: [
                       CircleAvatar(
                         backgroundImage: boy['photo_url'] != null ? NetworkImage(boy['photo_url']) : null,
-                        child: boy['photo_url'] == null ? Text(boy['name'][0].toUpperCase()) : null,
+                        child: boy['photo_url'] == null
+                            ? Text(
+                                (boy['name'] != null && boy['name'].toString().trim().isNotEmpty)
+                                    ? boy['name'].toString().trim()[0].toUpperCase()
+                                    : 'M',
+                              )
+                            : null,
                       ),
                       const SizedBox(width: 16),
                       Expanded(

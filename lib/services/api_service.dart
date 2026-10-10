@@ -12,6 +12,13 @@ import 'realtime_service.dart';
 class ApiService {
   static String get baseUrl => Constants.apiBaseUrl;
 
+  /// Safely resolves full URL by ensuring exactly one slash between baseUrl and endpoint.
+  static String buildUrl(String endpoint) {
+    final base = baseUrl.endsWith('/') ? baseUrl.substring(0, baseUrl.length - 1) : baseUrl;
+    final path = endpoint.startsWith('/') ? endpoint : '/$endpoint';
+    return '$base$path';
+  }
+
   // ── Shared HTTP client (one instance for the app lifetime) ──
   static http.Client _httpClient = http.Client();
 
@@ -124,7 +131,7 @@ class ApiService {
   }
 
   static Future<dynamic> get(String endpoint) async {
-    final url = '$baseUrl$endpoint';
+    final url = buildUrl(endpoint);
     _logStart('GET', url);
     final stopwatch = Stopwatch()..start();
     final headers = await _getHeaders();
@@ -258,7 +265,7 @@ class ApiService {
       targetBody = Map<String, dynamic>.from(body);
     }
 
-    final url = '$baseUrl$targetEndpoint';
+    final url = buildUrl(targetEndpoint);
     _logStart('POST', url);
     final stopwatch = Stopwatch()..start();
     debugPrint('⏳ [API] POST $url → HTTP AWAIT');
@@ -275,7 +282,7 @@ class ApiService {
     }
 
     if (response.statusCode == 404 && targetEndpoint != '/sadhana') {
-      final fbUrl = '$baseUrl/sadhana';
+      final fbUrl = buildUrl('/sadhana');
       _logStart('POST', fbUrl);
       final fbStopwatch = Stopwatch()..start();
       debugPrint('⏳ [API] POST $fbUrl → HTTP AWAIT (fallback)');
@@ -295,7 +302,7 @@ class ApiService {
   }
 
   static Future<dynamic> patch(String endpoint, Map<String, dynamic> body) async {
-    final url = '$baseUrl$endpoint';
+    final url = buildUrl(endpoint);
     _logStart('PATCH', url);
     final stopwatch = Stopwatch()..start();
     final headers = await _getHeaders();
@@ -311,7 +318,7 @@ class ApiService {
   }
 
   static Future<dynamic> delete(String endpoint, {Map<String, dynamic>? body}) async {
-    final url = '$baseUrl$endpoint';
+    final url = buildUrl(endpoint);
     _logStart('DELETE', url);
     final stopwatch = Stopwatch()..start();
     final headers = await _getHeaders();

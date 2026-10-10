@@ -19,31 +19,47 @@ export class PreachersService {
   ) {}
 
   async getMyStudents(preacher: any, targetPreacherId?: string) {
-    const preacherId = preacher._id ? preacher._id.toString() : preacher.toString();
+    const preacherId = (
+      preacher?._id ??
+      preacher?.id ??
+      preacher?.uid ??
+      (typeof preacher === 'string' ? preacher : '')
+    ).toString();
     const canViewAll = Boolean(
-      preacher.canViewAllStudents || preacher.isHeadPreacher || preacher.role === 'admin'
+      preacher?.canViewAllStudents || preacher?.isHeadPreacher || preacher?.role === 'admin'
     );
+    const extraUid = (preacher?.firebaseUid ?? preacher?.uid ?? '').toString();
 
-    const buildPreacherCondition = (pId: string, extraUid?: string) => {
-      const matchers: any[] = [{ preacherId: pId }];
-      if (Types.ObjectId.isValid(pId)) {
-        matchers.push({ preacherId: new Types.ObjectId(pId) });
+    const buildPreacherCondition = (pId: string, extra?: string) => {
+      const matchers: any[] = [];
+      if (pId) {
+        matchers.push({ preacherId: pId });
+        if (Types.ObjectId.isValid(pId)) {
+          matchers.push({ preacherId: new Types.ObjectId(pId) });
+        }
       }
-      if (extraUid) {
-        matchers.push({ preacherId: extraUid });
+      if (extra && extra !== pId) {
+        matchers.push({ preacherId: extra });
+        if (Types.ObjectId.isValid(extra)) {
+          matchers.push({ preacherId: new Types.ObjectId(extra) });
+        }
       }
-      return { $or: matchers };
+      return matchers.length > 0 ? { $or: matchers } : { preacherId: pId };
     };
 
     let availablePreachers: any[] = [];
-    let queryFilter: any = buildPreacherCondition(preacherId, preacher.firebaseUid);
+    let queryFilter: any = buildPreacherCondition(preacherId, extraUid);
 
     if (canViewAll) {
-      availablePreachers = await this.userModel
-        .find({ role: 'preacher', status: 'ACTIVE' })
-        .select('_id name email preacherCode photoUrl phoneNumber')
-        .sort({ name: 1 })
-        .lean();
+      try {
+        availablePreachers = await this.userModel
+          .find({ role: 'preacher', status: 'ACTIVE' })
+          .select('_id name email preacherCode photoUrl phoneNumber')
+          .sort({ name: 1 })
+          .lean();
+      } catch (err) {
+        availablePreachers = [];
+      }
 
       if (targetPreacherId && targetPreacherId !== 'all') {
         queryFilter = buildPreacherCondition(targetPreacherId);
@@ -58,12 +74,22 @@ export class PreachersService {
       }
     }
 
-    const rawStudents = await this.userModel
-      .find(queryFilter)
-      .populate('preacherId', 'name email preacherCode')
-      .select('name email phoneNumber role status photoUrl dob joiningDate isBlocked createdAt preacherId whatsapp_number')
-      .sort({ name: 1 })
-      .lean();
+    let rawStudents: any[] = [];
+    try {
+      rawStudents = await this.userModel
+        .find(queryFilter)
+        .populate('preacherId', 'name email preacherCode')
+        .select('name email phoneNumber role status photoUrl dob joiningDate isBlocked createdAt preacherId whatsapp_number')
+        .sort({ name: 1 })
+        .lean();
+    } catch (populateError) {
+      // Fallback: If populate fails due to any uncastable preacherId in legacy records, fetch cleanly without populate
+      rawStudents = await this.userModel
+        .find(queryFilter)
+        .select('name email phoneNumber role status photoUrl dob joiningDate isBlocked createdAt preacherId whatsapp_number')
+        .sort({ name: 1 })
+        .lean();
+    }
 
     const students = rawStudents.map((s: any) => ({
       ...s,
@@ -78,12 +104,12 @@ export class PreachersService {
       pendingCount,
       students,
       canViewAll,
-      availablePreachers: availablePreachers.map((p: any) => ({
-        id: p._id.toString(),
-        _id: p._id.toString(),
-        name: p.name,
-        email: p.email,
-        preacherCode: p.preacherCode,
+      availablePreachers: (availablePreachers || []).map((p: any) => ({
+        id: (p._id ?? p.id ?? '').toString(),
+        _id: (p._id ?? p.id ?? '').toString(),
+        name: p.name ?? '',
+        email: p.email ?? '',
+        preacherCode: p.preacherCode ?? '',
       })),
     };
   }
@@ -95,12 +121,19 @@ export class PreachersService {
       throw new NotFoundException('Student account not found.');
     }
 
-    const preacherId = preacher._id ? preacher._id.toString() : preacher.toString();
+    const preacherId = (
+      preacher?._id ??
+      preacher?.id ??
+      preacher?.uid ??
+      (typeof preacher === 'string' ? preacher : '')
+    ).toString();
     const canViewAll = Boolean(
-      preacher.canViewAllStudents || preacher.isHeadPreacher || preacher.role === 'admin'
+      preacher?.canViewAllStudents || preacher?.isHeadPreacher || preacher?.role === 'admin'
     );
+    const studentPreacherId = student.preacherId ? student.preacherId.toString() : '';
+    const extraUid = (preacher?.firebaseUid ?? preacher?.uid ?? '').toString();
 
-    if (!canViewAll && student.preacherId?.toString() !== preacherId) {
+    if (!canViewAll && studentPreacherId !== preacherId && (!extraUid || studentPreacherId !== extraUid)) {
       throw new ForbiddenException('Access denied: Student is not assigned to your preacher group.');
     }
 
@@ -117,18 +150,32 @@ export class PreachersService {
   }
 
   async getStudentProgress(preacher: any, studentId: string) {
-    const student = await this.userModel.findById(studentId).populate('preacherId', 'name email preacherCode');
+    let student: any;
+    try {
+      student = await this.userModel.findById(studentId).populate('preacherId', 'name email preacherCode');
+    } catch (err) {
+      student = await this.userModel.findById(studentId);
+    }
 
     if (!student) {
       throw new NotFoundException('Student account not found.');
     }
 
-    const preacherId = preacher._id ? preacher._id.toString() : preacher.toString();
+    const preacherId = (
+      preacher?._id ??
+      preacher?.id ??
+      preacher?.uid ??
+      (typeof preacher === 'string' ? preacher : '')
+    ).toString();
     const canViewAll = Boolean(
-      preacher.canViewAllStudents || preacher.isHeadPreacher || preacher.role === 'admin'
+      preacher?.canViewAllStudents || preacher?.isHeadPreacher || preacher?.role === 'admin'
     );
+    const studentPreacherId = student.preacherId?._id
+      ? student.preacherId._id.toString()
+      : (student.preacherId ? student.preacherId.toString() : '');
+    const extraUid = (preacher?.firebaseUid ?? preacher?.uid ?? '').toString();
 
-    if (!canViewAll && student.preacherId?.toString() !== preacherId) {
+    if (!canViewAll && studentPreacherId !== preacherId && (!extraUid || studentPreacherId !== extraUid)) {
       throw new ForbiddenException('Access denied: Student is not assigned to your preacher group.');
     }
 

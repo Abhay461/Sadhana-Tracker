@@ -33,8 +33,8 @@ export class User {
   })
   status: string;
 
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', index: true, default: null })
-  preacherId: MongooseSchema.Types.ObjectId;
+  @Prop({ type: MongooseSchema.Types.Mixed, ref: 'User', index: true, default: null })
+  preacherId: any;
 
   @Prop({ type: String, uppercase: true, trim: true, sparse: true, index: true, default: null })
   preacherCode: string;
