@@ -61,7 +61,7 @@ class _BlocklistTabState extends State<BlocklistTab> {
             itemCount: widget.folkBoys.length,
             itemBuilder: (context, index) {
               final boy = widget.folkBoys[index];
-              final isBlocked = _checkIsBlocked(boy['id'].toString());
+              final isBlocked = _checkIsBlocked((boy['id'] ?? boy['_id'] ?? '').toString());
 
               return Card(
                 color: Colors.white,

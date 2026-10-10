@@ -44,7 +44,7 @@ class _StudentListTabState extends State<StudentListTab> {
   }
 
   void _showBoyScreenTimeDetails(Map<String, dynamic> boy) {
-    final boyId = boy['id'].toString();
+    final boyId = (boy['id'] ?? boy['_id'] ?? '').toString();
     final boyUpdates = widget.allUpdates[boyId] ?? [];
     
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
@@ -450,8 +450,8 @@ class _StudentListTabState extends State<StudentListTab> {
 
     final filteredBoys = widget.folkBoys.where((boy) {
       final name = (boy['name'] ?? '').toString().toLowerCase();
-      final whatsapp = (boy['whatsapp_number'] ?? '').toString().toLowerCase();
-      final matchesSearch = name.contains(_searchTerm.toLowerCase()) || whatsapp.contains(_searchTerm.toLowerCase());
+      final phone = (boy['whatsapp_number'] ?? boy['phoneNumber'] ?? boy['phone'] ?? '').toString().toLowerCase();
+      final matchesSearch = name.contains(_searchTerm.toLowerCase()) || phone.contains(_searchTerm.toLowerCase());
 
       bool matchesRole = true;
       if (_selectedRoleFilter != 'All') {

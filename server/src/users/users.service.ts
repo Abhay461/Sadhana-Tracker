@@ -66,29 +66,26 @@ export class UsersService {
     const preachers = await this.userModel
       .find({ role: 'preacher', status: 'ACTIVE' })
       .select('_id name email preacherCode photoUrl phoneNumber firebaseUid')
-      .sort({ name: 1 });
+      .sort({ name: 1 })
+      .lean();
 
-    const validPreachers: any[] = [];
-
-    for (const p of preachers) {
-      if (p.firebaseUid) {
-        try {
-          await this.firebaseService.getAuth().getUser(p.firebaseUid);
-          validPreachers.push(p);
-        } catch (err: any) {
-          if (err.code === 'auth/user-not-found') {
-            this.logger.warn(`Preacher ${p.name} (${p._id}) not found in Firebase Auth. Deactivating orphan in MongoDB.`);
-            await this.userModel.findByIdAndUpdate(p._id, { status: 'DEACTIVATED', isBlocked: true });
-            continue;
+    // Verify orphans in background without blocking the HTTP response
+    setImmediate(async () => {
+      for (const p of preachers) {
+        if (p.firebaseUid) {
+          try {
+            await this.firebaseService.getAuth().getUser(p.firebaseUid);
+          } catch (err: any) {
+            if (err?.code === 'auth/user-not-found') {
+              this.logger.warn(`Preacher ${p.name} (${p._id}) not found in Firebase Auth. Deactivating orphan in MongoDB.`);
+              await this.userModel.findByIdAndUpdate(p._id, { status: 'DEACTIVATED', isBlocked: true });
+            }
           }
-          validPreachers.push(p);
         }
-      } else {
-        validPreachers.push(p);
       }
-    }
+    });
 
-    return validPreachers.map((p) => ({
+    return preachers.map((p: any) => ({
       id: p._id.toString(),
       _id: p._id.toString(),
       name: p.name,

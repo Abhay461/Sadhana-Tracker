@@ -64,8 +64,8 @@ class _AttendanceTabState extends State<AttendanceTab> {
             padding: const EdgeInsets.all(16),
             itemCount: widget.folkBoys.length,
             itemBuilder: (context, index) {
-              final boy = widget.folkBoys[index];
-              final isPresent = todayUpdateList.any((u) => u['worker_id'] == boy['id'] && u['category'] == 'attendance' && u['date'] == today);
+              final boyId = (boy['id'] ?? boy['_id'] ?? '').toString();
+              final isPresent = todayUpdateList.any((u) => u['worker_id']?.toString() == boyId && u['category'] == 'attendance' && u['date'] == today);
 
               return Card(
                 color: isPresent ? const Color(0xFFE6F4EA) : Colors.white,

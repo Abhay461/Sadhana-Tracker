@@ -128,14 +128,19 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
     WidgetsBinding.instance.addObserver(this);
 
     final currentUid = FirebaseAuth.instance.currentUser?.uid;
-    if (_staticCacheUid != null && _staticCacheUid != currentUid) {
+    if (_staticCacheUid != null && currentUid != null && _staticCacheUid != currentUid) {
       clearStaticCache();
     }
-    _staticCacheUid = currentUid;
+    if (currentUid != null) {
+      _staticCacheUid = currentUid;
+    }
 
-    // Populate immediately from static cache if available for 0ms delay
+    // Populate immediately from static cache or UserSession in-memory profile for 0ms delay
     if (_staticProfile != null) {
       _profile = _staticProfile;
+      _isLoadingProfile = false;
+    } else if (UserSession.cachedProfile != null) {
+      _profile = UserSession.cachedProfile;
       _isLoadingProfile = false;
     }
     if (_staticFolkBoys != null && _staticFolkBoys!.isNotEmpty) {
@@ -264,6 +269,17 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
       } else if (_staticProfile != null) {
         _profile = _staticProfile;
         _isLoadingProfile = false;
+      } else if (UserSession.cachedProfile != null) {
+        _profile = UserSession.cachedProfile;
+        _staticProfile = UserSession.cachedProfile;
+        _isLoadingProfile = false;
+      } else {
+        final cached = await UserSession.getSession(user.uid);
+        if (cached != null && cached['profile'] is Map) {
+          _profile = Map<String, dynamic>.from(cached['profile'] as Map);
+          _staticProfile = _profile;
+          _isLoadingProfile = false;
+        }
       }
 
       if (_staticFolkBoys != null && _staticFolkBoys!.isNotEmpty) {
@@ -274,35 +290,43 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
         _allUpdates = Map.from(_staticAllUpdates!);
       }
 
-      // Fire parallel requests concurrently to avoid waterfall latency
-      await Future.wait([
-        if (_profile == null)
-          ApiService.get('/users/me').then((profileData) {
-            if (profileData is Map && mounted) {
-              final map = Map<String, dynamic>.from(profileData);
-              final role = (map['role'] as String? ?? '').toLowerCase();
-              if (role != 'preacher' && role != 'admin') {
-                Navigator.pushReplacementNamed(context, '/home');
-                return;
-              }
-              final uid = FirebaseAuth.instance.currentUser?.uid;
-              if (uid != null && uid.isNotEmpty) {
-                UserSession.saveSession(
-                  uid: uid,
-                  role: role,
-                  profileData: map,
-                );
-              }
+      // CRITICAL FIX: Ensure _profile is resolved BEFORE calling _fetchFolkBoys!
+      // Otherwise, _canViewAllStudents evaluates to false due to the race condition,
+      // requesting the un-scoped endpoint and clearing the student list!
+      if (_profile == null) {
+        try {
+          final profileData = await ApiService.get('/users/me');
+          if (profileData is Map && mounted) {
+            final map = Map<String, dynamic>.from(profileData);
+            final role = (map['role'] as String? ?? '').toLowerCase();
+            if (role != 'preacher' && role != 'admin') {
+              Navigator.pushReplacementNamed(context, '/home');
+              return;
+            }
+            final uid = FirebaseAuth.instance.currentUser?.uid;
+            if (uid != null && uid.isNotEmpty) {
+              UserSession.saveSession(
+                uid: uid,
+                role: role,
+                profileData: map,
+              );
+            }
+            if (mounted) {
               setState(() {
                 _profile = map;
                 _staticProfile = map;
                 _isLoadingProfile = false;
               });
             }
-          }).catchError((e) {
-            debugPrint('Error loading preacher profile: $e');
-            if (mounted) setState(() => _isLoadingProfile = false);
-          }),
+          }
+        } catch (e) {
+          debugPrint('Error loading preacher profile: $e');
+          if (mounted) setState(() => _isLoadingProfile = false);
+        }
+      }
+
+      // Now fire data fetches concurrently with guaranteed profile permissions
+      await Future.wait([
         _fetchFolkBoys(force: force),
         _fetchAllUpdates(force: force),
         _fetchAnnouncements(force: force),
@@ -333,7 +357,13 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
       return;
     }
 
-    // 2. If master all-students cache is already loaded and force is false, reuse it locally!
+    // 2. Ensure profile fallback from UserSession if somehow still null
+    if (_profile == null && UserSession.cachedProfile != null) {
+      _profile = UserSession.cachedProfile;
+      _staticProfile = _profile;
+    }
+
+    // 3. If master all-students cache is already loaded and force is false, reuse it locally!
     final masterList = _masterAllStudentsCache ?? _staticMasterAllStudentsCache;
     if (_canViewAllStudents && masterList != null && masterList.isNotEmpty && !force) {
       if (targetId == 'all' || targetId.isEmpty) {
@@ -349,7 +379,7 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
         debugPrint('[STUDENTS] Using cached/all student data for preacherId: $targetId');
         final filtered = masterList.where((s) {
           if (s is! Map) return false;
-          final pObj = s['preacherId'];
+          final pObj = s['preacherId'] ?? s['preacher_id'] ?? s['preacher'];
           final pId = pObj is Map ? (pObj['_id'] ?? pObj['id'] ?? '').toString() : (pObj ?? '').toString();
           return pId == targetId;
         }).toList();
@@ -397,18 +427,40 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
         if (data['availablePreachers'] is List) {
           extractedPreachers = List.from(data['availablePreachers']);
         }
+        if (data['canViewAll'] == true && _profile != null) {
+          _profile!['canViewAllStudents'] = true;
+          _staticProfile?['canViewAllStudents'] = true;
+        }
+      }
+
+      // Ensure all students have both id and _id fields normalized
+      for (var i = 0; i < extractedStudents.length; i++) {
+        if (extractedStudents[i] is Map) {
+          final sMap = Map<String, dynamic>.from(extractedStudents[i] as Map);
+          final idVal = (sMap['id'] ?? sMap['_id'])?.toString();
+          if (idVal != null && idVal.isNotEmpty) {
+            sMap['id'] = idVal;
+            sMap['_id'] = idVal;
+            extractedStudents[i] = sMap;
+          }
+        }
       }
 
       // If master list fetched (targetId == 'all' or empty), save to master cache
       if (targetId == 'all' || targetId.isEmpty) {
-        _masterAllStudentsCache = List.from(extractedStudents);
-        _staticMasterAllStudentsCache = List.from(extractedStudents);
+        if (extractedStudents.isNotEmpty || _masterAllStudentsCache == null) {
+          _masterAllStudentsCache = List.from(extractedStudents);
+          _staticMasterAllStudentsCache = List.from(extractedStudents);
+        }
       }
 
       if (mounted) {
         setState(() {
-          _folkBoys = extractedStudents;
-          _staticFolkBoys = extractedStudents;
+          // If extractedStudents is empty but we already had students, preserve cached students on unforced refresh
+          if (extractedStudents.isNotEmpty || _folkBoys.isEmpty || force || targetId != 'all') {
+            _folkBoys = extractedStudents;
+            _staticFolkBoys = extractedStudents;
+          }
           if (extractedPreachers.isNotEmpty) {
             _availablePreachers = extractedPreachers;
           }
@@ -1379,7 +1431,7 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
       folkBoys: activeFolkBoys,
       allUpdates: _allUpdates,
       preacherProfile: _profile,
-      onRefresh: _loadProfileAndData,
+      onRefresh: () => _loadProfileAndData(force: true),
       canViewAllStudents: _canViewAllStudents,
       availablePreachers: _availablePreachers,
       selectedPreacherId: _selectedPreacherId,
@@ -1390,7 +1442,7 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
   Widget _buildApprovalsTabContent() {
     return ApprovalTab(
       allUpdates: _allUpdates,
-      onRefresh: _loadProfileAndData,
+      onRefresh: () => _loadProfileAndData(force: true),
       preacherProfile: _profile,
       folkBoys: _folkBoys,
     );
@@ -1400,7 +1452,7 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
     return SettingsTab(
       preacherProfile: _profile,
 
-      onRefresh: _loadProfileAndData,
+      onRefresh: () => _loadProfileAndData(force: true),
     );
   }
 
@@ -1599,34 +1651,34 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
           allUpdates: _allUpdates,
           preacherProfile: _profile,
     
-          onRefresh: _loadProfileAndData,
+          onRefresh: () => _loadProfileAndData(force: true),
         );
       case 'online':
         return OnlineSessionTab(
           folkBoys: activeFolkBoys,
           allUpdates: _allUpdates,
           preacherProfile: _profile,
-          onRefresh: _loadProfileAndData,
+          onRefresh: () => _loadProfileAndData(force: true),
         );
       case 'notifications':
         return NotificationsTab(
           folkBoys: activeFolkBoys,
           allUpdates: _allUpdates,
           preacherProfile: _profile,
-          onRefresh: _loadProfileAndData,
+          onRefresh: () => _loadProfileAndData(force: true),
         );
       case 'announcements':
         return AnnouncementsTab(
           announcements: _announcements,
           preacherProfile: _profile,
-          onRefresh: _loadProfileAndData,
+          onRefresh: () => _loadProfileAndData(force: true),
         );
       case 'attendance':
         return AttendanceTab(
           folkBoys: activeFolkBoys,
           allUpdates: _allUpdates,
           preacherProfile: _profile,
-          onRefresh: _loadProfileAndData,
+          onRefresh: () => _loadProfileAndData(force: true),
         );
       case 'birthday':
         return BirthdayTab(
@@ -1638,7 +1690,7 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
           tripBookings: _tripBookings,
           folkBoys: activeFolkBoys,
           preacherProfile: _profile,
-          onRefresh: _loadProfileAndData,
+          onRefresh: () => _loadProfileAndData(force: true),
         );
       case 'event':
         return EventTab(
@@ -1646,7 +1698,7 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
           eventBookings: _eventBookings,
           folkBoys: activeFolkBoys,
           preacherProfile: _profile,
-          onRefresh: _loadProfileAndData,
+          onRefresh: () => _loadProfileAndData(force: true),
         );
       case 'blocklist':
         return BlocklistTab(
@@ -1654,7 +1706,7 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
           allUpdates: _allUpdates,
           preacherProfile: _profile,
     
-          onRefresh: _loadProfileAndData,
+          onRefresh: () => _loadProfileAndData(force: true),
         );
       case 'accommodation':
         return AccommodationTab(
@@ -1662,13 +1714,13 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
           allUpdates: _allUpdates,
           preacherProfile: _profile,
     
-          onRefresh: _loadProfileAndData,
+          onRefresh: () => _loadProfileAndData(force: true),
         );
       case 'approval':
         return ApprovalTab(
           allUpdates: _allUpdates,
     
-          onRefresh: _loadProfileAndData,
+          onRefresh: () => _loadProfileAndData(force: true),
           preacherProfile: _profile,
           folkBoys: _folkBoys,
         );
@@ -1678,14 +1730,14 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
           allUpdates: _allUpdates,
           preacherProfile: _profile,
     
-          onRefresh: _loadProfileAndData,
+          onRefresh: () => _loadProfileAndData(force: true),
         );
       case 'payment':
         return PaymentTab(
           folkBoys: activeFolkBoys,
           allUpdates: _allUpdates,
     
-          onRefresh: _loadProfileAndData,
+          onRefresh: () => _loadProfileAndData(force: true),
         );
       case 'message':
         return MessageTab(
@@ -1696,14 +1748,14 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
         return SettingsTab(
           preacherProfile: _profile,
     
-          onRefresh: _loadProfileAndData,
+          onRefresh: () => _loadProfileAndData(force: true),
         );
       case 'student_list':
         return StudentListTab(
           folkBoys: activeFolkBoys,
           allUpdates: _allUpdates,
     
-          onRefresh: _loadProfileAndData,
+          onRefresh: () => _loadProfileAndData(force: true),
         );
       case 'festival':
         if (!_isAdmin) {

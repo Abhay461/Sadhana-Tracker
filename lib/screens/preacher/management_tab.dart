@@ -191,7 +191,7 @@ class _ManagementTabState extends State<ManagementTab> {
 
 
   void _showBoyScreenTimeDetails(Map<String, dynamic> boy) {
-    final boyId = boy['id'].toString();
+    final boyId = (boy['id'] ?? boy['_id'] ?? '').toString();
     final boyUpdates = widget.allUpdates[boyId] ?? [];
     
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
@@ -1892,7 +1892,7 @@ class _ManagementTabState extends State<ManagementTab> {
 
       bool matchesRole = true;
       if (_selectedRoleFilter != 'All') {
-        final matches = widget.folkBoys.where((b) => b['id'].toString() == task['worker_id'].toString());
+        final matches = widget.folkBoys.where((b) => (b['id'] ?? b['_id']).toString() == task['worker_id'].toString());
         final boy = matches.isNotEmpty ? matches.first : null;
         if (boy == null) {
           matchesRole = false;

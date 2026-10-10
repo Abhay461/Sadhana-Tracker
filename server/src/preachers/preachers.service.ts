@@ -4,7 +4,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { User, UserDocument } from '../database/schemas/users.schema';
 import { SadhanaEntry, SadhanaEntryDocument } from '../database/schemas/sadhana-entries.schema';
 import { ApproveStudentDto } from './dto/approve-student.dto';
@@ -24,39 +24,61 @@ export class PreachersService {
       preacher.canViewAllStudents || preacher.isHeadPreacher || preacher.role === 'admin'
     );
 
+    const buildPreacherCondition = (pId: string, extraUid?: string) => {
+      const matchers: any[] = [{ preacherId: pId }];
+      if (Types.ObjectId.isValid(pId)) {
+        matchers.push({ preacherId: new Types.ObjectId(pId) });
+      }
+      if (extraUid) {
+        matchers.push({ preacherId: extraUid });
+      }
+      return { $or: matchers };
+    };
+
     let availablePreachers: any[] = [];
-    let queryFilter: any = { preacherId };
+    let queryFilter: any = buildPreacherCondition(preacherId, preacher.firebaseUid);
 
     if (canViewAll) {
       availablePreachers = await this.userModel
         .find({ role: 'preacher', status: 'ACTIVE' })
         .select('_id name email preacherCode photoUrl phoneNumber')
-        .sort({ name: 1 });
+        .sort({ name: 1 })
+        .lean();
 
       if (targetPreacherId && targetPreacherId !== 'all') {
-        queryFilter = { preacherId: targetPreacherId };
+        queryFilter = buildPreacherCondition(targetPreacherId);
       } else {
         // 'all' or empty - fetch all students/members who have a preacher assigned or any student role
         queryFilter = {
-          role: { $in: ['folk_boy', 'residency', 'student', 'user', 'member'] },
+          $or: [
+            { role: { $in: ['folk_boy', 'residency', 'student', 'user', 'member'] } },
+            { preacherId: { $exists: true, $ne: null } },
+          ],
         };
       }
     }
 
-    const students = await this.userModel
+    const rawStudents = await this.userModel
       .find(queryFilter)
       .populate('preacherId', 'name email preacherCode')
-      .select('name email phoneNumber role status photoUrl dob joiningDate isBlocked createdAt preacherId')
-      .sort({ name: 1 });
+      .select('name email phoneNumber role status photoUrl dob joiningDate isBlocked createdAt preacherId whatsapp_number')
+      .sort({ name: 1 })
+      .lean();
 
-    const pendingCount = students.filter((s) => s.status === 'PENDING_APPROVAL').length;
+    const students = rawStudents.map((s: any) => ({
+      ...s,
+      id: s._id ? s._id.toString() : '',
+      _id: s._id ? s._id.toString() : '',
+    }));
+
+    const pendingCount = students.filter((s: any) => s.status === 'PENDING_APPROVAL').length;
 
     return {
       total: students.length,
       pendingCount,
       students,
       canViewAll,
-      availablePreachers: availablePreachers.map((p) => ({
+      availablePreachers: availablePreachers.map((p: any) => ({
         id: p._id.toString(),
         _id: p._id.toString(),
         name: p.name,

@@ -34,12 +34,15 @@ class _SignupScreenState extends State<SignupScreen> {
   String? _errorMessage;
   String? _successMessage;
 
+  static List<dynamic>? _cachedPreachers;
+
   List<dynamic> _preachers = [];
   Map<String, dynamic>? _selectedPreacher;
   String _searchTerm = '';
   bool _isLoadingPreachers = false;
   String? _preacherError;
   int _currentStep = 0; // 0 for Account Credentials card, 1 for Personal Details card
+  StateSetter? _activeModalSetState;
 
   // Signup flow dates
   DateTime? _selectedDob;
@@ -58,6 +61,10 @@ class _SignupScreenState extends State<SignupScreen> {
   void initState() {
     super.initState();
     _occupationController.text = 'Student';
+    if (_cachedPreachers != null && _cachedPreachers!.isNotEmpty) {
+      _preachers = List<dynamic>.from(_cachedPreachers!);
+      _isLoadingPreachers = false;
+    }
     _fetchPreachers();
   }
 
@@ -66,6 +73,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
   @override
   void dispose() {
+    _activeModalSetState = null;
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -82,18 +90,16 @@ class _SignupScreenState extends State<SignupScreen> {
   }
 
   Future<void> _fetchPreachers({StateSetter? modalSetState}) async {
+    if (modalSetState != null) {
+      _activeModalSetState = modalSetState;
+    }
     if (mounted) {
       setState(() {
         _isLoadingPreachers = true;
         _preacherError = null;
       });
     }
-    if (modalSetState != null) {
-      modalSetState(() {
-        _isLoadingPreachers = true;
-        _preacherError = null;
-      });
-    }
+    _activeModalSetState?.call(() {});
 
     try {
       final data = await ApiService.get('/users/preachers').timeout(const Duration(seconds: 30));
@@ -104,25 +110,25 @@ class _SignupScreenState extends State<SignupScreen> {
         list = data['data'];
       }
 
+      _cachedPreachers = list;
+
       if (!mounted) return;
       setState(() {
         _preachers = list;
         _isLoadingPreachers = false;
         _preacherError = list.isEmpty ? 'No active preachers registered yet.' : null;
       });
-      if (modalSetState != null) {
-        modalSetState(() {});
-      }
+      _activeModalSetState?.call(() {});
     } catch (err) {
       debugPrint('Error fetching preachers: $err');
       if (!mounted) return;
       setState(() {
         _isLoadingPreachers = false;
-        _preacherError = 'Server is waking up or network slow. Tap Retry below.';
+        _preacherError = _preachers.isEmpty
+            ? 'Server is waking up or network slow. Tap Retry below.'
+            : null;
       });
-      if (modalSetState != null) {
-        modalSetState(() {});
-      }
+      _activeModalSetState?.call(() {});
     }
   }
 
@@ -424,6 +430,9 @@ class _SignupScreenState extends State<SignupScreen> {
 
   void _showPreacherPicker() {
     _searchTerm = '';
+    if (_preachers.isEmpty && !_isLoadingPreachers) {
+      _fetchPreachers();
+    }
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -431,6 +440,7 @@ class _SignupScreenState extends State<SignupScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setModalState) {
+            _activeModalSetState = setModalState;
             // Auto fetch if preachers list is empty and not already loading
             if (_preachers.isEmpty && !_isLoadingPreachers && _preacherError == null) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -652,7 +662,9 @@ class _SignupScreenState extends State<SignupScreen> {
           },
         );
       },
-    );
+    ).whenComplete(() {
+      _activeModalSetState = null;
+    });
   }
 
   Future<void> _selectDob(BuildContext context) async {

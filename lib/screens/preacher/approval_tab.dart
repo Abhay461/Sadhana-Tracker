@@ -28,7 +28,7 @@ class _ApprovalTabState extends State<ApprovalTab> {
   String _getDiscipleRole(String? workerId) {
     if (workerId == null) return '';
     for (final boy in widget.folkBoys) {
-      if (boy is Map && boy['id']?.toString() == workerId) {
+      if (boy is Map && (boy['id'] ?? boy['_id'])?.toString() == workerId) {
         final role = boy['role']?.toString();
         if (role == 'residency') return 'Residency';
         if (role == 'folk_boy') return 'Folk Boy';

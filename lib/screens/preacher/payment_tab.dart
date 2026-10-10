@@ -169,7 +169,7 @@ class _PaymentTabState extends State<PaymentTab> {
                     ),
                     items: widget.folkBoys.map((boy) {
                       return DropdownMenuItem<String>(
-                        value: boy['id'].toString(),
+                        value: (boy['id'] ?? boy['_id'] ?? '').toString(),
                         child: Text(boy['name'] ?? ''),
                       );
                     }).toList(),

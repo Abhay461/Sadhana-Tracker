@@ -59,7 +59,7 @@ class ApiService {
       if (_cachedIdToken != null &&
           _cachedUid == user.uid &&
           _tokenFetchTime != null &&
-          now.difference(_tokenFetchTime!).inMinutes < 10) {
+          now.difference(_tokenFetchTime!).inMinutes < 45) {
         idToken = _cachedIdToken;
         wasFreshTokenRequested = false;
       } else {
@@ -73,11 +73,14 @@ class ApiService {
           }
         } catch (e) {
           debugPrint('Firebase token refresh warning: $e');
-          if (_cachedUid == user.uid && _cachedIdToken != null) {
+          // Only reuse cached token if it is less than 50 minutes old (tokens expire at 60 mins)
+          if (_cachedUid == user.uid &&
+              _cachedIdToken != null &&
+              _tokenFetchTime != null &&
+              now.difference(_tokenFetchTime!).inMinutes < 50) {
             idToken = _cachedIdToken;
             wasFreshTokenRequested = false;
           } else {
-            clearTokenCache();
             try {
               wasFreshTokenRequested = true;
               idToken = await user.getIdToken(true).timeout(const Duration(seconds: 15));
@@ -86,12 +89,19 @@ class ApiService {
                 _cachedUid = user.uid;
                 _tokenFetchTime = DateTime.now();
               }
-            } catch (_) {}
+            } catch (_) {
+              // If force refresh failed, use cached token if available rather than clearing session
+              if (_cachedUid == user.uid && _cachedIdToken != null) {
+                idToken = _cachedIdToken;
+              }
+            }
           }
         }
       }
     } else {
-      clearTokenCache();
+      if (_cachedUid != null) {
+        clearTokenCache();
+      }
     }
 
     final timezoneOffset = DateTime.now().timeZoneOffset.inMinutes.toString();
@@ -345,8 +355,22 @@ class ApiService {
     }
 
     if (response.statusCode == 401) {
-      clearTokenCache();
-      FirebaseAuth.instance.signOut().catchError((_) {});
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        user.getIdToken(true).then((freshToken) {
+          if (freshToken != null && freshToken.isNotEmpty) {
+            _cachedIdToken = freshToken;
+            _tokenFetchTime = DateTime.now();
+            _cachedUid = user.uid;
+          }
+        }).catchError((_) {
+          clearTokenCache();
+          FirebaseAuth.instance.signOut().catchError((_) {});
+        });
+      } else {
+        clearTokenCache();
+        FirebaseAuth.instance.signOut().catchError((_) {});
+      }
     }
 
     final message = jsonBody is Map ? (jsonBody['message'] ?? 'API Request Failed') : 'HTTP ${response.statusCode} Error';
