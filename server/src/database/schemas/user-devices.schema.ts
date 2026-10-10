@@ -5,8 +5,8 @@ export type UserDeviceDocument = UserDevice & Document;
 
 @Schema({ timestamps: true, collection: 'userDevices' })
 export class UserDevice {
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true, index: true })
-  userId: MongooseSchema.Types.ObjectId;
+  @Prop({ type: MongooseSchema.Types.Mixed, ref: 'User', required: true, index: true })
+  userId: any;
 
   @Prop({ type: String, required: true, unique: true, index: true })
   fcmToken: string;

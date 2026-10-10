@@ -33,8 +33,21 @@ export class AccommodationsService {
     }
 
     let preacherIdObj: Types.ObjectId | null = null;
-    if (rawPreacherId && Types.ObjectId.isValid(rawPreacherId.toString())) {
-      preacherIdObj = new Types.ObjectId(rawPreacherId.toString());
+    if (rawPreacherId) {
+      const idStr = (rawPreacherId._id || rawPreacherId.id || rawPreacherId).toString();
+      if (Types.ObjectId.isValid(idStr)) {
+        preacherIdObj = new Types.ObjectId(idStr);
+      }
+    }
+
+    if (!preacherIdObj) {
+      const defaultPreacher = await this.userModel
+        .findOne({ role: { $in: ['preacher', 'admin'] }, status: 'ACTIVE' })
+        .select('_id')
+        .lean();
+      if (defaultPreacher) {
+        preacherIdObj = defaultPreacher._id as Types.ObjectId;
+      }
     }
 
     const userIdObj = Types.ObjectId.isValid(user._id.toString()) ? new Types.ObjectId(user._id.toString()) : user._id;
@@ -55,7 +68,8 @@ export class AccommodationsService {
 
     if (preacherIdObj && this.notificationsService) {
       const studentName = user.name || 'A student';
-      const cleanDetails = (dto.requestDetails || '').replace(/\n/g, ' • ');
+      const cleanDetails = (dto.requestDetails || '').replace(/\r?\n/g, ' • ');
+      console.log(`📌 [ACCOMMODATION SENDING PUSH NOTIFICATION]: PreacherID=${preacherIdObj.toString()}`);
       this.notificationsService
         .sendMulticastNotification({
           targetUserIds: [preacherIdObj.toString()],
@@ -67,6 +81,7 @@ export class AccommodationsService {
             studentId: user._id.toString(),
           },
         })
+        .then((res) => console.log('📌 [ACCOMMODATION NOTIFICATION SENT]:', res))
         .catch((err) => console.error('Failed to send accommodation push notification:', err));
     }
 

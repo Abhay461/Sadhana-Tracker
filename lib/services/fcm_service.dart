@@ -99,7 +99,14 @@ class FcmService {
       return;
     }
 
-    // Show the notification as a visible Android notification
+    showLocalNotification(title: title, body: body);
+  }
+
+  /// Show a visible notification anytime (FCM foreground or WebSocket realtime update).
+  static void showLocalNotification({
+    required String title,
+    required String body,
+  }) {
     _localNotifications.show(
       DateTime.now().millisecondsSinceEpoch ~/ 1000,
       title,
@@ -117,7 +124,7 @@ class FcmService {
         ),
       ),
     );
-    debugPrint('[FCM] Foreground notification displayed: "$title" - "$body"');
+    debugPrint('[FCM] Local heads-up notification displayed: "$title" - "$body"');
   }
 
   static Future<void> registerTokenWithBackend({String? overrideToken}) async {

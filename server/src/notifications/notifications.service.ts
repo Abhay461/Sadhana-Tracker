@@ -67,28 +67,38 @@ export class NotificationsService {
       return { successCount: 0, failureCount: 0 };
     }
 
-    const validObjectIds = rawIds.filter((id) => Types.ObjectId.isValid(id)).map((id) => new Types.ObjectId(id));
+    const targetOids = new Set<string>();
 
-    // Resolve any users matching by _id or firebaseUid
+    for (const rawId of rawIds) {
+      if (Types.ObjectId.isValid(rawId)) {
+        targetOids.add(rawId);
+      }
+    }
+
     const matchedUsers = await this.userModel
       .find({
-        $or: [{ _id: { $in: validObjectIds } }, { firebaseUid: { $in: rawIds } }],
+        $or: [
+          { _id: { $in: Array.from(targetOids).map((id) => new Types.ObjectId(id)) } },
+          { firebaseUid: { $in: rawIds } },
+        ],
       })
-      .select('_id firebaseUid')
+      .select('_id')
       .lean();
 
-    const queryIds: any[] = [...validObjectIds];
-    matchedUsers.forEach((u) => {
-      queryIds.push(u._id);
-      if (u.firebaseUid) queryIds.push(u.firebaseUid);
-    });
-    rawIds.forEach((id) => {
-      queryIds.push(id);
-    });
+    matchedUsers.forEach((u) => targetOids.add(u._id.toString()));
+
+    const targetObjectIds = Array.from(targetOids).map((id) => new Types.ObjectId(id));
+    const targetStringIds = Array.from(targetOids);
 
     const devices = await this.userDeviceModel.find({
-      userId: { $in: queryIds },
+      $or: [
+        { userId: { $in: targetObjectIds } },
+        { userId: { $in: targetStringIds } },
+        { userId: { $in: rawIds } },
+      ],
     });
+
+    this.logger.log(`Found ${devices.length} registered FCM devices for targets: ${rawIds.join(', ')}`);
 
     if (devices.length === 0) {
       this.logger.warn(`No registered FCM devices found for users: ${rawIds.join(', ')}`);

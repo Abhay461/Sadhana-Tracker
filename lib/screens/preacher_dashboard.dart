@@ -203,6 +203,11 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
     _fcmForegroundSub?.cancel();
     _fcmForegroundSub = FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       debugPrint('🔔 [PREACHER] FCM foreground message: ${message.notification?.title ?? message.data.toString()}');
+      final title = message.notification?.title ?? message.data['title']?.toString() ?? 'Sadhana Tracker';
+      final body = message.notification?.body ?? message.data['body']?.toString() ?? message.data['message']?.toString();
+      if (body != null && body.trim().isNotEmpty) {
+        FcmService.showLocalNotification(title: title, body: body);
+      }
       _silentRefresh();
     });
   }
@@ -212,8 +217,31 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
     debugPrint('[REALTIME] Event received: ${event.type}:${event.action}');
     switch (event.type) {
       case 'sadhana_update':
+        _fetchAllUpdates(force: true);
+        break;
       case 'accommodation_update':
+        if (event.action == 'create') {
+          final payload = event.payload is Map ? event.payload as Map : {};
+          final desc = payload['requestDetails']?.toString().replaceAll('\n', ' • ') ?? 'New accommodation request submitted';
+          FcmService.showLocalNotification(
+            title: 'Accommodation Request',
+            body: desc,
+          );
+        }
+        _fetchAllUpdates(force: true);
+        break;
       case 'appointment_update':
+        if (event.action == 'create') {
+          final payload = event.payload is Map ? event.payload as Map : {};
+          final student = payload['worker_name']?.toString() ?? 'A student';
+          final desc = payload['work_started']?.toString() ?? 'Appointment booked';
+          FcmService.showLocalNotification(
+            title: 'Appointment Booked',
+            body: '$student booked $desc',
+          );
+        }
+        _fetchAllUpdates(force: true);
+        break;
       case 'payment_update':
         _fetchAllUpdates(force: true);
         break;
