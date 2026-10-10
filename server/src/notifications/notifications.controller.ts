@@ -28,7 +28,8 @@ export class NotificationsController {
     @CurrentUser() user: any,
     @Body() dto: RegisterDeviceDto,
   ) {
-    return this.notificationsService.registerDeviceToken(user._id, dto);
+    const userId = user?._id || user?.id || user?.uid || user?.firebaseUid;
+    return this.notificationsService.registerDeviceToken(userId, dto);
   }
 
   @Delete('device-token')
@@ -37,7 +38,8 @@ export class NotificationsController {
     @CurrentUser() user: any,
     @Body('fcmToken') fcmToken: string,
   ) {
-    return this.notificationsService.removeDeviceToken(user._id, fcmToken);
+    const userId = user?._id || user?.id || user?.uid || user?.firebaseUid;
+    return this.notificationsService.removeDeviceToken(userId, fcmToken);
   }
 
   @Post('send')

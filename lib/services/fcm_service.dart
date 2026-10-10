@@ -38,15 +38,21 @@ class FcmService {
         alert: true,
         badge: true,
         sound: true,
+        provisional: true,
       );
 
       debugPrint('[FCM] Permission status: ${settings.authorizationStatus}');
 
-      if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+      if (settings.authorizationStatus == AuthorizationStatus.authorized ||
+          settings.authorizationStatus == AuthorizationStatus.provisional) {
         debugPrint('[FCM] User granted notification permission');
         await registerTokenWithBackend();
       } else {
-        debugPrint('[FCM] User declined notification permission');
+        debugPrint('[FCM] Notification permission status: ${settings.authorizationStatus}');
+        // On Android, attempt registration regardless so the device is registered
+        if (!kIsWeb && Platform.isAndroid) {
+          await registerTokenWithBackend();
+        }
       }
 
       // 3. Token Refresh Listener
@@ -85,29 +91,33 @@ class FcmService {
   static void _handleForegroundMessage(RemoteMessage message) {
     debugPrint('[FCM] Foreground message: title="${message.notification?.title}", body="${message.notification?.body}", data=${message.data}');
 
-    final notification = message.notification;
-    if (notification == null) {
-      debugPrint('[FCM] Data-only message (no notification payload) — skipping display');
+    final title = message.notification?.title ?? message.data['title']?.toString() ?? 'Sadhana Tracker';
+    final body = message.notification?.body ?? message.data['body']?.toString() ?? message.data['message']?.toString();
+
+    if (body == null || body.trim().isEmpty) {
+      debugPrint('[FCM] Message has no body or displayable text — skipping display');
       return;
     }
 
     // Show the notification as a visible Android notification
     _localNotifications.show(
-      notification.hashCode,
-      notification.title ?? 'Sadhana Tracker',
-      notification.body ?? '',
+      DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      title,
+      body,
       NotificationDetails(
         android: AndroidNotificationDetails(
           _channel.id,
           _channel.name,
           channelDescription: _channel.description,
-          importance: Importance.high,
+          importance: Importance.max,
           priority: Priority.high,
           icon: '@mipmap/launcher_icon',
+          playSound: true,
+          enableVibration: true,
         ),
       ),
     );
-    debugPrint('[FCM] Foreground notification displayed: "${notification.title}"');
+    debugPrint('[FCM] Foreground notification displayed: "$title" - "$body"');
   }
 
   static Future<void> registerTokenWithBackend({String? overrideToken}) async {

@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
 import '../services/cloudinary_service.dart';
+import '../services/fcm_service.dart';
 import '../services/realtime_service.dart';
 import '../utils/user_session.dart';
 
@@ -190,6 +191,9 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
 
   // ── Real-time refresh setup ──
   void _startRealtimeRefresh() {
+    // 0. Ensure FCM push notifications and device token are active
+    FcmService.initialize().catchError((_) {});
+
     // 1. Connect to WebSocket Realtime Service (Event-driven)
     RealtimeService.instance.connect();
     _realtimeSub?.cancel();

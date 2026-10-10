@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { UserDevice, UserDeviceDocument } from '../database/schemas/user-devices.schema';
+import { User, UserDocument } from '../database/schemas/users.schema';
 import { FirebaseService } from '../firebase/firebase.service';
 import { RegisterDeviceDto } from './dto/register-device.dto';
 import { SendNotificationDto } from './dto/send-notification.dto';
@@ -12,15 +13,32 @@ export class NotificationsService {
 
   constructor(
     @InjectModel(UserDevice.name) private readonly userDeviceModel: Model<UserDeviceDocument>,
+    @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     private readonly firebaseService: FirebaseService,
   ) {}
 
-  async registerDeviceToken(userId: string, dto: RegisterDeviceDto) {
+  async registerDeviceToken(userIdentifier: any, dto: RegisterDeviceDto) {
+    let mongoUserId: any = null;
+
+    if (userIdentifier) {
+      const idStr = userIdentifier.toString();
+      if (Types.ObjectId.isValid(idStr)) {
+        mongoUserId = new Types.ObjectId(idStr);
+      } else {
+        const foundUser = await this.userModel.findOne({ firebaseUid: idStr }).select('_id').lean();
+        if (foundUser) {
+          mongoUserId = foundUser._id;
+        } else {
+          mongoUserId = idStr;
+        }
+      }
+    }
+
     const device = await this.userDeviceModel.findOneAndUpdate(
       { fcmToken: dto.fcmToken },
       {
         $set: {
-          userId,
+          userId: mongoUserId || userIdentifier,
           platform: dto.platform,
           appInstanceId: dto.appInstanceId,
           appVersion: dto.appVersion,
@@ -29,12 +47,12 @@ export class NotificationsService {
       },
       { upsert: true, new: true },
     );
-    this.logger.log(`Registered FCM token for user ${userId} (${dto.platform})`);
+    this.logger.log(`Registered FCM token for user ${userIdentifier} (resolved: ${mongoUserId}) (${dto.platform})`);
     return device;
   }
 
   async removeDeviceToken(userId: string, fcmToken: string) {
-    await this.userDeviceModel.deleteOne({ userId, fcmToken });
+    await this.userDeviceModel.deleteOne({ fcmToken });
     this.logger.log(`Revoked FCM token for user ${userId}`);
     return { success: true };
   }
@@ -44,35 +62,119 @@ export class NotificationsService {
       return { successCount: 0, failureCount: 0 };
     }
 
-    const devices = await this.userDeviceModel.find({
-      userId: { $in: dto.targetUserIds },
-    });
-
-    if (devices.length === 0) {
-      this.logger.warn(`No registered FCM devices found for users: ${dto.targetUserIds.join(', ')}`);
+    const rawIds = dto.targetUserIds.filter(Boolean).map((id) => id.toString().trim());
+    if (rawIds.length === 0) {
       return { successCount: 0, failureCount: 0 };
     }
 
-    const tokens = devices.map((d) => d.fcmToken);
+    const validObjectIds = rawIds.filter((id) => Types.ObjectId.isValid(id)).map((id) => new Types.ObjectId(id));
+
+    // Resolve any users matching by _id or firebaseUid
+    const matchedUsers = await this.userModel
+      .find({
+        $or: [{ _id: { $in: validObjectIds } }, { firebaseUid: { $in: rawIds } }],
+      })
+      .select('_id firebaseUid')
+      .lean();
+
+    const queryIds: any[] = [...validObjectIds];
+    matchedUsers.forEach((u) => {
+      queryIds.push(u._id);
+      if (u.firebaseUid) queryIds.push(u.firebaseUid);
+    });
+    rawIds.forEach((id) => {
+      queryIds.push(id);
+    });
+
+    const devices = await this.userDeviceModel.find({
+      userId: { $in: queryIds },
+    });
+
+    if (devices.length === 0) {
+      this.logger.warn(`No registered FCM devices found for users: ${rawIds.join(', ')}`);
+      return { successCount: 0, failureCount: 0 };
+    }
+
+    const tokens = Array.from(new Set(devices.map((d) => d.fcmToken).filter(Boolean)));
+    if (tokens.length === 0) {
+      return { successCount: 0, failureCount: 0 };
+    }
+
+    const sanitizedData: Record<string, string> = {};
+    if (dto.dataPayload) {
+      for (const [k, v] of Object.entries(dto.dataPayload)) {
+        if (v !== undefined && v !== null) {
+          sanitizedData[k] = String(v);
+        }
+      }
+    }
+    sanitizedData['title'] = dto.title;
+    sanitizedData['body'] = dto.body;
+
+    const message: any = {
+      tokens,
+      notification: {
+        title: dto.title,
+        body: dto.body,
+      },
+      data: sanitizedData,
+      android: {
+        priority: 'high',
+        notification: {
+          channelId: 'sadhana_tracker_notifications',
+          sound: 'default',
+          priority: 'high',
+          defaultSound: true,
+          defaultVibrateTimings: true,
+        },
+      },
+      apns: {
+        payload: {
+          aps: {
+            sound: 'default',
+            badge: 1,
+          },
+        },
+      },
+    };
 
     try {
-      const response = await this.firebaseService.getMessaging().sendMulticast({
-        tokens,
-        notification: {
-          title: dto.title,
-          body: dto.body,
-        },
-        data: dto.dataPayload || {},
-      });
+      const messaging = this.firebaseService.getMessaging();
+      let response: any;
 
-      this.logger.log(`FCM Multicast sent: ${response.successCount} succeeded, ${response.failureCount} failed.`);
+      if (typeof (messaging as any).sendEachForMulticast === 'function') {
+        response = await (messaging as any).sendEachForMulticast(message);
+      } else if (typeof (messaging as any).sendMulticast === 'function') {
+        response = await (messaging as any).sendMulticast(message);
+      } else {
+        response = { successCount: 0, failureCount: 0, responses: [] };
+        for (const token of tokens) {
+          try {
+            await messaging.send({
+              token,
+              notification: { title: dto.title, body: dto.body },
+              data: sanitizedData,
+            });
+            response.successCount++;
+            response.responses.push({ success: true });
+          } catch (err: any) {
+            response.failureCount++;
+            response.responses.push({ success: false, error: err });
+          }
+        }
+      }
+
+      this.logger.log(
+        `FCM Multicast sent to ${tokens.length} devices: ${response.successCount} succeeded, ${response.failureCount} failed.`,
+      );
 
       // Clean up invalid/unregistered tokens
-      if (response.failureCount > 0) {
+      if (response.failureCount > 0 && response.responses) {
         const tokensToRemove: string[] = [];
-        response.responses.forEach((resp, idx) => {
+        response.responses.forEach((resp: any, idx: number) => {
           if (!resp.success && resp.error) {
             const code = resp.error.code;
+            this.logger.warn(`Device ${idx} error: ${resp.error.message} (${code})`);
             if (
               code === 'messaging/registration-token-not-registered' ||
               code === 'messaging/invalid-registration-token'

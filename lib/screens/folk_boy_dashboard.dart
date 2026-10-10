@@ -6577,15 +6577,23 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> with S
 
       final requestDetails = 'Name: $name\nAge: $age\nArrival: $arrivalStr\nDeparture: $departureStr';
 
-      final pObj = widget.preacher ?? widget.profile['preacher'];
-      final preacherId = (pObj is Map ? (pObj['id'] ?? pObj['_id']) : (pObj is String && pObj.isNotEmpty ? pObj : null))?.toString() ??
-          (widget.profile['preacher_id'] ?? widget.profile['preacherId'])?.toString();
+      dynamic p = widget.preacher ?? widget.profile['preacherId'] ?? widget.profile['preacher'] ?? widget.profile['preacher_id'];
+      String? preacherId;
+      String? preacherName;
+      if (p is Map) {
+        preacherId = (p['_id'] ?? p['id'] ?? p['userId'] ?? p['user_id'])?.toString();
+        preacherName = p['name']?.toString();
+      } else if (p is String && p.isNotEmpty && !p.startsWith('{')) {
+        preacherId = p;
+      }
+      preacherName ??= widget.profile['preacher_name']?.toString() ?? widget.profile['preacherName']?.toString() ?? 'Preacher';
+
       final updateData = {
         'worker_id': widget.profile['id'] ?? widget.profile['_id'],
         'worker_name': widget.profile['name'],
         'preacher_id': preacherId,
         'preacherId': preacherId,
-        'preacher_name': widget.preacher?['name'] ?? 'Preacher',
+        'preacher_name': preacherName,
         'category': 'accommodation',
         'work_started': 'Accommodation Booking',
         'description': requestDetails,
@@ -7127,13 +7135,19 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
   Map<String, dynamic>? get _effectivePreacher {
     if (widget.preacher != null) return widget.preacher;
     if (_selectedPreacherFromList != null) return _selectedPreacherFromList;
-    final preacherId = (widget.profile['preacher_id'] ?? widget.profile['preacherId'] ?? widget.profile['preacher'])?.toString();
-    final preacherName = (widget.profile['preacher_name'] ?? widget.profile['preacherName'])?.toString();
-    if (preacherName != null && preacherName.isNotEmpty) {
-      return {'id': preacherId ?? 'preacher_1', 'name': preacherName};
-    }
-    if (preacherId != null && preacherId.isNotEmpty) {
-      return {'id': preacherId, 'name': 'Assigned Preacher'};
+
+    dynamic p = widget.profile['preacherId'] ?? widget.profile['preacher'] ?? widget.profile['preacher_id'];
+    if (p is Map) {
+      final id = (p['_id'] ?? p['id'] ?? p['userId'] ?? p['user_id'])?.toString();
+      final name = p['name']?.toString() ??
+          (widget.profile['preacher_name'] ?? widget.profile['preacherName'])?.toString() ??
+          'Assigned Preacher';
+      if (id != null && id.isNotEmpty) {
+        return {'id': id, '_id': id, 'name': name};
+      }
+    } else if (p is String && p.isNotEmpty && !p.startsWith('{')) {
+      final name = (widget.profile['preacher_name'] ?? widget.profile['preacherName'])?.toString() ?? 'Assigned Preacher';
+      return {'id': p, '_id': p, 'name': name};
     }
     return null;
   }

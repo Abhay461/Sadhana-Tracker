@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/api_service.dart';
+import '../services/fcm_service.dart';
 import '../utils/notification_helper.dart';
 import '../utils/user_session.dart';
 
@@ -109,6 +110,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
         if (mounted) {
           NotificationHelper.loginUser(credential.user!.uid).catchError((_) {});
+          FcmService.initialize().catchError((_) {});
 
           // DIRECT Seamless Navigation - No 2nd Loading Page!
           if (role == 'preacher' || role == 'admin') {
