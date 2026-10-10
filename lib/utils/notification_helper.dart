@@ -123,7 +123,8 @@ class NotificationHelper {
         break;
       case 'accommodation':
         title = 'Accommodation Request';
-        body = '$studentName requested accommodation: $description';
+        final cleanAcc = description.replaceAll('\n', ' • ');
+        body = '$studentName requested accommodation: $cleanAcc';
         break;
       case 'residency_admission':
         title = 'Residency Admission Request';
@@ -131,7 +132,8 @@ class NotificationHelper {
         break;
       case 'preacher_appointment':
         title = 'Appointment Booked';
-        body = '$studentName booked appointment: $description';
+        final cleanAppt = description.replaceAll('\n', ' • ');
+        body = '$studentName booked appointment: $cleanAppt';
         break;
       case 'service':
         title = 'Service Logged';

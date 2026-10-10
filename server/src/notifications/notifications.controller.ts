@@ -42,8 +42,8 @@ export class NotificationsController {
 
   @Post('send')
   @UseGuards(RolesGuard)
-  @Roles('admin', 'preacher')
-  @ApiOperation({ summary: 'Send targeted FCM push notification (Admin/Preacher only)' })
+  @Roles('admin', 'preacher', 'folk_boy', 'residency', 'student', 'user', 'member')
+  @ApiOperation({ summary: 'Send targeted FCM push notification' })
   async sendNotification(@Body() dto: SendNotificationDto) {
     return this.notificationsService.sendMulticastNotification(dto);
   }

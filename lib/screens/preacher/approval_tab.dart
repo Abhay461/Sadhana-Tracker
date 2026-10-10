@@ -145,27 +145,7 @@ class _ApprovalTabState extends State<ApprovalTab> {
   }
 
   Widget _buildRoleBadge(String? workerId, {String? category}) {
-    if (category == 'accommodation') return const SizedBox.shrink();
-    final role = _getDiscipleRole(workerId);
-    if (role.isEmpty) return const SizedBox.shrink();
-    
-    final isResidency = role.toLowerCase() == 'residency';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: isResidency ? const Color(0xFFF3E8FF) : const Color(0xFFEFF6FF),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: isResidency ? const Color(0xFFE9D5FF) : const Color(0xFFBFDBFE), width: 0.5),
-      ),
-      child: Text(
-        role.toUpperCase(),
-        style: TextStyle(
-          fontSize: 8,
-          fontWeight: FontWeight.bold,
-          color: isResidency ? const Color(0xFF7E22CE) : const Color(0xFF1D4ED8),
-        ),
-      ),
-    );
+    return const SizedBox.shrink();
   }
 
   Widget _buildCategoryBadge(String cat) {
@@ -589,7 +569,6 @@ class _ApprovalTabState extends State<ApprovalTab> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(studentName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                _buildRoleBadge(u['worker_id']?.toString(), category: cat),
               ],
             ),
             const SizedBox(height: 4),
@@ -833,9 +812,7 @@ class _ApprovalTabState extends State<ApprovalTab> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            const SizedBox(width: 4),
-                            _buildRoleBadge(u['worker_id']?.toString(), category: cat),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 6),
                             _buildCategoryBadge(cat),
                             const SizedBox(width: 4),
                             Text('• $updateDate', style: const TextStyle(fontSize: 10, color: Colors.black87, fontWeight: FontWeight.w500)),
@@ -952,9 +929,7 @@ class _ApprovalTabState extends State<ApprovalTab> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            const SizedBox(width: 4),
-                            _buildRoleBadge(u['worker_id']?.toString(), category: category),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 6),
                             _buildCategoryBadge(category),
                             const SizedBox(width: 4),
                             Text('• $updateDate', style: const TextStyle(fontSize: 10, color: Colors.black87, fontWeight: FontWeight.w500)),

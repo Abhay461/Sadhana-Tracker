@@ -10,14 +10,16 @@ import { Appointment, AppointmentDocument } from '../database/schemas/appointmen
 import { LogSadhanaDto } from './dto/log-sadhana.dto';
 import { LockDayDto } from './dto/lock-day.dto';
 import { RealtimeService } from '../realtime/realtime.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class SadhanaService {
   constructor(
     @InjectModel(SadhanaEntry.name) private readonly sadhanaModel: Model<SadhanaEntryDocument>,
-    @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
-    @InjectModel(Appointment.name) private readonly appointmentModel: Model<AppointmentDocument>,
-    private readonly realtimeService: RealtimeService,
+    @InjectModel(User.name) private readonly userModel?: Model<UserDocument>,
+    @InjectModel(Appointment.name) private readonly appointmentModel?: Model<AppointmentDocument>,
+    private readonly realtimeService?: RealtimeService,
+    private readonly notificationsService?: NotificationsService,
   ) {}
 
   private calculatePoints(activities: any): number {
@@ -174,10 +176,30 @@ export class SadhanaService {
         preacherId: preacherIdRaw,
         response: responsePayload,
       }));
-      this.realtimeService.emit('appointment_update', 'create', responsePayload, {
-        preacherId: preacherIdRaw,
-        studentId: userId,
-      });
+      if (this.realtimeService) {
+        this.realtimeService.emit('appointment_update', 'create', responsePayload, {
+          preacherId: preacherIdRaw,
+          studentId: userId,
+        });
+      }
+
+      if (preacherIdRaw && this.notificationsService) {
+        const studentName = body.worker_name || 'A student';
+        const purposeText = reason || 'Preacher Appointment';
+        this.notificationsService
+          .sendMulticastNotification({
+            targetUserIds: [preacherIdRaw.toString()],
+            title: 'Appointment Booked',
+            body: `${studentName} booked appointment: ${preferredDate} @ ${preferredTime} (Purpose: ${purposeText})`,
+            dataPayload: {
+              category: 'preacher_appointment',
+              appointmentId: apptId,
+              studentId: userId,
+            },
+          })
+          .catch((err) => console.error('Failed to send appointment push notification:', err));
+      }
+
       return responsePayload;
     }
 

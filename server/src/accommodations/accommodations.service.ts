@@ -11,6 +11,7 @@ import { User, UserDocument } from '../database/schemas/users.schema';
 import { CreateAccommodationDto } from './dto/create-accommodation.dto';
 import { UpdateAccommodationStatusDto } from './dto/update-accommodation-status.dto';
 import { RealtimeService } from '../realtime/realtime.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class AccommodationsService {
@@ -18,6 +19,7 @@ export class AccommodationsService {
     @InjectModel(Accommodation.name) private readonly accommodationModel: Model<AccommodationDocument>,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     private readonly realtimeService: RealtimeService,
+    private readonly notificationsService?: NotificationsService,
   ) {}
 
   async createRequest(user: any, dto: CreateAccommodationDto) {
@@ -50,6 +52,23 @@ export class AccommodationsService {
       preacherId: preacherIdObj?.toString(),
       studentId: user._id?.toString(),
     });
+
+    if (preacherIdObj && this.notificationsService) {
+      const studentName = user.name || 'A student';
+      const cleanDetails = (dto.requestDetails || '').replace(/\n/g, ' • ');
+      this.notificationsService
+        .sendMulticastNotification({
+          targetUserIds: [preacherIdObj.toString()],
+          title: 'Accommodation Request',
+          body: `${studentName} requested accommodation: ${cleanDetails}`,
+          dataPayload: {
+            category: 'accommodation',
+            accommodationId: accommodation._id.toString(),
+            studentId: user._id.toString(),
+          },
+        })
+        .catch((err) => console.error('Failed to send accommodation push notification:', err));
+    }
 
     return accommodation;
   }

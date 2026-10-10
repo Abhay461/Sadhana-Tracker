@@ -6577,7 +6577,9 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> with S
 
       final requestDetails = 'Name: $name\nAge: $age\nArrival: $arrivalStr\nDeparture: $departureStr';
 
-      final preacherId = (widget.preacher?['id'] ?? widget.preacher?['_id'] ?? widget.profile['preacher_id'] ?? widget.profile['preacherId'])?.toString();
+      final pObj = widget.preacher ?? widget.profile['preacher'];
+      final preacherId = (pObj is Map ? (pObj['id'] ?? pObj['_id']) : (pObj is String && pObj.isNotEmpty ? pObj : null))?.toString() ??
+          (widget.profile['preacher_id'] ?? widget.profile['preacherId'])?.toString();
       final updateData = {
         'worker_id': widget.profile['id'] ?? widget.profile['_id'],
         'worker_name': widget.profile['name'],
@@ -7256,6 +7258,7 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
         'worker_id': widget.profile['id'] ?? widget.profile['_id'],
         'worker_name': widget.profile['name'],
         'preacher_id': preacherId,
+        'preacherId': preacherId,
         'preacher_name': activePreacher['name'] ?? 'Preacher',
         'category': 'preacher_appointment',
         'work_started': bookingStr,
