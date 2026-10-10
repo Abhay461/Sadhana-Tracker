@@ -20,6 +20,83 @@ class ApprovalTab extends StatefulWidget {
     required this.folkBoys,
   });
 
+  static List<dynamic> extractPendingUpdates(Map<String, List<dynamic>> allUpdates) {
+    final pendingUpdates = [];
+    final Set<String> seenPendingIds = {};
+
+    for (var list in allUpdates.values) {
+      for (var u in list) {
+        if (u is! Map) continue;
+        final cat = u['category'];
+        final id = (u['_id'] ?? u['id'] ?? u['appointmentId'] ?? '').toString();
+        final dedupKey = id.isNotEmpty ? id : '${cat}_${u['date']}_${u['description']}_${u['worker_id']}';
+
+        if (cat == 'preacher_appointment' || cat == 'accommodation' || cat == 'residency_admission') {
+          final isCompleted = u['is_completed'] == true ||
+              u['isCompleted'] == true ||
+              (u['work_completed'] != null &&
+                  u['work_completed'].toString().isNotEmpty &&
+                  u['work_completed'] != 'PENDING') ||
+              (u['status'] != null &&
+                  u['status'].toString().isNotEmpty &&
+                  u['status'] != 'PENDING');
+          if (!isCompleted) {
+            if (seenPendingIds.add(dedupKey)) {
+              pendingUpdates.add(u);
+            }
+          }
+        } else if (cat == 'payment') {
+          final workCompleted = u['work_completed'] ?? '';
+          if (u['is_completed'] == false &&
+              (workCompleted == 'SUBMITTED' || workCompleted == 'WAITING_APPROVAL')) {
+            if (seenPendingIds.add(dedupKey)) {
+              pendingUpdates.add(u);
+            }
+          }
+        }
+      }
+    }
+    return pendingUpdates;
+  }
+
+  static List<dynamic> extractCompletedUpdates(Map<String, List<dynamic>> allUpdates) {
+    final completedUpdates = [];
+    final Set<String> seenCompletedIds = {};
+
+    for (var list in allUpdates.values) {
+      for (var u in list) {
+        if (u is! Map) continue;
+        final cat = u['category'];
+        final id = (u['_id'] ?? u['id'] ?? u['appointmentId'] ?? '').toString();
+        final dedupKey = id.isNotEmpty ? id : '${cat}_${u['date']}_${u['description']}_${u['worker_id']}';
+
+        if (cat == 'preacher_appointment' || cat == 'accommodation' || cat == 'residency_admission') {
+          final isCompleted = u['is_completed'] == true ||
+              u['isCompleted'] == true ||
+              (u['work_completed'] != null &&
+                  u['work_completed'].toString().isNotEmpty &&
+                  u['work_completed'] != 'PENDING') ||
+              (u['status'] != null &&
+                  u['status'].toString().isNotEmpty &&
+                  u['status'] != 'PENDING');
+          if (isCompleted) {
+            if (seenCompletedIds.add(dedupKey)) {
+              completedUpdates.add(u);
+            }
+          }
+        } else if (cat == 'payment') {
+          final workCompleted = u['work_completed'] ?? '';
+          if (u['is_completed'] == true && workCompleted == 'PAID') {
+            if (seenCompletedIds.add(dedupKey)) {
+              completedUpdates.add(u);
+            }
+          }
+        }
+      }
+    }
+    return completedUpdates;
+  }
+
   @override
   State<ApprovalTab> createState() => _ApprovalTabState();
 }
@@ -298,40 +375,9 @@ class _ApprovalTabState extends State<ApprovalTab> {
 
   @override
   Widget build(BuildContext context) {
-    final pendingUpdates = [];
-    final completedUpdates = [];
-    final Set<String> seenPendingIds = {};
-    final Set<String> seenCompletedIds = {};
+    final pendingUpdates = ApprovalTab.extractPendingUpdates(widget.allUpdates);
+    final completedUpdates = ApprovalTab.extractCompletedUpdates(widget.allUpdates);
 
-    for (var list in widget.allUpdates.values) {
-      for (var u in list) {
-        final cat = u['category'];
-        final id = (u['_id'] ?? u['id'] ?? u['appointmentId'] ?? '').toString();
-        if (cat == 'preacher_appointment' || cat == 'accommodation' || cat == 'residency_admission') {
-          final isCompleted = u['is_completed'] == true || u['isCompleted'] == true || (u['work_completed'] != null && u['work_completed'].toString().isNotEmpty && u['work_completed'] != 'PENDING');
-          if (!isCompleted) {
-            if (id.isEmpty || seenPendingIds.add(id)) {
-              pendingUpdates.add(u);
-            }
-          } else {
-            if (id.isEmpty || seenCompletedIds.add(id)) {
-              completedUpdates.add(u);
-            }
-          }
-        } else if (cat == 'payment') {
-          final workCompleted = u['work_completed'] ?? '';
-          if (u['is_completed'] == false && (workCompleted == 'SUBMITTED' || workCompleted == 'WAITING_APPROVAL')) {
-            if (id.isEmpty || seenPendingIds.add(id)) {
-              pendingUpdates.add(u);
-            }
-          } else if (u['is_completed'] == true && workCompleted == 'PAID') {
-            if (id.isEmpty || seenCompletedIds.add(id)) {
-              completedUpdates.add(u);
-            }
-          }
-        }
-      }
-    }
     pendingUpdates.sort((a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''));
     completedUpdates.sort((a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''));
 

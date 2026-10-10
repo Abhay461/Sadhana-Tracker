@@ -21,7 +21,6 @@ class StudentListTab extends StatefulWidget {
 class _StudentListTabState extends State<StudentListTab> {
   final _searchController = TextEditingController();
   String _searchTerm = '';
-  String _selectedRoleFilter = 'All'; // 'All', 'folk_boy', 'residency'
   Map<String, dynamic>? _selectedBoy;
   bool _showStudentCard = false;
   bool _showExcelGrid = true;
@@ -451,14 +450,7 @@ class _StudentListTabState extends State<StudentListTab> {
     final filteredBoys = widget.folkBoys.where((boy) {
       final name = (boy['name'] ?? '').toString().toLowerCase();
       final phone = (boy['whatsapp_number'] ?? boy['phoneNumber'] ?? boy['phone'] ?? '').toString().toLowerCase();
-      final matchesSearch = name.contains(_searchTerm.toLowerCase()) || phone.contains(_searchTerm.toLowerCase());
-
-      bool matchesRole = true;
-      if (_selectedRoleFilter != 'All') {
-        matchesRole = (boy['role'] ?? '') == _selectedRoleFilter;
-      }
-
-      return matchesSearch && matchesRole;
+      return name.contains(_searchTerm.toLowerCase()) || phone.contains(_searchTerm.toLowerCase());
     }).toList();
 
     return Container(
@@ -476,82 +468,14 @@ class _StudentListTabState extends State<StudentListTab> {
                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF64748B), size: 20),
                 prefixIconConstraints: const BoxConstraints(minWidth: 40),
-                suffixIcon: PopupMenuButton<String>(
-                  padding: EdgeInsets.zero,
-                  icon: Icon(
-                    Icons.tune_rounded,
-                    color: _selectedRoleFilter != 'All' ? const Color(0xFF3F1200) : const Color(0xFF64748B),
-                    size: 20,
-                  ),
-                  tooltip: 'Filter by Role',
-                  onSelected: (String value) {
-                    setState(() {
-                      _selectedRoleFilter = value;
-                    });
-                  },
-                  itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                    PopupMenuItem<String>(
-                      value: 'All',
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.all_inclusive_rounded,
-                            size: 18,
-                            color: _selectedRoleFilter == 'All' ? const Color(0xFF3F1200) : Colors.grey,
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            'All Students',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: _selectedRoleFilter == 'All' ? FontWeight.bold : FontWeight.normal,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    PopupMenuItem<String>(
-                      value: 'folk_boy',
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.person_rounded,
-                            size: 18,
-                            color: _selectedRoleFilter == 'folk_boy' ? const Color(0xFF3F1200) : Colors.grey,
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            'Folk Boy',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: _selectedRoleFilter == 'folk_boy' ? FontWeight.bold : FontWeight.normal,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    PopupMenuItem<String>(
-                      value: 'residency',
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.home_rounded,
-                            size: 18,
-                            color: _selectedRoleFilter == 'residency' ? const Color(0xFF3F1200) : Colors.grey,
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            'Residency',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: _selectedRoleFilter == 'residency' ? FontWeight.bold : FontWeight.normal,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+                suffixIcon: _searchTerm.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear_rounded, color: Color(0xFF64748B), size: 18),
+                        onPressed: () {
+                          _searchController.clear();
+                        },
+                      )
+                    : null,
                 hintText: 'Search student name or phone...',
                 hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
                 filled: true,

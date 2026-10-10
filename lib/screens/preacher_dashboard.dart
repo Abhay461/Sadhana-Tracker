@@ -996,7 +996,7 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
             final wId = userObj is Map ? (userObj['_id'] ?? userObj['id']) : (acc['worker_id'] ?? acc['userId'] ?? acc['studentId']);
             final wName = userObj is Map ? userObj['name'] : (acc['worker_name'] ?? acc['userName'] ?? acc['studentName'] ?? 'Student');
             final status = (acc['status'] ?? '').toString().toUpperCase();
-            final isDone = status == 'APPROVED' || acc['is_completed'] == true;
+            final isDone = status == 'APPROVED' || status == 'REJECTED' || acc['is_completed'] == true;
             final room = acc['assignedRoom'] ?? acc['work_completed'] ?? '';
             rawUpdates.add({
               '_id': acc['_id'] ?? acc['id'],
@@ -1006,7 +1006,8 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
               'category': 'accommodation',
               'work_started': 'Accommodation Booking',
               'description': reqDetails,
-              'work_completed': isDone ? (room.toString().isNotEmpty ? 'ROOM: $room' : 'Approved') : (status.isNotEmpty ? status : 'PENDING'),
+              'work_completed': isDone ? (room.toString().isNotEmpty ? 'ROOM: $room' : (status == 'REJECTED' ? 'REJECTED' : 'Approved')) : (status.isNotEmpty ? status : 'PENDING'),
+              'status': status,
               'is_completed': isDone,
               'created_at': acc['createdAt'] ?? acc['created_at'] ?? DateTime.now().toIso8601String(),
             });
@@ -1206,45 +1207,22 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
   }
 
   int get _pendingApprovalCount {
-    final pendingAccounts = _folkBoys.where((b) {
-      final role = b['role'] as String? ?? '';
-      return role.startsWith('pending_');
-    }).length;
-
-    int pendingUpdatesCount = 0;
-    final Set<String> seenPendingIds = {};
-    for (var list in _allUpdates.values) {
-      for (var u in list) {
-        final cat = u['category'];
-        final id = (u['_id'] ?? u['id'] ?? u['appointmentId'] ?? '').toString();
-        if (cat == 'preacher_appointment' || cat == 'accommodation' || cat == 'residency_admission') {
-          final isDone = u['is_completed'] == true || u['work_completed'] == 'APPROVED' || u['status'] == 'APPROVED';
-          if (!isDone) {
-            if (id.isEmpty || seenPendingIds.add(id)) {
-              pendingUpdatesCount++;
-            }
-          }
-        } else if (cat == 'payment') {
-          final workCompleted = u['work_completed'] ?? '';
-          if (u['is_completed'] == false && (workCompleted == 'SUBMITTED' || workCompleted == 'WAITING_APPROVAL')) {
-            if (id.isEmpty || seenPendingIds.add(id)) {
-              pendingUpdatesCount++;
-            }
-          }
-        }
-      }
-    }
-    return pendingAccounts + pendingUpdatesCount;
+    return ApprovalTab.extractPendingUpdates(_allUpdates).length;
   }
 
   int get _pendingPaymentCount {
     int count = 0;
+    final Set<String> seenIds = {};
     for (var list in _allUpdates.values) {
       for (var u in list) {
-        if (u['category'] == 'payment') {
+        if (u is Map && u['category'] == 'payment') {
+          final id = (u['_id'] ?? u['id'] ?? '').toString();
+          final dedupKey = id.isNotEmpty ? id : '${u['date']}_${u['description']}_${u['worker_id']}';
           final workCompleted = u['work_completed'] ?? '';
           if (u['is_completed'] == false && (workCompleted == 'SUBMITTED' || workCompleted == 'WAITING_APPROVAL')) {
-            count++;
+            if (seenIds.add(dedupKey)) {
+              count++;
+            }
           }
         }
       }
