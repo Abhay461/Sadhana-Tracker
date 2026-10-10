@@ -31,7 +31,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
   void _startLongTimer() {
     _longTimer?.cancel();
-    _longTimer = Timer(const Duration(seconds: 8), () {
+    _longTimer = Timer(const Duration(seconds: 4), () {
       if (mounted && !_hasError) {
         setState(() {
           _isTakingLong = true;
@@ -70,16 +70,35 @@ class _SplashScreenState extends State<SplashScreen> {
         _isTakingLong = false;
         _errorMessage = '';
       });
-      _startLongTimer();
     }
+    _startLongTimer();
 
     // Register user with notification helper asynchronously
     NotificationHelper.loginUser(user.uid).catchError((_) {});
     FcmService.initialize().catchError((_) {});
 
     try {
-      // 1. Fast attempt to fetch fresh profile from NestJS API (5 seconds max)
-      final response = await ApiService.get('/users/me').timeout(const Duration(seconds: 5));
+      // Check cached session first for instant offline/cold-start fallback
+      final cachedSession = await UserSession.getSession(user.uid);
+      final cachedRole = cachedSession?['role']?.toString();
+      final cachedProfile = cachedSession?['profile'] as Map<String, dynamic>?;
+
+      dynamic response;
+      if (cachedRole != null && cachedRole.isNotEmpty) {
+        // Cached role available: Try a quick 4-second fresh sync; if sleeping, immediately use cached role
+        try {
+          response = await ApiService.get('/users/me').timeout(const Duration(seconds: 4));
+        } catch (_) {
+          debugPrint(
+              '[SPLASH NAV QUICK FALLBACK] Server dormant. Using verified cached role "$cachedRole" for UID ${user.uid}.');
+          _navigateToRole(cachedRole, cachedProfile);
+          return;
+        }
+      } else {
+        // No cache: Give Render free tier sufficient time to wake up from cold start (up to 35 seconds)
+        response = await ApiService.get('/users/me').timeout(const Duration(seconds: 35));
+      }
+
       if (response is Map) {
         final profileData = Map<String, dynamic>.from(response);
         final rawRole = (profileData['role'] ?? '').toString().toLowerCase();
@@ -103,7 +122,7 @@ class _SplashScreenState extends State<SplashScreen> {
       final String errStr = e.toString();
       debugPrint('[SPLASH API FAIL] /users/me failed: $errStr');
 
-      // 2. Safe Fallback: Check if we have a verified cached role strictly belonging to this UID
+      // Final safe Fallback check
       final cachedSession = await UserSession.getSession(user.uid);
       final cachedRole = cachedSession?['role']?.toString();
       final cachedProfile = cachedSession?['profile'] as Map<String, dynamic>?;
@@ -115,7 +134,7 @@ class _SplashScreenState extends State<SplashScreen> {
         return;
       }
 
-      // 3. No reliable role available -> DO NOT DEFAULT TO folk_boy OR GUESS ROLE. Stays on Error/Retry screen.
+      // No reliable role available -> display connection error screen
       debugPrint(
           '[SPLASH NAV BLOCKED] /users/me failed ($errStr). No reliable cached role found for UID ${user.uid}. Displaying connection error screen.');
 
@@ -178,7 +197,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 if (_isTakingLong) ...[
                   const SizedBox(height: 20),
                   const Text(
-                    'Server start ho raha hai, kripya thoda wait karein...\n(Free Render server sleep se wake ho raha hai)',
+                    'Connecting to server...\nPlease wait a moment while server wakes up.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Color(0xFF64748B),

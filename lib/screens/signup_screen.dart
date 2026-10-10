@@ -37,6 +37,8 @@ class _SignupScreenState extends State<SignupScreen> {
   List<dynamic> _preachers = [];
   Map<String, dynamic>? _selectedPreacher;
   String _searchTerm = '';
+  bool _isLoadingPreachers = false;
+  String? _preacherError;
   int _currentStep = 0; // 0 for Account Credentials card, 1 for Personal Details card
 
   // Signup flow dates
@@ -79,17 +81,53 @@ class _SignupScreenState extends State<SignupScreen> {
     super.dispose();
   }
 
-  Future<void> _fetchPreachers() async {
+  Future<void> _fetchPreachers({StateSetter? modalSetState}) async {
+    if (mounted) {
+      setState(() {
+        _isLoadingPreachers = true;
+        _preacherError = null;
+      });
+    }
+    if (modalSetState != null) {
+      modalSetState(() {
+        _isLoadingPreachers = true;
+        _preacherError = null;
+      });
+    }
+
     try {
-      final data = await ApiService.get('/users/preachers');
+      final data = await ApiService.get('/users/preachers').timeout(const Duration(seconds: 30));
+      List<dynamic> list = [];
+      if (data is List) {
+        list = data;
+      } else if (data is Map && data['data'] is List) {
+        list = data['data'];
+      }
+
       if (!mounted) return;
       setState(() {
-        _preachers = data is List ? data : [];
+        _preachers = list;
+        _isLoadingPreachers = false;
+        _preacherError = list.isEmpty ? 'No active preachers registered yet.' : null;
       });
+      if (modalSetState != null) {
+        modalSetState(() {});
+      }
     } catch (err) {
       debugPrint('Error fetching preachers: $err');
+      if (!mounted) return;
+      setState(() {
+        _isLoadingPreachers = false;
+        _preacherError = 'Server is waking up or network slow. Tap Retry below.';
+      });
+      if (modalSetState != null) {
+        modalSetState(() {});
+      }
     }
   }
+
+  bool _isOtpSent = false;
+  String? _otpSentEmail;
 
   Future<void> _handleSignup() async {
     setState(() {
@@ -106,6 +144,8 @@ class _SignupScreenState extends State<SignupScreen> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
+        _isOtpSent = true;
+        _otpSentEmail = email;
       });
       _showOtpDialog(email);
     } catch (e) {
@@ -383,6 +423,7 @@ class _SignupScreenState extends State<SignupScreen> {
   }
 
   void _showPreacherPicker() {
+    _searchTerm = '';
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -390,6 +431,13 @@ class _SignupScreenState extends State<SignupScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setModalState) {
+            // Auto fetch if preachers list is empty and not already loading
+            if (_preachers.isEmpty && !_isLoadingPreachers && _preacherError == null) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _fetchPreachers(modalSetState: setModalState);
+              });
+            }
+
             final filteredPreachers = _preachers.where((p) {
               final name = (p['name'] ?? '').toString().toLowerCase();
               return name.contains(_searchTerm.toLowerCase());
@@ -431,10 +479,27 @@ class _SignupScreenState extends State<SignupScreen> {
                           color: Color(0xFF0F172A),
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B), size: 20),
-                        onPressed: () => Navigator.pop(context),
-                      )
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_isLoadingPreachers)
+                            const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0F172A)),
+                            )
+                          else
+                            IconButton(
+                              icon: const Icon(Icons.refresh_rounded, color: Color(0xFF64748B), size: 20),
+                              tooltip: 'Refresh preachers',
+                              onPressed: () => _fetchPreachers(modalSetState: setModalState),
+                            ),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B), size: 20),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                   const SizedBox(height: 10),
@@ -468,57 +533,118 @@ class _SignupScreenState extends State<SignupScreen> {
                   ),
                   const SizedBox(height: 14),
                   Expanded(
-                    child: filteredPreachers.isNotEmpty
-                        ? ListView.separated(
-                            itemCount: filteredPreachers.length,
-                            separatorBuilder: (context, index) => const Divider(color: Color(0xFFF1F5F9), height: 1),
-                            itemBuilder: (context, index) {
-                              final p = filteredPreachers[index];
-                              final isSelected = _selectedPreacher?['id'] == p['id'] || _selectedPreacher?['_id'] == p['_id'];
-                              return InkWell(
-                                onTap: () {
-                                  setState(() {
-                                    _selectedPreacher = p;
-                                  });
-                                  Navigator.pop(context);
-                                },
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 14),
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          p['name'] ?? '',
-                                          style: TextStyle(
-                                            fontFamily: 'Inter',
-                                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                                            fontSize: 15,
-                                            color: isSelected ? const Color(0xFF0F172A) : const Color(0xFF334155),
-                                          ),
-                                        ),
-                                      ),
-                                      if (isSelected)
-                                        const Icon(
-                                          Icons.check_rounded,
-                                          color: Color(0xFF0F172A),
-                                          size: 18,
-                                        ),
-                                    ],
+                    child: _isLoadingPreachers
+                        ? const Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                SizedBox(
+                                  width: 28,
+                                  height: 28,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    color: Color(0xFF0F172A),
                                   ),
                                 ),
-                              );
-                            },
-                          )
-                        : const Center(
-                            child: Text(
-                              'No preachers found',
-                              style: TextStyle(
-                                fontFamily: 'Inter',
-                                color: Color(0xFF64748B),
-                                fontWeight: FontWeight.w500,
-                              ),
+                                SizedBox(height: 12),
+                                Text(
+                                  'Loading preachers from server...',
+                                  style: TextStyle(
+                                    fontFamily: 'Inter',
+                                    color: Color(0xFF64748B),
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
+                          )
+                        : filteredPreachers.isNotEmpty
+                            ? ListView.separated(
+                                itemCount: filteredPreachers.length,
+                                separatorBuilder: (context, index) => const Divider(color: Color(0xFFF1F5F9), height: 1),
+                                itemBuilder: (context, index) {
+                                  final p = filteredPreachers[index];
+                                  final isSelected = _selectedPreacher?['id'] == p['id'] || _selectedPreacher?['_id'] == p['_id'];
+                                  return InkWell(
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedPreacher = p;
+                                      });
+                                      Navigator.pop(context);
+                                    },
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 14),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              p['name'] ?? '',
+                                              style: TextStyle(
+                                                fontFamily: 'Inter',
+                                                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                                                fontSize: 15,
+                                                color: isSelected ? const Color(0xFF0F172A) : const Color(0xFF334155),
+                                              ),
+                                            ),
+                                          ),
+                                          if (isSelected)
+                                            const Icon(
+                                              Icons.check_rounded,
+                                              color: Color(0xFF0F172A),
+                                              size: 18,
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              )
+                            : _preachers.isEmpty
+                                ? Center(
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          const Icon(Icons.cloud_off_rounded, color: Color(0xFF94A3B8), size: 40),
+                                          const SizedBox(height: 10),
+                                          Text(
+                                            _preacherError ?? 'Could not load preachers from server.',
+                                            textAlign: TextAlign.center,
+                                            style: const TextStyle(
+                                              fontFamily: 'Inter',
+                                              color: Color(0xFF64748B),
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 16),
+                                          ElevatedButton.icon(
+                                            onPressed: () => _fetchPreachers(modalSetState: setModalState),
+                                            icon: const Icon(Icons.refresh_rounded, size: 16),
+                                            label: const Text('Retry Connection'),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: const Color(0xFF0F172A),
+                                              foregroundColor: Colors.white,
+                                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                : Center(
+                                    child: Text(
+                                      'No preachers matching "$_searchTerm"',
+                                      style: const TextStyle(
+                                        fontFamily: 'Inter',
+                                        color: Color(0xFF64748B),
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
                   ),
                 ],
               ),
@@ -1246,6 +1372,53 @@ class _SignupScreenState extends State<SignupScreen> {
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 28),
+
+                    if (_isOtpSent && _otpSentEmail != null) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF0FDF4),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFF86EFAC)),
+                        ),
+                        child: Column(
+                          children: [
+                            Text(
+                              'OTP code sent to $_otpSentEmail',
+                              style: const TextStyle(
+                                fontFamily: 'Inter',
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                                color: Color(0xFF166534),
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 8),
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF166534),
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              icon: const Icon(Icons.mark_email_read_rounded, size: 16),
+                              label: const Text(
+                                'Enter 6-Digit OTP',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              onPressed: () => _showOtpDialog(_otpSentEmail!),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
 
                     // Clean Direct Screen Multi-Step Form
                     _buildSignupForm(),

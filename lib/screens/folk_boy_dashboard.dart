@@ -569,7 +569,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
 
         if (preacherId != null && preacherId.isNotEmpty) {
           try {
-            final preachersData = await ApiService.get('/users/preachers').timeout(const Duration(seconds: 4));
+            final preachersData = await ApiService.get('/users/preachers').timeout(const Duration(seconds: 15));
             if (preachersData is List) {
               final match = preachersData.firstWhere(
                 (p) => (p['id'] ?? p['_id'])?.toString() == preacherId || p['name'] == preacherName,

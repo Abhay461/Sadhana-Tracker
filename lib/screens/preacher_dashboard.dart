@@ -48,6 +48,7 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
   static String? _staticCacheUid;
   static Map<String, dynamic>? _staticProfile;
   static List<dynamic>? _staticFolkBoys;
+  static List<dynamic>? _staticMasterAllStudentsCache;
   static Map<String, List<dynamic>>? _staticAllUpdates;
   static List<dynamic>? _staticAnnouncements;
   static List<dynamic>? _staticTripBookings;
@@ -57,6 +58,7 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
     _staticCacheUid = null;
     _staticProfile = null;
     _staticFolkBoys = null;
+    _staticMasterAllStudentsCache = null;
     _staticAllUpdates = null;
     _staticAnnouncements = null;
     _staticTripBookings = null;
@@ -139,6 +141,9 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
     if (_staticFolkBoys != null && _staticFolkBoys!.isNotEmpty) {
       _folkBoys = List.from(_staticFolkBoys!);
       _isLoadingBoys = false;
+    }
+    if (_staticMasterAllStudentsCache != null && _staticMasterAllStudentsCache!.isNotEmpty) {
+      _masterAllStudentsCache = List.from(_staticMasterAllStudentsCache!);
     }
     if (_staticAllUpdates != null && _staticAllUpdates!.isNotEmpty) {
       _allUpdates = Map.from(_staticAllUpdates!);
@@ -316,11 +321,50 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
     }
   }
 
+  List<dynamic>? _masterAllStudentsCache;
+  final Set<String> _inFlightPreacherFetches = {};
+
   Future<void> _fetchFolkBoys({String? preacherId, bool force = false}) async {
-    if (_isFetchingFolkBoys && !force) {
-      debugPrint('⏭️ [PREACHER] _fetchFolkBoys already in-flight, skipping duplicate request.');
+    final targetId = (preacherId ?? _selectedPreacherId).trim();
+
+    // 1. Guard against duplicate simultaneous request for the same preacherId
+    if (_inFlightPreacherFetches.contains(targetId) && !force) {
+      debugPrint('[STUDENTS] Skipping duplicate request for preacherId: $targetId');
       return;
     }
+
+    // 2. If master all-students cache is already loaded and force is false, reuse it locally!
+    final masterList = _masterAllStudentsCache ?? _staticMasterAllStudentsCache;
+    if (_canViewAllStudents && masterList != null && masterList.isNotEmpty && !force) {
+      if (targetId == 'all' || targetId.isEmpty) {
+        debugPrint('[STUDENTS] Using cached/all student data');
+        if (mounted) {
+          setState(() {
+            _folkBoys = List.from(masterList);
+            _isLoadingBoys = false;
+          });
+        }
+        return;
+      } else {
+        debugPrint('[STUDENTS] Using cached/all student data for preacherId: $targetId');
+        final filtered = masterList.where((s) {
+          if (s is! Map) return false;
+          final pObj = s['preacherId'];
+          final pId = pObj is Map ? (pObj['_id'] ?? pObj['id'] ?? '').toString() : (pObj ?? '').toString();
+          return pId == targetId;
+        }).toList();
+
+        if (mounted) {
+          setState(() {
+            _folkBoys = filtered;
+            _isLoadingBoys = false;
+          });
+        }
+        return;
+      }
+    }
+
+    _inFlightPreacherFetches.add(targetId);
     _isFetchingFolkBoys = true;
 
     try {
@@ -328,11 +372,11 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
         setState(() => _isLoadingBoys = true);
       }
 
-      final targetId = preacherId ?? _selectedPreacherId;
       String url = '/preacher/students';
       if (_canViewAllStudents && targetId.isNotEmpty && targetId != 'all') {
         url = '/preacher/students?preacherId=$targetId';
       } else if (_canViewAllStudents) {
+        debugPrint('[STUDENTS] Fetch all students');
         url = '/preacher/students?preacherId=all';
       }
 
@@ -355,6 +399,12 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
         }
       }
 
+      // If master list fetched (targetId == 'all' or empty), save to master cache
+      if (targetId == 'all' || targetId.isEmpty) {
+        _masterAllStudentsCache = List.from(extractedStudents);
+        _staticMasterAllStudentsCache = List.from(extractedStudents);
+      }
+
       if (mounted) {
         setState(() {
           _folkBoys = extractedStudents;
@@ -369,6 +419,7 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
       debugPrint('Error fetching folk boys: $e');
       if (mounted) setState(() => _isLoadingBoys = false);
     } finally {
+      _inFlightPreacherFetches.remove(targetId);
       _isFetchingFolkBoys = false;
     }
   }
@@ -378,7 +429,7 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
       _selectedPreacherId = preacherId;
       _isLoadingBoys = true;
     });
-    _fetchFolkBoys(preacherId: preacherId, force: true);
+    _fetchFolkBoys(preacherId: preacherId, force: false);
   }
 
   Future<void> _fetchTripAndEventBookings({bool force = false}) async {

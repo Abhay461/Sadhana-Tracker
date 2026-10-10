@@ -719,15 +719,22 @@ class _ManagementTabState extends State<ManagementTab> {
     ];
 
     String? getMatchedKey(Map<String, dynamic> u) {
+      final cat = (u['category'] ?? '').toString().toLowerCase();
+      if (cat == 'accommodation' || cat.contains('accommodation') || cat == 'preacher_appointment' || cat.contains('residency')) {
+        return null;
+      }
+
       final act = (u['work_started'] ?? u['activity'] ?? u['title'] ?? '').toString().toLowerCase();
       final desc = (u['description'] ?? '').toString().toLowerCase();
       final combined = '$act $desc';
+
+      if (combined.contains('accommodation') || combined.contains('booking')) return null;
 
       if (combined.contains('morning') || combined.contains('wake')) return 'morning wake-up';
       if (combined.contains('mangla')) return 'mangla arti';
       if (combined.contains('chanting') || combined.contains('japa')) return 'chanting';
       if (combined.contains('online') || combined.contains('session')) return 'online session';
-      if (combined.contains('book') || combined.contains('reading')) return 'book reading';
+      if (combined.contains('book reading') || combined.contains('reading') || combined.contains('book')) return 'book reading';
       if (combined.contains('service')) return 'service';
       if (combined.contains('temple')) return 'temple visit';
       if (combined.contains('srimad') || combined.contains('bhagavatam')) return 'srimad bhagavatam class';
@@ -888,6 +895,12 @@ class _ManagementTabState extends State<ManagementTab> {
       return textToProcess;
     }
 
+    String cleanActivityText(String raw) {
+      String s = raw.trim();
+      s = s.replaceFirst(RegExp(r'^(Book Reading|Service|Online Session|Chanting|Temple Visit|Morning Wake-up|Sleep Time|SB Class|BG Class)\s*[-:]\s*', caseSensitive: false), '').trim();
+      return s;
+    }
+
     String? getDetailText(Map<String, dynamic> u) {
       final workComp = (u['work_completed'] ?? u['detail'] ?? '').toString().trim();
       final key = getMatchedKey(u);
@@ -897,7 +910,11 @@ class _ManagementTabState extends State<ManagementTab> {
         final workStart = (u['work_started'] ?? '').toString().trim();
         if (workStart.contains('(') && workStart.contains(')')) {
           textToFormat = workStart.substring(workStart.indexOf('(') + 1, workStart.lastIndexOf(')')).trim();
+        } else {
+          textToFormat = cleanActivityText(workStart);
         }
+      } else {
+        textToFormat = cleanActivityText(textToFormat);
       }
 
       if (key == 'online session' || key == 'service' || key == 'srimad bhagavatam class' || key == 'bhagavad gita class') {
@@ -951,7 +968,8 @@ class _ManagementTabState extends State<ManagementTab> {
         if (acts['bookReading'] != null) {
           final b = acts['bookReading'];
           if (b is Map) {
-            final name = (b['bookName'] ?? b['name'] ?? b['book_name'] ?? b['book'] ?? b['title'] ?? '').toString().trim();
+            String name = (b['bookName'] ?? b['name'] ?? b['book_name'] ?? b['book'] ?? b['title'] ?? '').toString().trim();
+            name = cleanActivityText(name);
             final pagesOrMins = b['pagesOrMinutes'] ?? b['pagesRead'] ?? b['pages'] ?? b['durationMinutes'] ?? b['duration'] ?? b['timeSpan'] ?? b['value'];
             final readingType = (b['readingType'] ?? b['type'] ?? '').toString().trim().toLowerCase();
 
@@ -971,20 +989,24 @@ class _ManagementTabState extends State<ManagementTab> {
               }
             }
 
-            final combined = [name, detailStr].where((s) => s.isNotEmpty && s != '0' && s != 'null').join(' - ');
-            if (combined.isNotEmpty) result['book reading'] = combined;
+            final hasDurationInName = name.contains('(') || RegExp(r'\d+\s*(?:mins?|minutes?|hrs?|hours?|pages?)', caseSensitive: false).hasMatch(name);
+            final combined = (detailStr.isNotEmpty && !hasDurationInName && !name.contains(detailStr)) ? '$name - $detailStr' : name;
+            if (combined.isNotEmpty) result['book reading'] = cleanActivityText(combined);
           } else if (b is String && b.isNotEmpty && b != '0' && b != 'null') {
-            result['book reading'] = b;
+            result['book reading'] = cleanActivityText(b);
           }
         }
         if (acts['service'] != null) {
           final s = acts['service'];
           if (s is Map) {
             final dur = (s['durationMinutes'] ?? s['duration'] ?? s['timeSpan'] ?? s['time'] ?? '').toString();
-            final name = (s['serviceName'] ?? s['name'] ?? '').toString().trim();
+            String name = (s['serviceName'] ?? s['name'] ?? '').toString().trim();
+            name = cleanActivityText(name);
             final formattedDur = formatDurationText(dur);
             if (name.isNotEmpty && name != 'null' && name != '0' && name.toLowerCase() != 'service') {
-              result['service'] = name;
+              final hasDurationInName = name.contains('(') || RegExp(r'\d+\s*(?:mins?|minutes?|hrs?|hours?)', caseSensitive: false).hasMatch(name);
+              final combined = (formattedDur != null && !hasDurationInName && !name.contains(formattedDur)) ? '$name ($formattedDur)' : name;
+              result['service'] = combined;
             } else if (formattedDur != null) {
               result['service'] = formattedDur;
             }
@@ -993,7 +1015,7 @@ class _ManagementTabState extends State<ManagementTab> {
             if (formattedDur != null) {
               result['service'] = formattedDur;
             } else {
-              result['service'] = s;
+              result['service'] = cleanActivityText(s);
             }
           }
         }
@@ -1039,13 +1061,13 @@ class _ManagementTabState extends State<ManagementTab> {
       if (key != null) {
         if (!result.containsKey(key)) {
           final detail = getDetailText(u);
-          if (detail != null) result[key] = detail;
+          if (detail != null) result[key] = cleanActivityText(detail);
         }
       } else {
         final act = (u['work_started'] ?? u['activity'] ?? u['title'] ?? '').toString().trim().toLowerCase();
         if (act.isNotEmpty && !result.containsKey(act)) {
           final detail = getDetailText(u);
-          if (detail != null) result[act] = detail;
+          if (detail != null) result[act] = cleanActivityText(detail);
         }
       }
 
@@ -1337,25 +1359,11 @@ class _ManagementTabState extends State<ManagementTab> {
     // MAIN DASHBOARD MATRIX TABLE (MULTIPLE STUDENTS SIDE-BY-SIDE)
     final List<Map<String, dynamic>> rawCandidates = [];
     final Set<String> seenCandidateIds = {};
-    if (widget.folkBoys.isNotEmpty) {
-      for (var b in widget.folkBoys) {
-        final map = b is Map<String, dynamic> ? b : Map<String, dynamic>.from(b as Map);
-        final id = (map['id'] ?? map['_id'] ?? map['userId'] ?? map['user_id'] ?? '').toString();
-        if (id.isEmpty || seenCandidateIds.add(id)) {
-          rawCandidates.add(map);
-        }
-      }
-    } else {
-      final Map<String, String> uniqueNames = {};
-      for (var u in sadhanaLogs) {
-        final id = (u['worker_id'] ?? '').toString();
-        final name = (u['worker_name'] ?? 'Student').toString();
-        if (id.isNotEmpty) uniqueNames[id] = name;
-      }
-      for (var entry in uniqueNames.entries) {
-        if (seenCandidateIds.add(entry.key)) {
-          rawCandidates.add({'id': entry.key, 'name': entry.value});
-        }
+    for (var b in widget.folkBoys) {
+      final map = b is Map<String, dynamic> ? b : Map<String, dynamic>.from(b as Map);
+      final id = (map['id'] ?? map['_id'] ?? map['userId'] ?? map['user_id'] ?? '').toString();
+      if (id.isEmpty || seenCandidateIds.add(id)) {
+        rawCandidates.add(map);
       }
     }
 
@@ -1804,45 +1812,49 @@ class _ManagementTabState extends State<ManagementTab> {
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFCBD5E1)),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: widget.availablePreachers.any((p) => (p['_id'] ?? p['id']).toString() == widget.selectedPreacherId) || widget.selectedPreacherId == 'all'
-                    ? widget.selectedPreacherId
-                    : 'all',
-                icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF3F1200)),
-                elevation: 4,
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 180),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
                 borderRadius: BorderRadius.circular(12),
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12.5,
-                  color: Color(0xFF3F1200),
-                ),
-                onChanged: (String? newValue) {
-                  if (newValue != null && widget.onPreacherSelected != null) {
-                    widget.onPreacherSelected!(newValue);
-                  }
-                },
-                items: [
-                  const DropdownMenuItem<String>(
-                    value: 'all',
-                    child: Text('🌐 All Preachers'),
+                border: Border.all(color: const Color(0xFFCBD5E1)),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  isExpanded: true,
+                  value: widget.availablePreachers.any((p) => (p['_id'] ?? p['id']).toString() == widget.selectedPreacherId) || widget.selectedPreacherId == 'all'
+                      ? widget.selectedPreacherId
+                      : 'all',
+                  icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF3F1200)),
+                  elevation: 4,
+                  borderRadius: BorderRadius.circular(12),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12.0,
+                    color: Color(0xFF3F1200),
                   ),
-                  ...widget.availablePreachers.map((p) {
-                    final pId = (p['_id'] ?? p['id'] ?? '').toString();
-                    final pName = (p['name'] ?? 'Preacher').toString();
-                    return DropdownMenuItem<String>(
-                      value: pId,
-                      child: Text('🙏 $pName'),
-                    );
-                  }),
-                ],
+                  onChanged: (String? newValue) {
+                    if (newValue != null && widget.onPreacherSelected != null) {
+                      widget.onPreacherSelected!(newValue);
+                    }
+                  },
+                  items: [
+                    const DropdownMenuItem<String>(
+                      value: 'all',
+                      child: Text('🌐 All Preachers', overflow: TextOverflow.ellipsis),
+                    ),
+                    ...widget.availablePreachers.map((p) {
+                      final pId = (p['_id'] ?? p['id'] ?? '').toString();
+                      final pName = (p['name'] ?? 'Preacher').toString();
+                      return DropdownMenuItem<String>(
+                        value: pId,
+                        child: Text('🙏 $pName', overflow: TextOverflow.ellipsis),
+                      );
+                    }),
+                  ],
+                ),
               ),
             ),
           ),

@@ -180,6 +180,12 @@ class _StudentSadhanaExcelGridState extends State<StudentSadhanaExcelGrid> {
     }).toList();
   }
 
+  String _cleanGridText(String raw) {
+    String s = raw.trim();
+    s = s.replaceFirst(RegExp(r'^(Book Reading|Service|Online Session|Chanting|Temple Visit|Morning Wake-up|Sleep Time|SB Class|BG Class|Temple / Service)\s*[-:]\s*', caseSensitive: false), '').trim();
+    return s;
+  }
+
   /// Parse raw activity object/value into clean text
   String? _parseActivityValue(dynamic obj, String columnKey) {
     if (obj == null) return null;
@@ -187,18 +193,28 @@ class _StudentSadhanaExcelGridState extends State<StudentSadhanaExcelGrid> {
     if (obj is Map) {
       if (columnKey == 'reading') {
         final rTime = (obj['readingTime'] ?? obj['time'] ?? obj['duration'] ?? obj['readTime'] ?? obj['pages'] ?? '').toString().trim();
-        final bName = (obj['bookName'] ?? obj['book'] ?? obj['name'] ?? '').toString().trim();
+        final bName = _cleanGridText((obj['bookName'] ?? obj['book'] ?? obj['name'] ?? '').toString());
+        if (bName.isNotEmpty && bName != 'null') {
+          if (rTime.isNotEmpty && rTime != '0' && rTime != '0 mins' && rTime != 'null' && !bName.contains(rTime)) {
+            return '$bName ($rTime)';
+          }
+          return bName;
+        }
         if (rTime.isNotEmpty && rTime != '0' && rTime != '0 mins' && rTime != 'null') return rTime;
-        if (bName.isNotEmpty && bName != 'null') return bName;
         if (obj['attended'] == true || obj['read'] == true) return 'Read';
         return null;
       }
 
       if (columnKey == 'class') {
         if (obj['attended'] == false) return null;
-        final sName = (obj['sessionName'] ?? obj['topic'] ?? obj['title'] ?? obj['name'] ?? obj['className'] ?? '').toString().trim();
+        final sName = _cleanGridText((obj['sessionName'] ?? obj['topic'] ?? obj['title'] ?? obj['name'] ?? obj['className'] ?? '').toString());
         final sTime = (obj['time'] ?? obj['duration'] ?? '').toString().trim();
-        if (sName.isNotEmpty && sName != 'null') return sName;
+        if (sName.isNotEmpty && sName != 'null') {
+          if (sTime.isNotEmpty && sTime != 'null' && !sName.contains(sTime)) {
+            return '$sName ($sTime)';
+          }
+          return sName;
+        }
         if (sTime.isNotEmpty && sTime != 'null') return sTime;
         if (obj['attended'] == true) return 'Attended';
         return null;
@@ -206,9 +222,14 @@ class _StudentSadhanaExcelGridState extends State<StudentSadhanaExcelGrid> {
 
       if (columnKey == 'service') {
         if (obj['attended'] == false) return null;
-        final sName = (obj['serviceName'] ?? obj['name'] ?? obj['title'] ?? obj['service'] ?? '').toString().trim();
+        final sName = _cleanGridText((obj['serviceName'] ?? obj['name'] ?? obj['title'] ?? obj['service'] ?? '').toString());
         final sTime = (obj['duration'] ?? obj['time'] ?? '').toString().trim();
-        if (sName.isNotEmpty && sName != 'null') return sName;
+        if (sName.isNotEmpty && sName != 'null') {
+          if (sTime.isNotEmpty && sTime != 'null' && !sName.contains(sTime)) {
+            return '$sName ($sTime)';
+          }
+          return sName;
+        }
         if (sTime.isNotEmpty && sTime != 'null') return sTime;
         if (obj['attended'] == true || obj['done'] == true) return 'Done';
         return null;
@@ -249,10 +270,10 @@ class _StudentSadhanaExcelGridState extends State<StudentSadhanaExcelGrid> {
       }
 
       // Fallback map inspection
-      if (obj['time'] != null && obj['time'].toString().isNotEmpty && obj['time'] != 'null') return obj['time'].toString();
-      if (obj['name'] != null && obj['name'].toString().isNotEmpty && obj['name'] != 'null') return obj['name'].toString();
-      if (obj['title'] != null && obj['title'].toString().isNotEmpty && obj['title'] != 'null') return obj['title'].toString();
-      if (obj['value'] != null && obj['value'].toString().isNotEmpty && obj['value'] != 'null') return obj['value'].toString();
+      if (obj['time'] != null && obj['time'].toString().isNotEmpty && obj['time'] != 'null') return _cleanGridText(obj['time'].toString());
+      if (obj['name'] != null && obj['name'].toString().isNotEmpty && obj['name'] != 'null') return _cleanGridText(obj['name'].toString());
+      if (obj['title'] != null && obj['title'].toString().isNotEmpty && obj['title'] != 'null') return _cleanGridText(obj['title'].toString());
+      if (obj['value'] != null && obj['value'].toString().isNotEmpty && obj['value'] != 'null') return _cleanGridText(obj['value'].toString());
 
       return null;
     }
@@ -265,13 +286,14 @@ class _StudentSadhanaExcelGridState extends State<StudentSadhanaExcelGrid> {
       return '$str rounds';
     }
 
-    return str;
+    return _cleanGridText(str);
   }
 
   /// Extract display value for a specific column key from a log item
   String? _getDisplayValueFromLog(Map<String, dynamic> u, String columnKey) {
     final cat = (u['category'] ?? '').toString().toLowerCase();
-    final act = (u['work_started'] ?? u['activity'] ?? u['title'] ?? u['name'] ?? '').toString().toLowerCase();
+    final rawAct = (u['work_started'] ?? u['activity'] ?? u['title'] ?? u['name'] ?? '').toString();
+    final act = rawAct.toLowerCase();
     final desc = (u['description'] ?? u['work_completed'] ?? u['notes'] ?? '').toString().toLowerCase();
     final directVal = (u['work_completed'] ?? u['value'] ?? u['rounds'] ?? u['duration'] ?? u['time'] ?? '').toString().trim();
 
@@ -305,26 +327,30 @@ class _StudentSadhanaExcelGridState extends State<StudentSadhanaExcelGrid> {
       if (acts['reading'] != null) return _parseActivityValue(acts['reading'], columnKey);
       if (acts['bookReading'] != null) return _parseActivityValue(acts['bookReading'], columnKey);
       if (cat == 'reading' || act.contains('read') || act.contains('book') || act.contains('path')) {
-        return directVal.isNotEmpty ? directVal : 'Logged';
+        final val = directVal.isNotEmpty ? directVal : rawAct;
+        return _cleanGridText(val.isNotEmpty ? val : 'Logged');
       }
     } else if (columnKey == 'class') {
       if (acts['class'] != null) return _parseActivityValue(acts['class'], columnKey);
       if (acts['onlineSession'] != null) return _parseActivityValue(acts['onlineSession'], columnKey);
       if (acts['session'] != null) return _parseActivityValue(acts['session'], columnKey);
       if (cat == 'class' || cat == 'online_session' || act.contains('session') || act.contains('class') || act.contains('sb') || act.contains('bg') || act.contains('bhagavatam') || act.contains('gita') || act.contains('lecture')) {
-        return directVal.isNotEmpty ? directVal : 'Attended';
+        final val = directVal.isNotEmpty ? directVal : rawAct;
+        return _cleanGridText(val.isNotEmpty ? val : 'Attended');
       }
     } else if (columnKey == 'service') {
       if (acts['service'] != null) return _parseActivityValue(acts['service'], columnKey);
       if (acts['templeVisit'] != null) return _parseActivityValue(acts['templeVisit'], columnKey);
       if (cat == 'service' || act.contains('service') || act.contains('temple') || act.contains('seva')) {
-        return directVal.isNotEmpty ? directVal : 'Logged';
+        final val = directVal.isNotEmpty ? directVal : rawAct;
+        return _cleanGridText(val.isNotEmpty ? val : 'Logged');
       }
     } else if (columnKey == 'ekadashi') {
       if (acts['ekadashiFasting'] != null) return _parseActivityValue(acts['ekadashiFasting'], columnKey);
       if (acts['ekadashi'] != null) return _parseActivityValue(acts['ekadashi'], columnKey);
       if (cat == 'ekadashi' || cat == 'ekadashi_fasting' || act.contains('ekadashi') || act.contains('fasting')) {
-        return directVal.isNotEmpty ? directVal : 'Fasting';
+        final val = directVal.isNotEmpty ? directVal : rawAct;
+        return _cleanGridText(val.isNotEmpty ? val : 'Fasting');
       }
     } else if (columnKey == 'sleep') {
       if (acts['sleepTime'] != null) return _parseActivityValue(acts['sleepTime'], columnKey);
