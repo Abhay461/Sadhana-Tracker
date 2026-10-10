@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
@@ -12,6 +13,8 @@ import { RealtimeService } from '../realtime/realtime.service';
 
 @Injectable()
 export class PreachersService {
+  private readonly logger = new Logger(PreachersService.name);
+
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(SadhanaEntry.name) private readonly sadhanaModel: Model<SadhanaEntryDocument>,
@@ -19,99 +22,129 @@ export class PreachersService {
   ) {}
 
   async getMyStudents(preacher: any, targetPreacherId?: string) {
-    const preacherId = (
-      preacher?._id ??
-      preacher?.id ??
-      preacher?.uid ??
-      (typeof preacher === 'string' ? preacher : '')
-    ).toString();
-    const canViewAll = Boolean(
-      preacher?.canViewAllStudents || preacher?.isHeadPreacher || preacher?.role === 'admin'
-    );
-    const extraUid = (preacher?.firebaseUid ?? preacher?.uid ?? '').toString();
+    try {
+      const preacherId = (
+        preacher?._id ??
+        preacher?.id ??
+        preacher?.uid ??
+        (typeof preacher === 'string' ? preacher : '')
+      ).toString();
+      const canViewAll = Boolean(
+        preacher?.canViewAllStudents || preacher?.isHeadPreacher || preacher?.role === 'admin'
+      );
+      const extraUid = (preacher?.firebaseUid ?? preacher?.uid ?? '').toString();
 
-    const buildPreacherCondition = (pId: string, extra?: string) => {
-      const matchers: any[] = [];
-      if (pId) {
-        matchers.push({ preacherId: pId });
-        if (Types.ObjectId.isValid(pId)) {
-          matchers.push({ preacherId: new Types.ObjectId(pId) });
+      this.logger.log(
+        `[getMyStudents] Request started: preacherId=${preacherId}, role=${preacher?.role}, canViewAll=${canViewAll}, targetPreacherId=${targetPreacherId || 'none'}`
+      );
+
+      const buildPreacherCondition = (pId: string, extra?: string) => {
+        const matchers: any[] = [];
+        if (pId) {
+          matchers.push({ preacherId: pId }, { preacher_id: pId });
+          if (Types.ObjectId.isValid(pId)) {
+            const oid = new Types.ObjectId(pId);
+            matchers.push({ preacherId: oid }, { preacher_id: oid });
+          }
+        }
+        if (extra && extra !== pId) {
+          matchers.push({ preacherId: extra }, { preacher_id: extra });
+          if (Types.ObjectId.isValid(extra)) {
+            const extraOid = new Types.ObjectId(extra);
+            matchers.push({ preacherId: extraOid }, { preacher_id: extraOid });
+          }
+        }
+        return matchers.length > 0 ? { $or: matchers } : { preacherId: pId };
+      };
+
+      let availablePreachers: any[] = [];
+      let queryFilter: any = buildPreacherCondition(preacherId, extraUid);
+
+      if (canViewAll) {
+        try {
+          availablePreachers = await this.userModel
+            .find({ role: 'preacher', status: 'ACTIVE' })
+            .select('_id name email preacherCode photoUrl phoneNumber')
+            .sort({ name: 1 })
+            .lean();
+        } catch (err) {
+          this.logger.warn(`[getMyStudents] Failed to load availablePreachers: ${err.message}`);
+          availablePreachers = [];
+        }
+
+        if (targetPreacherId && targetPreacherId !== 'all') {
+          queryFilter = buildPreacherCondition(targetPreacherId);
+        } else {
+          // 'all' or empty - fetch all students/members who have a preacher assigned or any student role
+          queryFilter = {
+            $or: [
+              { role: { $in: ['folk_boy', 'residency', 'student', 'user', 'member'] } },
+              { preacherId: { $exists: true, $ne: null } },
+              { preacher_id: { $exists: true, $ne: null } },
+            ],
+          };
         }
       }
-      if (extra && extra !== pId) {
-        matchers.push({ preacherId: extra });
-        if (Types.ObjectId.isValid(extra)) {
-          matchers.push({ preacherId: new Types.ObjectId(extra) });
-        }
-      }
-      return matchers.length > 0 ? { $or: matchers } : { preacherId: pId };
-    };
 
-    let availablePreachers: any[] = [];
-    let queryFilter: any = buildPreacherCondition(preacherId, extraUid);
-
-    if (canViewAll) {
+      let rawStudents: any[] = [];
       try {
-        availablePreachers = await this.userModel
-          .find({ role: 'preacher', status: 'ACTIVE' })
-          .select('_id name email preacherCode photoUrl phoneNumber')
+        rawStudents = await this.userModel
+          .find(queryFilter)
+          .populate('preacherId', 'name email preacherCode')
+          .select('name email phoneNumber role status photoUrl dob joiningDate isBlocked createdAt preacherId preacher_id whatsapp_number')
           .sort({ name: 1 })
           .lean();
-      } catch (err) {
-        availablePreachers = [];
+      } catch (populateError) {
+        this.logger.warn(`[getMyStudents] Populate failed (${populateError.message}), falling back to unpopulated query`);
+        try {
+          rawStudents = await this.userModel
+            .find(queryFilter)
+            .select('name email phoneNumber role status photoUrl dob joiningDate isBlocked createdAt preacherId preacher_id whatsapp_number')
+            .sort({ name: 1 })
+            .lean();
+        } catch (findError) {
+          this.logger.error(`[getMyStudents] Direct query failed (${findError.message}), falling back to direct ID match`);
+          const fallbackCondition: any = Types.ObjectId.isValid(preacherId)
+            ? { $or: [{ preacherId: new Types.ObjectId(preacherId) }, { preacherId }] }
+            : { preacherId };
+          rawStudents = await this.userModel
+            .find(fallbackCondition)
+            .select('name email phoneNumber role status photoUrl dob joiningDate isBlocked createdAt preacherId preacher_id whatsapp_number')
+            .sort({ name: 1 })
+            .lean();
+        }
       }
 
-      if (targetPreacherId && targetPreacherId !== 'all') {
-        queryFilter = buildPreacherCondition(targetPreacherId);
-      } else {
-        // 'all' or empty - fetch all students/members who have a preacher assigned or any student role
-        queryFilter = {
-          $or: [
-            { role: { $in: ['folk_boy', 'residency', 'student', 'user', 'member'] } },
-            { preacherId: { $exists: true, $ne: null } },
-          ],
-        };
-      }
+      const students = rawStudents.map((s: any) => ({
+        ...s,
+        id: s._id ? s._id.toString() : '',
+        _id: s._id ? s._id.toString() : '',
+        preacherId: s.preacherId || s.preacher_id,
+      }));
+
+      const pendingCount = students.filter((s: any) => s.status === 'PENDING_APPROVAL').length;
+
+      this.logger.log(
+        `[getMyStudents] Completed successfully: returned ${students.length} students (pending=${pendingCount})`
+      );
+
+      return {
+        total: students.length,
+        pendingCount,
+        students,
+        canViewAll,
+        availablePreachers: (availablePreachers || []).map((p: any) => ({
+          id: (p._id ?? p.id ?? '').toString(),
+          _id: (p._id ?? p.id ?? '').toString(),
+          name: p.name ?? '',
+          email: p.email ?? '',
+          preacherCode: p.preacherCode ?? '',
+        })),
+      };
+    } catch (fatalError) {
+      this.logger.error(`[getMyStudents] Fatal error: ${fatalError.message}`, fatalError.stack);
+      throw fatalError;
     }
-
-    let rawStudents: any[] = [];
-    try {
-      rawStudents = await this.userModel
-        .find(queryFilter)
-        .populate('preacherId', 'name email preacherCode')
-        .select('name email phoneNumber role status photoUrl dob joiningDate isBlocked createdAt preacherId whatsapp_number')
-        .sort({ name: 1 })
-        .lean();
-    } catch (populateError) {
-      // Fallback: If populate fails due to any uncastable preacherId in legacy records, fetch cleanly without populate
-      rawStudents = await this.userModel
-        .find(queryFilter)
-        .select('name email phoneNumber role status photoUrl dob joiningDate isBlocked createdAt preacherId whatsapp_number')
-        .sort({ name: 1 })
-        .lean();
-    }
-
-    const students = rawStudents.map((s: any) => ({
-      ...s,
-      id: s._id ? s._id.toString() : '',
-      _id: s._id ? s._id.toString() : '',
-    }));
-
-    const pendingCount = students.filter((s: any) => s.status === 'PENDING_APPROVAL').length;
-
-    return {
-      total: students.length,
-      pendingCount,
-      students,
-      canViewAll,
-      availablePreachers: (availablePreachers || []).map((p: any) => ({
-        id: (p._id ?? p.id ?? '').toString(),
-        _id: (p._id ?? p.id ?? '').toString(),
-        name: p.name ?? '',
-        email: p.email ?? '',
-        preacherCode: p.preacherCode ?? '',
-      })),
-    };
   }
 
   async approveStudentAccount(preacher: any, studentId: string, dto: ApproveStudentDto) {
@@ -130,7 +163,7 @@ export class PreachersService {
     const canViewAll = Boolean(
       preacher?.canViewAllStudents || preacher?.isHeadPreacher || preacher?.role === 'admin'
     );
-    const studentPreacherId = student.preacherId ? student.preacherId.toString() : '';
+    const studentPreacherId = (student.preacherId ?? (student as any).preacher_id)?.toString() || '';
     const extraUid = (preacher?.firebaseUid ?? preacher?.uid ?? '').toString();
 
     if (!canViewAll && studentPreacherId !== preacherId && (!extraUid || studentPreacherId !== extraUid)) {
@@ -172,7 +205,7 @@ export class PreachersService {
     );
     const studentPreacherId = student.preacherId?._id
       ? student.preacherId._id.toString()
-      : (student.preacherId ? student.preacherId.toString() : '');
+      : ((student.preacherId ?? (student as any).preacher_id)?.toString() || '');
     const extraUid = (preacher?.firebaseUid ?? preacher?.uid ?? '').toString();
 
     if (!canViewAll && studentPreacherId !== preacherId && (!extraUid || studentPreacherId !== extraUid)) {

@@ -155,4 +155,82 @@ describe('PreachersService', () => {
     expect(result.availablePreachers[0].name).toBe('Preacher A');
     expect(result.availablePreachers[1].name).toBe('Preacher B');
   });
+
+  it('getMyStudents matches students with snake_case preacher_id field', async () => {
+    const preacherOid = new Types.ObjectId();
+    const mockPreacher = {
+      _id: preacherOid,
+      role: 'preacher',
+      canViewAllStudents: false,
+    };
+
+    const mockStudents = [
+      {
+        _id: new Types.ObjectId(),
+        name: 'Student SnakeCase',
+        email: 'snake@test.com',
+        role: 'folk_boy',
+        status: 'ACTIVE',
+        preacher_id: preacherOid.toString(),
+      },
+    ];
+
+    const queryChain = {
+      populate: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      sort: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue(mockStudents),
+    };
+    userModel.find.mockReturnValue(queryChain);
+
+    const result = await service.getMyStudents(mockPreacher);
+
+    expect(result.total).toBe(1);
+    expect(result.students[0].name).toBe('Student SnakeCase');
+    expect(result.students[0].preacherId).toBe(preacherOid.toString());
+  });
+
+  it('getMyStudents uses safe direct ID fallback when complex query fails', async () => {
+    const preacherOid = new Types.ObjectId();
+    const mockPreacher = {
+      _id: preacherOid,
+      role: 'preacher',
+      canViewAllStudents: false,
+    };
+
+    const mockSafeFallbackStudents = [
+      {
+        _id: new Types.ObjectId(),
+        name: 'Resilient Student',
+        status: 'ACTIVE',
+        preacherId: preacherOid,
+      },
+    ];
+
+    const failingChain = {
+      populate: jest.fn().mockImplementation(() => {
+        throw new Error('Populate error');
+      }),
+    };
+    const failingDirectChain = {
+      select: jest.fn().mockReturnThis(),
+      sort: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockRejectedValue(new Error('Mongo complex query failed')),
+    };
+    const safeFallbackChain = {
+      select: jest.fn().mockReturnThis(),
+      sort: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue(mockSafeFallbackStudents),
+    };
+
+    userModel.find
+      .mockReturnValueOnce(failingChain)
+      .mockReturnValueOnce(failingDirectChain)
+      .mockReturnValueOnce(safeFallbackChain);
+
+    const result = await service.getMyStudents(mockPreacher);
+
+    expect(result.total).toBe(1);
+    expect(result.students[0].name).toBe('Resilient Student');
+  });
 });

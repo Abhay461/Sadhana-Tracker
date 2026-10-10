@@ -6,6 +6,7 @@ import {
   Param,
   Query,
   UseGuards,
+  Logger,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { PreachersService } from './preachers.service';
@@ -13,16 +14,17 @@ import { ApproveStudentDto } from './dto/approve-student.dto';
 import { FirebaseAuthGuard } from '../common/guards/firebase-auth.guard';
 import { ActiveUserGuard } from '../common/guards/active-user.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { OwnershipGuard } from '../common/guards/ownership.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 
 @ApiTags('Preacher Dashboard')
 @Controller('preacher')
-@UseGuards(FirebaseAuthGuard, ActiveUserGuard, RolesGuard, OwnershipGuard)
+@UseGuards(FirebaseAuthGuard, ActiveUserGuard, RolesGuard)
 @Roles('preacher', 'admin')
 @ApiBearerAuth('access-token')
 export class PreachersController {
+  private readonly logger = new Logger(PreachersController.name);
+
   constructor(private readonly preachersService: PreachersService) {}
 
   @Get('students')

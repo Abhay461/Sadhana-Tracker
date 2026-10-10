@@ -25,8 +25,8 @@ export class OwnershipGuard implements CanActivate {
       return true;
     }
 
-    // Extract target userId from query parameters, body, or explicit userId route param
-    const targetUserId = request.params.userId || request.body.userId;
+    // Extract target userId from query parameters, body, or explicit userId route param safely
+    const targetUserId = request.params?.userId || request.body?.userId || request.query?.userId;
 
     if (!targetUserId) {
       return true; // No explicit target user specified, controller-level logic handles resource access
