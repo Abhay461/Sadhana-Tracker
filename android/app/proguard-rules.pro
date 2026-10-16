@@ -28,15 +28,12 @@
     native <methods>;
 }
 
-# 6. Keep AndroidX & Activity EdgeToEdge
--keep class androidx.activity.** { *; }
-
-# 7. Keep Plugins (Razorpay, OneSignal, Firebase)
+# 6. Keep Plugins (Razorpay, Firebase)
 -keep class com.razorpay.** { *; }
 -dontwarn com.razorpay.**
--keep class com.onesignal.** { *; }
--dontwarn com.onesignal.**
 -keep class com.google.firebase.** { *; }
 -dontwarn com.google.firebase.**
+
+
 
 

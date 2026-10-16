@@ -147,10 +147,13 @@ export class NotificationsService {
           priority: 'high',
           notification: {
             channelId: 'sadhana_tracker_notifications',
+            icon: 'launcher_icon',
+            color: '#3F51B5',
             sound: 'default',
             priority: 'high',
             defaultSound: true,
             defaultVibrateTimings: true,
+            clickAction: 'FLUTTER_NOTIFICATION_CLICK',
           },
         },
         apns: {

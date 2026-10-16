@@ -111,6 +111,7 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
   StreamSubscription<RealtimeEvent>? _realtimeSub;
   StreamSubscription? _fcmForegroundSub;
   bool _isSilentRefreshing = false;
+  Timer? _debouncedRefreshTimer;
 
   @override
   void didChangeDependencies() {
@@ -169,11 +170,22 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
 
   @override
   void dispose() {
+    _debouncedRefreshTimer?.cancel();
     _realtimeSub?.cancel();
     _fcmForegroundSub?.cancel();
     RealtimeService.instance.disconnect();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  /// Debounces rapid successive refresh requests (from FCM, WebSocket, or app-resume)
+  /// into a single network sync.
+  void _scheduleDebouncedRefresh({Duration delay = const Duration(milliseconds: 600)}) {
+    _debouncedRefreshTimer?.cancel();
+    _debouncedRefreshTimer = Timer(delay, () {
+      if (!mounted) return;
+      _silentRefresh();
+    });
   }
 
   // ── Lifecycle: auto-refresh when app comes back to foreground ──
@@ -184,8 +196,8 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
         debugPrint('⏭️ [PREACHER] App resumed but refresh already in-flight, skipping duplicate app-resume refresh.');
         return;
       }
-      debugPrint('🔄 [PREACHER] App resumed → refreshing data');
-      _silentRefresh();
+      debugPrint('🔄 [PREACHER] App resumed → scheduling debounced refresh');
+      _scheduleDebouncedRefresh(delay: const Duration(milliseconds: 300));
     }
   }
 
@@ -203,53 +215,31 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
     _fcmForegroundSub?.cancel();
     _fcmForegroundSub = FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       debugPrint('🔔 [PREACHER] FCM foreground message received: ${message.notification?.title ?? message.data.toString()}');
-      _silentRefresh();
+      _scheduleDebouncedRefresh();
     });
   }
 
   void _handleRealtimeEvent(RealtimeEvent event) {
     if (!mounted) return;
-    debugPrint('[REALTIME] Event received: ${event.type}:${event.action}');
     switch (event.type) {
       case 'sadhana_update':
-        _fetchAllUpdates(force: true);
-        break;
       case 'accommodation_update':
-        if (event.action == 'create') {
-          final desc = event.data['requestDetails']?.toString().replaceAll('\n', ' • ') ?? 'New accommodation request submitted';
-          FcmService.showLocalNotification(
-            title: 'Accommodation Request',
-            body: desc,
-          );
-        }
-        _fetchAllUpdates(force: true);
-        break;
       case 'appointment_update':
-        if (event.action == 'create') {
-          final student = event.data['worker_name']?.toString() ?? 'A student';
-          final desc = event.data['work_started']?.toString() ?? 'Appointment booked';
-          FcmService.showLocalNotification(
-            title: 'Appointment Booked',
-            body: '$student booked $desc',
-          );
-        }
-        _fetchAllUpdates(force: true);
-        break;
       case 'payment_update':
-        _fetchAllUpdates(force: true);
+        _scheduleDebouncedRefresh();
         break;
       case 'student_update':
-        _fetchFolkBoys(force: true);
+        _fetchFolkBoys(force: false);
         break;
       case 'trip_update':
       case 'event_update':
-        _fetchTripAndEventBookings(force: true);
+        _fetchTripAndEventBookings(force: false);
         break;
       case 'announcement_update':
-        _fetchAnnouncements(force: true);
+        _fetchAnnouncements(force: false);
         break;
       default:
-        _silentRefresh();
+        _scheduleDebouncedRefresh();
         break;
     }
   }
@@ -673,7 +663,8 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
       itemMap['worker_id'] = workerId;
       itemMap['worker_name'] = workerName;
       itemMap['date'] = date;
-      result.add(itemMap);
+
+      final int countBefore = result.length;
 
       final dynamic rawActs = itemMap['activities'];
       if (rawActs is Map) {
@@ -973,6 +964,12 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
             });
           }
         }
+      }
+
+      // If no sub-activities were unpacked from this item (e.g. appointment,
+      // accommodation, screen-time, or trip), preserve the item itself.
+      if (result.length == countBefore) {
+        result.add(itemMap);
       }
     }
     return result;

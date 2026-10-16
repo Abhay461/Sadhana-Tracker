@@ -1,60 +1,25 @@
 import 'package:flutter/foundation.dart';
-import 'package:onesignal_flutter/onesignal_flutter.dart';
 import '../services/api_service.dart';
-import 'constants.dart';
 
 class NotificationHelper {
-  static bool _isInitialized = false;
-
-  /// Initializes the OneSignal SDK safely in the background when configured.
+  /// Pure Firebase FCM handles all notifications.
   static Future<void> initialize() async {
-    if (!Constants.isOneSignalConfigured) {
-      debugPrint('ℹ️ [NotificationHelper] OneSignal is optional/not configured. Firebase FCM handles push notifications.');
-      return;
-    }
-    if (_isInitialized) return;
-
-    try {
-      final appId = Constants.oneSignalAppId.trim();
-
-      // Initialize OneSignal
-      OneSignal.Debug.setLogLevel(OSLogLevel.none);
-      OneSignal.initialize(appId);
-      _isInitialized = true;
-      debugPrint('NotificationHelper: OneSignal initialized successfully.');
-    } catch (e) {
-      debugPrint('NotificationHelper: Failed to initialize OneSignal: $e');
-    }
+    debugPrint('ℹ️ [NotificationHelper] Firebase FCM handles all push notifications.');
   }
 
-  /// Log in current user to OneSignal using their User ID.
-  static Future<void> loginUser(String userId) async {
-    if (!Constants.isOneSignalConfigured || !_isInitialized) return;
-    try {
-      await OneSignal.login(userId);
-      debugPrint('NotificationHelper: Associated OneSignal user: $userId');
-    } catch (e) {
-      debugPrint('NotificationHelper: Error logging in user to OneSignal: $e');
-    }
-  }
+  /// Optional stub kept for compatibility.
+  static Future<void> loginUser(String userId) async {}
 
-  /// Log out current user from OneSignal.
-  static Future<void> logoutUser() async {
-    if (!Constants.isOneSignalConfigured || !_isInitialized) return;
-    try {
-      await OneSignal.logout();
-      debugPrint('NotificationHelper: Disassociated user from OneSignal.');
-    } catch (e) {
-      debugPrint('NotificationHelper: Error logging out user from OneSignal: $e');
-    }
-  }
+  /// Optional stub kept for compatibility.
+  static Future<void> logoutUser() async {}
 
   /// Sends a push notification to specific users via the backend FCM service.
-  /// This is decoupled from OneSignal — the backend looks up FCM tokens by userId.
+  /// The backend looks up FCM device tokens by userId and delivers via Firebase Admin.
   static Future<void> sendNotification({
     required List<String> targetUserIds,
     required String title,
     required String body,
+    Map<String, String>? dataPayload,
     String? sendAfter,
   }) async {
     if (targetUserIds.isEmpty) return;
@@ -66,11 +31,15 @@ class NotificationHelper {
 
     try {
       debugPrint('[FCM] Sending notification → targets: $targetUserIds, title: "$title"');
-      final response = await ApiService.post('/notifications/send', {
+      final payload = <String, dynamic>{
         'targetUserIds': targetUserIds,
         'title': title,
         'body': body,
-      });
+      };
+      if (dataPayload != null && dataPayload.isNotEmpty) {
+        payload['dataPayload'] = dataPayload;
+      }
+      final response = await ApiService.post('/notifications/send', payload);
       debugPrint('[FCM] Notification send SUCCESS → response: $response');
     } catch (e) {
       debugPrint('[FCM] Notification send FAILED → error: $e');
@@ -93,6 +62,7 @@ class NotificationHelper {
 
     String title = 'New Student Activity';
     String body = '$studentName logged $category';
+    Map<String, String>? dataPayload;
 
     switch (category) {
       case 'residency_sadhna':
@@ -122,9 +92,28 @@ class NotificationHelper {
         body = '$studentName submitted payment reminder: $description';
         break;
       case 'accommodation':
-        title = 'Accommodation Request';
-        final cleanAcc = description.replaceAll('\n', ' • ');
-        body = '$studentName requested accommodation: $cleanAcc';
+        title = 'New Accommodation Request';
+        String arrival = '';
+        String departure = '';
+        final arrMatch = RegExp(r'Arrival:\s*([^\n\r•]+)', caseSensitive: false).firstMatch(description);
+        if (arrMatch != null) arrival = arrMatch.group(1)?.trim() ?? '';
+        final depMatch = RegExp(r'Departure:\s*([^\n\r•]+)', caseSensitive: false).firstMatch(description);
+        if (depMatch != null) departure = depMatch.group(1)?.trim() ?? '';
+
+        if (arrival.isNotEmpty && departure.isNotEmpty) {
+          body = 'Student: $studentName\nArrival: $arrival • Departure: $departure';
+        } else {
+          final cleanAcc = description.replaceAll('\n', ' • ').trim();
+          body = cleanAcc.isNotEmpty
+              ? 'Student: $studentName\nDetails: $cleanAcc'
+              : '$studentName requested accommodation';
+        }
+        dataPayload = {
+          'category': 'accommodation',
+          'studentName': studentName,
+          'arrivalDate': arrival,
+          'departureDate': departure,
+        };
         break;
       case 'residency_admission':
         title = 'Residency Admission Request';
@@ -145,6 +134,7 @@ class NotificationHelper {
       targetUserIds: [preacherId],
       title: title,
       body: body,
+      dataPayload: dataPayload,
     );
   }
 
@@ -226,7 +216,7 @@ class NotificationHelper {
       return;
     }
 
-    // Convert to UTC ISO-8601 string as expected by OneSignal
+    // Convert to UTC ISO-8601 string
     final sendAfterStr = reminderTime.toUtc().toIso8601String();
 
     await sendNotification(

@@ -11,6 +11,7 @@ import 'screens/preacher_dashboard.dart';
 import 'screens/reset_password_screen.dart';
 
 import 'utils/notification_helper.dart';
+import 'services/fcm_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,6 +19,9 @@ void main() async {
   // Initialize Firebase App
   try {
     await Firebase.initializeApp();
+    FcmService.initialize().catchError((e) {
+      debugPrint('FCM initialization error: $e');
+    });
   } catch (e) {
     debugPrint('Firebase initialization error: $e');
   }

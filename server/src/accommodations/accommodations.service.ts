@@ -68,17 +68,36 @@ export class AccommodationsService {
 
     if (preacherIdObj && this.notificationsService) {
       const studentName = user.name || 'A student';
-      const cleanDetails = (dto.requestDetails || '').replace(/\r?\n/g, ' • ');
+      let arrivalDate = '';
+      let departureDate = '';
+      if (dto.requestDetails) {
+        const arrMatch = dto.requestDetails.match(/Arrival:\s*([^\n\r•]+)/i);
+        if (arrMatch) arrivalDate = arrMatch[1].trim();
+        const depMatch = dto.requestDetails.match(/Departure:\s*([^\n\r•]+)/i);
+        if (depMatch) departureDate = depMatch[1].trim();
+      }
+
+      let formattedBody = `${studentName} requested accommodation`;
+      if (arrivalDate && departureDate) {
+        formattedBody = `Student: ${studentName}\nArrival: ${arrivalDate} • Departure: ${departureDate}`;
+      } else if (dto.requestDetails) {
+        const cleanDetails = dto.requestDetails.replace(/\r?\n/g, ' • ').trim();
+        formattedBody = cleanDetails ? `Student: ${studentName}\nDetails: ${cleanDetails}` : `${studentName} requested accommodation`;
+      }
+
       console.log(`📌 [ACCOMMODATION SENDING PUSH NOTIFICATION]: PreacherID=${preacherIdObj.toString()}`);
       this.notificationsService
         .sendMulticastNotification({
           targetUserIds: [preacherIdObj.toString()],
-          title: 'Accommodation Request',
-          body: `${studentName} requested accommodation: ${cleanDetails}`,
+          title: 'New Accommodation Request',
+          body: formattedBody,
           dataPayload: {
             category: 'accommodation',
             accommodationId: accommodation._id.toString(),
             studentId: user._id.toString(),
+            studentName: studentName,
+            arrivalDate: arrivalDate,
+            departureDate: departureDate,
           },
         })
         .then((res) => console.log('📌 [ACCOMMODATION NOTIFICATION SENT]:', res))

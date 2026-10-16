@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -25,7 +26,15 @@ class FcmService {
     enableVibration: true,
   );
 
+  static bool _isInitialized = false;
+
   static Future<void> initialize() async {
+    if (_isInitialized) {
+      debugPrint('[FCM] Service already initialized — skipping duplicate initialization');
+      return;
+    }
+    _isInitialized = true;
+
     try {
       // 0. Register background handler
       FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
@@ -61,8 +70,20 @@ class FcmService {
         await registerTokenWithBackend(overrideToken: newToken);
       });
 
-      // 4. Foreground Message Handler → show local notification
+      // 4. Foreground Message Handler → show local notification with BigTextStyle
       FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+
+      // 5. Notification tap handler when app is running in background
+      FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+        debugPrint('[FCM] Notification opened app from background: title="${message.notification?.title}", data=${message.data}');
+      });
+
+      // 6. Check if app was launched from a terminated state notification
+      _messaging.getInitialMessage().then((RemoteMessage? message) {
+        if (message != null) {
+          debugPrint('[FCM] App launched from terminated state notification: title="${message.notification?.title}", data=${message.data}');
+        }
+      });
 
       debugPrint('[FCM] Service initialized successfully');
     } catch (e) {
@@ -99,19 +120,70 @@ class FcmService {
     }
   }
 
+  /// Formats accommodation request body to clean student name, arrival date, and departure date.
+  static String formatAccommodationBody({
+    required String? studentName,
+    required String? arrivalDate,
+    required String? departureDate,
+    String? rawBody,
+  }) {
+    if (studentName != null &&
+        studentName.isNotEmpty &&
+        arrivalDate != null &&
+        arrivalDate.isNotEmpty &&
+        departureDate != null &&
+        departureDate.isNotEmpty) {
+      return 'Student: $studentName\nArrival: $arrivalDate • Departure: $departureDate';
+    }
+
+    if (rawBody != null && rawBody.isNotEmpty) {
+      final arrMatch = RegExp(r'Arrival:\s*([^\n\r•]+)', caseSensitive: false).firstMatch(rawBody);
+      final depMatch = RegExp(r'Departure:\s*([^\n\r•]+)', caseSensitive: false).firstMatch(rawBody);
+      if (arrMatch != null && depMatch != null) {
+        final sMatch = RegExp(r'^(?:Student:\s*)?([^\n\r•]+?)(?:\s+requested|\n|$)', caseSensitive: false).firstMatch(rawBody);
+        final name = studentName ?? sMatch?.group(1)?.trim() ?? 'Student';
+        return 'Student: $name\nArrival: ${arrMatch.group(1)!.trim()} • Departure: ${depMatch.group(1)!.trim()}';
+      }
+      return rawBody;
+    }
+
+    return 'Student: ${studentName ?? "Student"}\nNew accommodation booking requested';
+  }
+
   /// Show a visible notification when FCM message arrives in foreground.
   static void _handleForegroundMessage(RemoteMessage message) {
     debugPrint('[FCM] Foreground message: title="${message.notification?.title}", body="${message.notification?.body}", data=${message.data}');
 
-    final title = message.notification?.title ?? message.data['title']?.toString() ?? 'Sadhana Tracker';
-    final body = message.notification?.body ?? message.data['body']?.toString() ?? message.data['message']?.toString();
+    String title = message.notification?.title ?? message.data['title']?.toString() ?? 'Sadhana Tracker';
+    String? body = message.notification?.body ?? message.data['body']?.toString() ?? message.data['message']?.toString();
+
+    final category = message.data['category']?.toString();
+    final isAccommodation = category == 'accommodation' ||
+        title.toLowerCase().contains('accommodation') ||
+        (body != null && body.toLowerCase().contains('accommodation'));
+
+    if (isAccommodation &&
+        !title.toLowerCase().contains('approved') &&
+        !title.toLowerCase().contains('rejected')) {
+      title = 'New Accommodation Request';
+      body = formatAccommodationBody(
+        studentName: message.data['studentName']?.toString(),
+        arrivalDate: message.data['arrivalDate']?.toString(),
+        departureDate: message.data['departureDate']?.toString(),
+        rawBody: body,
+      );
+    }
 
     if (body == null || body.trim().isEmpty) {
       debugPrint('[FCM] Message has no body or displayable text — skipping display');
       return;
     }
 
-    showLocalNotification(title: title, body: body);
+    showLocalNotification(
+      title: title,
+      body: body,
+      payload: message.data['category']?.toString(),
+    );
   }
 
   /// Show a visible notification anytime (FCM foreground or WebSocket realtime update).
@@ -119,6 +191,8 @@ class FcmService {
   static void showLocalNotification({
     required String title,
     required String body,
+    String? payload,
+    int? id,
   }) {
     final now = DateTime.now().millisecondsSinceEpoch;
     // Purge entries older than 10 seconds
@@ -135,7 +209,16 @@ class FcmService {
     _recentNotificationDedupe[dedupeKey] = now;
 
     // Use remainder to guarantee 32-bit int compatibility on Android
-    final notifId = (now ~/ 1000).remainder(100000);
+    final notifId = id ?? (now ~/ 1000).remainder(100000);
+
+    // BigTextStyleInformation for expandable notifications on Android
+    final bigTextStyleInformation = BigTextStyleInformation(
+      cleanBody,
+      contentTitle: cleanTitle,
+      summaryText: 'Sadhana Tracker',
+      htmlFormatContent: false,
+      htmlFormatContentTitle: false,
+    );
 
     _localNotifications.show(
       notifId,
@@ -149,6 +232,8 @@ class FcmService {
           importance: Importance.max,
           priority: Priority.high,
           icon: '@mipmap/launcher_icon',
+          color: const Color(0xFF3F51B5),
+          styleInformation: bigTextStyleInformation,
           playSound: true,
           enableVibration: true,
         ),
@@ -158,6 +243,7 @@ class FcmService {
           presentSound: true,
         ),
       ),
+      payload: payload,
     );
     debugPrint('[FCM] Local heads-up notification displayed (id=$notifId): "$cleanTitle" - "$cleanBody"');
   }

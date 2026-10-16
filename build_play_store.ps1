@@ -13,16 +13,12 @@
 #   3. Add build_play_store.local.ps1 to .gitignore
 # ============================================================
 
-# API Keys - Replace these with your actual values for production
-$env:SUPABASE_URL = "https://plftorurxmtbzmdvttdm.supabase.co"
-$env:SUPABASE_ANON_KEY = "YOUR_PRODUCTION_ANON_KEY_HERE"
-$env:ONESIGNAL_APP_ID = "YOUR_ONESIGNAL_APP_ID_HERE"
+# API Base URL configuration
+$env:API_BASE_URL = "https://sadhana-tracker-qq6m.onrender.com/api/v1"
 
 # Build App Bundle (.aab) with environment variables passed via --dart-define and enable code obfuscation
 flutter build appbundle --release --obfuscate --split-debug-info=build/app/outputs/symbols `
-  --dart-define=SUPABASE_URL=$env:SUPABASE_URL `
-  --dart-define=SUPABASE_ANON_KEY=$env:SUPABASE_ANON_KEY `
-  --dart-define=ONESIGNAL_APP_ID=$env:ONESIGNAL_APP_ID
+  --dart-define=API_BASE_URL=$env:API_BASE_URL
 
 Write-Host ""
 Write-Host "Build complete! App Bundle (AAB) is at: build\app\outputs\bundle\release\app-release.aab"
