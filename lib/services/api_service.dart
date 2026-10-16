@@ -48,8 +48,8 @@ class ApiService {
   }
 
   static Future<void> logout() async {
-    clearTokenCache();
     await FcmService.revokeTokenOnLogout().catchError((_) {});
+    clearTokenCache();
     await NotificationHelper.logoutUser().catchError((_) {});
     await FirebaseAuth.instance.signOut().catchError((_) {});
   }

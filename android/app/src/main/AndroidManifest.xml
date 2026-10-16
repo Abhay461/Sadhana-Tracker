@@ -24,6 +24,7 @@
         android:label="Sadhana Tracker"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon"
+        android:resizeableActivity="true"
         android:enableOnBackInvokedCallback="true">
 
         <!-- Default FCM notification channel for Android 8+ -->
@@ -36,6 +37,7 @@
             android:exported="true"
             android:launchMode="singleTop"
             android:theme="@style/LaunchTheme"
+            android:resizeableActivity="true"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
@@ -53,6 +55,14 @@
             </intent-filter>
 
         </activity>
+
+        <!-- Support large screen devices (tablets/foldables) for Razorpay checkout in Android 16+ -->
+        <activity
+            android:name="com.razorpay.CheckoutActivity"
+            android:resizeableActivity="true"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|screenLayout|density"
+            tools:replace="android:resizeableActivity" />
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

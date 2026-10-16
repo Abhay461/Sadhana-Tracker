@@ -3,15 +3,11 @@
 # ============================================================
 
 # 1. Keep Flutter SDK classes and engine integration
--keep class io.flutter.app.** { *; }
--keep class io.flutter.plugin.** { *; }
--keep class io.flutter.util.** { *; }
--keep class io.flutter.view.** { *; }
 -keep class io.flutter.embedding.** { *; }
--keep class io.flutter.plugins.** { *; }
+-keepclassmembers class * implements io.flutter.plugin.common.MethodChannel$MethodCallHandler { *; }
 
-# 2. Keep platform channel messages and basic engine requirements
--keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod
+# 2. Keep platform channel messages, stack trace lines, and basic engine requirements
+-keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod,SourceFile,LineNumberTable
 
 # 3. Prevent warning messages from missing dependency references in external packages
 -dontwarn io.flutter.plugin.editing.TextInputPlugin
@@ -26,15 +22,21 @@
 }
 -keep class com.google.gson.** { *; }
 
-# 5. Keep App Package & Native Activity
--keep class com.sadhanatracker.app.** { *; }
--keep class com.sadhana.tracker.** { *; }
+# 5. Keep App Entry Point & Native JNI methods
+-keep class com.sadhanatracker.app.MainActivity { *; }
+-keepclassmembers class * {
+    native <methods>;
+}
 
-# 6. Keep Plugins (Razorpay, OneSignal, Firebase)
+# 6. Keep AndroidX & Activity EdgeToEdge
+-keep class androidx.activity.** { *; }
+
+# 7. Keep Plugins (Razorpay, OneSignal, Firebase)
 -keep class com.razorpay.** { *; }
 -dontwarn com.razorpay.**
 -keep class com.onesignal.** { *; }
 -dontwarn com.onesignal.**
 -keep class com.google.firebase.** { *; }
 -dontwarn com.google.firebase.**
+
 
