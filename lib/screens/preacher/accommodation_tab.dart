@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../services/api_service.dart';
+import '../../utils/notification_helper.dart';
 
 class AccommodationTab extends StatefulWidget {
   final List<dynamic> folkBoys;
@@ -60,6 +61,20 @@ class _AccommodationTabState extends State<AccommodationTab> {
         'date': DateFormat('yyyy-MM-dd').format(DateTime.now()),
         'points': 0,
       });
+
+      final studentId = (req['worker_id'] ?? req['workerId'] ?? req['userId'] ?? req['studentId'] ?? (req['user'] is Map ? (req['user']['_id'] ?? req['user']['id']) : null))?.toString();
+      if (studentId != null && studentId.isNotEmpty) {
+        NotificationHelper.sendApprovalNotification(
+          studentId: studentId,
+          preacherName: widget.preacherProfile?['name'] ?? 'Preacher',
+          category: 'accommodation',
+          approved: true,
+          details: {
+            ...req,
+            'assignedRoom': roomNumber,
+          },
+        ).catchError((_) {});
+      }
       
       await widget.onRefresh();
       if (mounted) {
@@ -112,6 +127,17 @@ class _AccommodationTabState extends State<AccommodationTab> {
         'date': DateFormat('yyyy-MM-dd').format(DateTime.now()),
         'points': 0,
       });
+
+      final studentId = (req['worker_id'] ?? req['workerId'] ?? req['userId'] ?? req['studentId'] ?? (req['user'] is Map ? (req['user']['_id'] ?? req['user']['id']) : null))?.toString();
+      if (studentId != null && studentId.isNotEmpty) {
+        NotificationHelper.sendApprovalNotification(
+          studentId: studentId,
+          preacherName: widget.preacherProfile?['name'] ?? 'Preacher',
+          category: 'accommodation',
+          approved: false,
+          details: req,
+        ).catchError((_) {});
+      }
 
       await widget.onRefresh();
       if (mounted) {

@@ -10,6 +10,7 @@ import { User, UserDocument } from '../database/schemas/users.schema';
 import { SadhanaEntry, SadhanaEntryDocument } from '../database/schemas/sadhana-entries.schema';
 import { ApproveStudentDto } from './dto/approve-student.dto';
 import { RealtimeService } from '../realtime/realtime.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class PreachersService {
@@ -19,6 +20,7 @@ export class PreachersService {
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(SadhanaEntry.name) private readonly sadhanaModel: Model<SadhanaEntryDocument>,
     private readonly realtimeService: RealtimeService,
+    private readonly notificationsService?: NotificationsService,
   ) {}
 
   async getMyStudents(preacher: any, targetPreacherId?: string) {
@@ -179,6 +181,28 @@ export class PreachersService {
       status: student.status,
     };
     this.realtimeService?.emit('student_update', 'update', res, { preacherId, studentId });
+
+    if (this.notificationsService && studentId) {
+      const isApproved = (dto.status || '').toUpperCase() === 'APPROVED' || (dto.status || '').toUpperCase() === 'ACTIVE';
+      const title = isApproved ? 'Account Approved!' : 'Account Status Updated';
+      const body = isApproved
+        ? 'Your account has been approved by your preacher. You can now access all features.'
+        : `Your account status has been updated to ${dto.status}.`;
+
+      this.notificationsService
+        .sendMulticastNotification({
+          targetUserIds: [studentId.toString()],
+          title,
+          body,
+          dataPayload: {
+            category: 'student_account',
+            studentId: studentId.toString(),
+            status: dto.status,
+          },
+        })
+        .catch((err) => this.logger.error('Failed to send student account approval notification', err));
+    }
+
     return res;
   }
 

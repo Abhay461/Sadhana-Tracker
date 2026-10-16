@@ -10,12 +10,14 @@ import { Payment, PaymentDocument } from '../database/schemas/payments.schema';
 import { SubmitPaymentDto } from './dto/submit-payment.dto';
 import { ApprovePaymentDto } from './dto/approve-payment.dto';
 import { RealtimeService } from '../realtime/realtime.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class PaymentsService {
   constructor(
     @InjectModel(Payment.name) private readonly paymentModel: Model<PaymentDocument>,
     private readonly realtimeService: RealtimeService,
+    private readonly notificationsService?: NotificationsService,
   ) {}
 
   async submitPayment(user: any, dto: SubmitPaymentDto) {
@@ -84,6 +86,26 @@ export class PaymentsService {
       preacherId: payment.preacherId?.toString() || preacherId,
       studentId: payment.userId?.toString(),
     });
+
+    if (this.notificationsService && payment.userId) {
+      const payTitle = dto.status === 'APPROVED' ? 'Payment Approved' : 'Payment Rejected';
+      const payBody = dto.status === 'APPROVED'
+        ? `Your payment submission for "${payment.title || 'course/service'}" has been approved.`
+        : `Your payment submission for "${payment.title || 'course/service'}" was rejected.`;
+
+      this.notificationsService
+        .sendMulticastNotification({
+          targetUserIds: [payment.userId.toString()],
+          title: payTitle,
+          body: payBody,
+          dataPayload: {
+            category: 'payment',
+            paymentId: payment._id.toString(),
+            status: dto.status,
+          },
+        })
+        .catch((err) => console.error('Failed to send payment approval notification to student:', err));
+    }
 
     return payment;
   }

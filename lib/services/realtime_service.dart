@@ -30,12 +30,21 @@ class RealtimeEvent {
       dataMap = {'value': rawData};
     }
 
+    final studentId = json['studentId']?.toString() ??
+        dataMap['studentId']?.toString() ??
+        dataMap['userId']?.toString() ??
+        dataMap['worker_id']?.toString() ??
+        dataMap['workerId']?.toString();
+    final preacherId = json['preacherId']?.toString() ??
+        dataMap['preacherId']?.toString() ??
+        dataMap['preacher_id']?.toString();
+
     return RealtimeEvent(
       type: (json['event'] ?? json['type'] ?? 'unknown').toString(),
       action: (json['action'] ?? 'update').toString(),
       data: dataMap,
-      preacherId: json['preacherId']?.toString(),
-      studentId: json['studentId']?.toString(),
+      preacherId: preacherId,
+      studentId: studentId,
       timestamp: (json['timestamp'] ?? DateTime.now().toIso8601String()).toString(),
     );
   }

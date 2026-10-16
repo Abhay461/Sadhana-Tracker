@@ -670,13 +670,14 @@ class _ApprovalTabState extends State<ApprovalTab> {
       }
      
       await widget.onRefresh();
-      final workerId = u['worker_id'];
-      if (workerId != null) {
+      final studentId = (u['worker_id'] ?? u['workerId'] ?? u['userId'] ?? u['studentId'] ?? (u['user'] is Map ? (u['user']['_id'] ?? u['user']['id']) : null))?.toString();
+      if (studentId != null && studentId.isNotEmpty) {
         NotificationHelper.sendApprovalNotification(
-          studentId: workerId,
+          studentId: studentId,
           preacherName: widget.preacherProfile?['name'] ?? 'Preacher',
           category: u['category'] ?? '',
           approved: true,
+          details: u,
         ).catchError((_) {});
       }
       if (mounted) {
@@ -727,13 +728,14 @@ class _ApprovalTabState extends State<ApprovalTab> {
       }
     
       await widget.onRefresh();
-      final workerId = u['worker_id'];
-      if (workerId != null) {
+      final studentId = (u['worker_id'] ?? u['workerId'] ?? u['userId'] ?? u['studentId'] ?? (u['user'] is Map ? (u['user']['_id'] ?? u['user']['id']) : null))?.toString();
+      if (studentId != null && studentId.isNotEmpty) {
         NotificationHelper.sendApprovalNotification(
-          studentId: workerId,
+          studentId: studentId,
           preacherName: widget.preacherProfile?['name'] ?? 'Preacher',
           category: u['category'] ?? '',
           approved: false,
+          details: u,
         ).catchError((_) {});
       }
       if (mounted) {

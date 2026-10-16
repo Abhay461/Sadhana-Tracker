@@ -77,9 +77,12 @@ export class AccommodationsService {
         if (depMatch) departureDate = depMatch[1].trim();
       }
 
+      const formattedArrival = this.formatDateReadable(arrivalDate);
+      const formattedDeparture = this.formatDateReadable(departureDate);
+
       let formattedBody = `${studentName} requested accommodation`;
-      if (arrivalDate && departureDate) {
-        formattedBody = `Student: ${studentName}\nArrival: ${arrivalDate} • Departure: ${departureDate}`;
+      if (formattedArrival && formattedDeparture) {
+        formattedBody = `Student: ${studentName}\nArrival: ${formattedArrival} • Departure: ${formattedDeparture}`;
       } else if (dto.requestDetails) {
         const cleanDetails = dto.requestDetails.replace(/\r?\n/g, ' • ').trim();
         formattedBody = cleanDetails ? `Student: ${studentName}\nDetails: ${cleanDetails}` : `${studentName} requested accommodation`;
@@ -96,8 +99,8 @@ export class AccommodationsService {
             accommodationId: accommodation._id.toString(),
             studentId: user._id.toString(),
             studentName: studentName,
-            arrivalDate: arrivalDate,
-            departureDate: departureDate,
+            arrivalDate: formattedArrival || arrivalDate,
+            departureDate: formattedDeparture || departureDate,
           },
         })
         .then((res) => console.log('📌 [ACCOMMODATION NOTIFICATION SENT]:', res))
@@ -185,6 +188,45 @@ export class AccommodationsService {
       studentId: item.userId?.toString(),
     });
 
+    if (this.notificationsService && item.userId) {
+      const status = dto.status;
+      const accTitle = status === 'APPROVED' ? 'Accommodation Approved' : 'Accommodation Rejected';
+      const roomInfo = dto.assignedRoom ? ` Room: ${dto.assignedRoom}` : '';
+      const accBody = status === 'APPROVED'
+        ? `Your accommodation request has been approved.${roomInfo}`
+        : 'Your accommodation request has been rejected.';
+
+      this.notificationsService
+        .sendMulticastNotification({
+          targetUserIds: [item.userId.toString()],
+          title: accTitle,
+          body: accBody,
+          dataPayload: {
+            category: 'accommodation',
+            accommodationId: item._id.toString(),
+            status: status,
+            assignedRoom: dto.assignedRoom || '',
+          },
+        })
+        .catch((err) => console.error('Failed to send accommodation approval notification to student:', err));
+    }
+
     return item;
+  }
+
+  formatDateReadable(dateStr?: string): string {
+    if (!dateStr) return '';
+    const trimmed = dateStr.trim();
+    const match = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (match) {
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const year = match[1];
+      const monthIdx = parseInt(match[2], 10) - 1;
+      const day = parseInt(match[3], 10);
+      if (monthIdx >= 0 && monthIdx < 12) {
+        return `${day} ${months[monthIdx]} ${year}`;
+      }
+    }
+    return trimmed;
   }
 }

@@ -4,6 +4,7 @@ import 'dart:io' show File, Platform, Directory;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/api_service.dart';
 import '../services/cloudinary_service.dart';
@@ -26,7 +27,7 @@ class FolkBoyDashboard extends StatefulWidget {
   State<FolkBoyDashboard> createState() => _FolkBoyDashboardState();
 }
 
-class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
+class _FolkBoyDashboardState extends State<FolkBoyDashboard> with WidgetsBindingObserver {
   static const _screenTimeChannel = MethodChannel('com.example.mobile_app/screen_time');
   static const _downloadChannel = MethodChannel('com.example.mobile_app/media_download');
   
@@ -96,16 +97,50 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   }
 
   StreamSubscription<RealtimeEvent>? _realtimeSub;
+  StreamSubscription<RemoteMessage>? _fcmForegroundSub;
+  Timer? _refreshDebounceTimer;
+
+  void _scheduleDebouncedRefresh({Duration delay = const Duration(milliseconds: 300)}) {
+    _refreshDebounceTimer?.cancel();
+    _refreshDebounceTimer = Timer(delay, () {
+      if (!mounted) return;
+      _fetchUpdates();
+      _loadProfileAndData();
+    });
+  }
 
   void _startRealtimeRefresh() {
     RealtimeService.instance.connect();
     _realtimeSub?.cancel();
     _realtimeSub = RealtimeService.instance.eventStream.listen(_handleRealtimeEvent);
+
+    _fcmForegroundSub?.cancel();
+    _fcmForegroundSub = FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      debugPrint('⚡ [STUDENT FCM] Foreground push received: ${message.notification?.title ?? message.data.toString()}');
+      _scheduleDebouncedRefresh(delay: const Duration(milliseconds: 200));
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      if (!RealtimeService.instance.isConnected) {
+        RealtimeService.instance.connect();
+      }
+      _scheduleDebouncedRefresh(delay: const Duration(milliseconds: 300));
+    }
   }
 
   void _handleRealtimeEvent(RealtimeEvent event) {
     if (!mounted) return;
     debugPrint('[REALTIME] Event received: ${event.type}:${event.action}');
+
+    // If event has a specific studentId, only process if it matches current student
+    final currentUserId = (_profile?['_id'] ?? _profile?['id'] ?? _profile?['userId'])?.toString();
+    if (event.studentId != null && currentUserId != null && event.studentId != currentUserId) {
+      return;
+    }
+
     switch (event.type) {
       case 'sadhana_update':
       case 'accommodation_update':
@@ -114,8 +149,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
       case 'trip_update':
       case 'event_update':
       case 'payment_update':
-        _fetchUpdates();
-        _loadProfileAndData();
+        _scheduleDebouncedRefresh();
         break;
       case 'announcement_update':
         _fetchAnnouncements();
@@ -126,6 +160,7 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _ensureFolkLogoAsset();
     _ensureMalaAsset();
     _loadProfileAndData();
@@ -483,7 +518,10 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _realtimeSub?.cancel();
+    _fcmForegroundSub?.cancel();
+    _refreshDebounceTimer?.cancel();
     try {
       _razorpay?.clear();
     } catch (_) {}
@@ -621,6 +659,15 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
 
       final String date = (u['dateString'] ?? u['date'] ?? '').toString();
       if (date.isEmpty) continue;
+
+      if (u['isLocked'] == true) {
+        result.add({
+          'id': 'lock_${u['_id'] ?? u['id'] ?? date}',
+          'date': date,
+          'category': 'folk_lock',
+          'is_completed': true,
+        });
+      }
 
       final activities = u['activities'];
       if (activities is Map) {
@@ -811,30 +858,57 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
     if (_profile == null) return;
     final requestId = ++_fetchUpdatesRequestId;
     try {
-      List<dynamic> data = [];
-      dynamic res;
+      List<dynamic> historyData = [];
+      List<dynamic> updatesData = [];
+      List<dynamic> accommodationsData = [];
+
       try {
-        res = await ApiService.get('/sadhana/history').timeout(const Duration(seconds: 15));
-        debugPrint('📋 [DEBUG] Raw /sadhana/history response type: ${res.runtimeType}');
-        if (res is Map) debugPrint('📋 [DEBUG] Response keys: ${res.keys.toList()}');
-        if (res is Map && res.containsKey('items')) {
-          data = res['items'] as List;
-        } else if (res is List) {
-          data = res;
-        } else if (res is Map) {
-          // Maybe response is a single Map with activities
-          data = [res];
-        }
-        debugPrint('📋 [DEBUG] Parsed data count: ${data.length}');
-        for (int i = 0; i < data.length && i < 3; i++) {
-          debugPrint('📋 [DEBUG] Item $i: ${data[i]}');
+        final historyRes = await ApiService.get('/sadhana/history').timeout(const Duration(seconds: 15));
+        debugPrint('📋 [DEBUG] Raw /sadhana/history response type: ${historyRes.runtimeType}');
+        if (historyRes is Map && historyRes.containsKey('items') && historyRes['items'] is List) {
+          historyData = historyRes['items'] as List;
+        } else if (historyRes is List) {
+          historyData = historyRes;
+        } else if (historyRes is Map) {
+          historyData = [historyRes];
         }
       } catch (e) {
         debugPrint('📋 [DEBUG] Error fetching history: $e');
-        try {
-          res = await ApiService.get('/sadhana/updates').timeout(const Duration(seconds: 15));
-          if (res is List) data = res;
-        } catch (_) {}
+      }
+
+      try {
+        final updatesRes = await ApiService.get('/sadhana/updates').timeout(const Duration(seconds: 15));
+        if (updatesRes is Map && updatesRes.containsKey('items') && updatesRes['items'] is List) {
+          updatesData = updatesRes['items'] as List;
+        } else if (updatesRes is List) {
+          updatesData = updatesRes;
+        }
+      } catch (e) {
+        debugPrint('📋 [DEBUG] Error fetching /sadhana/updates: $e');
+      }
+
+      try {
+        final accRes = await ApiService.get('/accommodations/my').timeout(const Duration(seconds: 15));
+        if (accRes is List) {
+          for (var item in accRes) {
+            if (item is! Map) continue;
+            final details = item['requestDetails']?.toString() ?? '';
+            final assignedRoom = item['assignedRoom']?.toString() ?? '';
+            final status = item['status']?.toString() ?? 'PENDING';
+            accommodationsData.add({
+              '_id': item['_id'],
+              'id': item['_id'],
+              'category': 'accommodation',
+              'description': details,
+              'is_completed': status == 'APPROVED',
+              'work_completed': assignedRoom.isNotEmpty ? 'ROOM: $assignedRoom' : status,
+              'status': status,
+              'created_at': item['createdAt'] ?? DateTime.now().toIso8601String(),
+            });
+          }
+        }
+      } catch (e) {
+        debugPrint('📋 [DEBUG] Error fetching /accommodations/my: $e');
       }
 
       if (requestId != _fetchUpdatesRequestId) {
@@ -842,7 +916,17 @@ class _FolkBoyDashboardState extends State<FolkBoyDashboard> {
         return;
       }
 
-      final normalizedData = _normalizeSadhanaItems(data);
+      final List<dynamic> combinedRaw = [];
+      if (historyData.isNotEmpty) {
+        combinedRaw.addAll(historyData);
+        // Include non-sadhana items (appointments, residency, payments) from updatesData
+        combinedRaw.addAll(updatesData.where((u) => u is Map && u['category'] != 'folk_sadhna'));
+      } else {
+        combinedRaw.addAll(updatesData);
+      }
+      combinedRaw.addAll(accommodationsData);
+
+      final normalizedData = _normalizeSadhanaItems(combinedRaw);
       debugPrint('📋 [DEBUG] Normalized items count: ${normalizedData.length}');
       for (int i = 0; i < normalizedData.length && i < 5; i++) {
         debugPrint('📋 [DEBUG] Normalized $i: date=${normalizedData[i]['date']} work=${normalizedData[i]['work_started']}');
@@ -6445,6 +6529,7 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> with S
   
   List<dynamic> _bookings = [];
   bool _isLoadingBookings = true;
+  StreamSubscription<RealtimeEvent>? _realtimeSub;
 
   @override
   void initState() {
@@ -6452,10 +6537,21 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> with S
     _tabController = TabController(length: 2, vsync: this);
     _nameController = TextEditingController(text: widget.profile['name'] ?? '');
     _fetchBookings();
+    _realtimeSub = RealtimeService.instance.eventStream.listen((event) {
+      if (!mounted) return;
+      if (event.type == 'accommodation_update' || event.type == 'sadhana_update') {
+        final currentUserId = (widget.profile['_id'] ?? widget.profile['id'] ?? widget.profile['userId'])?.toString();
+        if (event.studentId == null || event.studentId == currentUserId) {
+          debugPrint('⚡ [ACCOMMODATION SHEET] Realtime event received: refreshing bookings');
+          _fetchBookings();
+        }
+      }
+    });
   }
 
   @override
   void dispose() {
+    _realtimeSub?.cancel();
     _tabController.dispose();
     _nameController.dispose();
     _ageController.dispose();
@@ -7131,6 +7227,7 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
   bool _isLoadingAppointments = true;
   List<dynamic> _availablePreachers = [];
   Map<String, dynamic>? _selectedPreacherFromList;
+  StreamSubscription<RealtimeEvent>? _realtimeSub;
 
   Map<String, dynamic>? get _effectivePreacher {
     if (widget.preacher != null) return widget.preacher;
@@ -7157,10 +7254,21 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
     super.initState();
     _fetchAppointments();
     _fetchPreachersList();
+    _realtimeSub = RealtimeService.instance.eventStream.listen((event) {
+      if (!mounted) return;
+      if (event.type == 'appointment_update' || event.type == 'sadhana_update') {
+        final currentUserId = (widget.profile['_id'] ?? widget.profile['id'] ?? widget.profile['userId'])?.toString();
+        if (event.studentId == null || event.studentId == currentUserId) {
+          debugPrint('⚡ [APPOINTMENT SHEET] Realtime event received: refreshing appointments');
+          _fetchAppointments();
+        }
+      }
+    });
   }
 
   @override
   void dispose() {
+    _realtimeSub?.cancel();
     _purposeController.dispose();
     super.dispose();
   }

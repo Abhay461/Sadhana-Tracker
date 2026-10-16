@@ -97,13 +97,15 @@ export class NotificationsService {
     const targetObjectIds = Array.from(targetOids).map((id) => new Types.ObjectId(id));
     const targetStringIds = Array.from(targetOids);
 
-    const devices = await this.userDeviceModel.find({
-      $or: [
-        { userId: { $in: targetObjectIds } },
-        { userId: { $in: targetStringIds } },
-        { userId: { $in: rawIds } },
-      ],
-    });
+    const devices = await this.userDeviceModel
+      .find({
+        $or: [
+          { userId: { $in: targetObjectIds } },
+          { userId: { $in: targetStringIds } },
+          { userId: { $in: rawIds } },
+        ],
+      })
+      .sort({ lastSeenAt: -1, createdAt: -1 });
 
     this.logger.log(`Found ${devices.length} registered FCM devices for targets: ${rawIds.join(', ')}`);
 
@@ -112,10 +114,26 @@ export class NotificationsService {
       return { successCount: 0, failureCount: 0 };
     }
 
-    const tokens = Array.from(new Set(devices.map((d) => d.fcmToken).filter(Boolean)));
+    // Deduplicate tokens: keep only newest token per user/instance to prevent duplicate delivery to same device
+    const seenInstances = new Set<string>();
+    const tokens: string[] = [];
+    for (const d of devices) {
+      if (!d.fcmToken) continue;
+      const key = `${d.userId?.toString()}_${d.appInstanceId || d.platform || 'default'}`;
+      if (seenInstances.has(key)) continue;
+      seenInstances.add(key);
+      tokens.push(d.fcmToken);
+    }
+
     if (tokens.length === 0) {
       return { successCount: 0, failureCount: 0 };
     }
+
+    const eventTag = dto.dataPayload?.appointmentId
+      ? `appointment_${dto.dataPayload.appointmentId}`
+      : (dto.dataPayload?.accommodationId
+          ? `accommodation_${dto.dataPayload.accommodationId}`
+          : (dto.dataPayload?.id ? `entity_${dto.dataPayload.id}` : undefined));
 
     const sanitizedData: Record<string, string> = {};
     if (dto.dataPayload) {
@@ -154,6 +172,7 @@ export class NotificationsService {
             defaultSound: true,
             defaultVibrateTimings: true,
             clickAction: 'FLUTTER_NOTIFICATION_CLICK',
+            ...(eventTag ? { tag: eventTag } : {}),
           },
         },
         apns: {

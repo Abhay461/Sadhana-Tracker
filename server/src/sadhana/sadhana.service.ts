@@ -54,10 +54,13 @@ export class SadhanaService {
     const offset = dto.timezoneOffsetMinutes ?? 330;
     const logicalDate = this.computeLogicalDate(dto.dateString, offset);
 
-    const existing = await this.sadhanaModel.findOne({
+    const findQuery: any = this.sadhanaModel.findOne({
       userId,
       dateString: dto.dateString,
-    }).lean();
+    });
+    const existing = findQuery && typeof findQuery.lean === 'function'
+      ? await findQuery.lean()
+      : await findQuery;
 
     if (existing && existing.isLocked) {
       throw new ForbiddenException('Sadhana logging for this date has been locked by your preacher.');
@@ -185,16 +188,22 @@ export class SadhanaService {
 
       if (preacherIdRaw && this.notificationsService) {
         const studentName = body.worker_name || 'A student';
-        const purposeText = reason || 'Preacher Appointment';
+        const formattedDate = this.formatDateReadable(preferredDate);
+        const formattedTime = (preferredTime || '10:00 AM').trim();
+        const notificationBody = `${studentName} booked an appointment.\nDate: ${formattedDate} • Time: ${formattedTime}`;
+
         this.notificationsService
           .sendMulticastNotification({
             targetUserIds: [preacherIdRaw.toString()],
-            title: 'Appointment Booked',
-            body: `${studentName} booked appointment: ${preferredDate} @ ${preferredTime} (Purpose: ${purposeText})`,
+            title: 'New Appointment',
+            body: notificationBody,
             dataPayload: {
               category: 'preacher_appointment',
               appointmentId: apptId,
               studentId: userId,
+              studentName: studentName,
+              date: formattedDate,
+              time: formattedTime,
             },
           })
           .catch((err) => console.error('Failed to send appointment push notification:', err));
@@ -598,7 +607,37 @@ export class SadhanaService {
           ...body,
         };
         console.log(`📌 [APPOINTMENT APPROVE/REJECT RESPONSE]:`, JSON.stringify(response));
-        this.realtimeService?.emit('appointment_update', 'update', response);
+        this.realtimeService?.emit('appointment_update', 'update', response, {
+          preacherId: updatedDoc.preacherId?.toString(),
+          studentId: updatedDoc.userId?.toString(),
+        });
+
+        // Send push notification to student on approval or rejection
+        if (this.notificationsService && updatedDoc.userId) {
+          const readableDate = this.formatDateReadable(finalDate);
+          const apptTitle = status === 'APPROVED' ? 'Appointment Approved' : 'Appointment Rejected';
+          const apptBody = status === 'APPROVED'
+            ? (readableDate && finalTime
+                ? `Your appointment has been approved for ${readableDate} • ${finalTime}.`
+                : 'Your appointment request has been approved.')
+            : `Your appointment request for ${readableDate || 'the requested date'} has been rejected.`;
+
+          this.notificationsService
+            .sendMulticastNotification({
+              targetUserIds: [updatedDoc.userId.toString()],
+              title: apptTitle,
+              body: apptBody,
+              dataPayload: {
+                category: 'preacher_appointment',
+                appointmentId: updatedDoc._id.toString(),
+                status: status,
+                date: readableDate,
+                time: finalTime || '',
+              },
+            })
+            .catch((err) => console.error('Failed to send appointment approval notification to student:', err));
+        }
+
         return response;
       }
     }
@@ -650,7 +689,33 @@ export class SadhanaService {
         apptDoc.status = 'REJECTED';
         await apptDoc.save();
         console.log(`📌 [APPOINTMENT MONGO UPDATED VIA DELETE]: ID=${id}, FinalStatus=REJECTED`);
-        this.realtimeService?.emit('appointment_update', 'update', { id, appointmentId: id, status: 'REJECTED' });
+        this.realtimeService?.emit('appointment_update', 'update', {
+          id,
+          appointmentId: id,
+          status: 'REJECTED',
+          studentId: apptDoc.userId?.toString(),
+          preacherId: apptDoc.preacherId?.toString(),
+        }, {
+          preacherId: apptDoc.preacherId?.toString(),
+          studentId: apptDoc.userId?.toString(),
+        });
+
+        if (this.notificationsService && apptDoc.userId) {
+          const readableDate = this.formatDateReadable(apptDoc.preferredDate);
+          this.notificationsService
+            .sendMulticastNotification({
+              targetUserIds: [apptDoc.userId.toString()],
+              title: 'Appointment Rejected',
+              body: `Your appointment request for ${readableDate || 'the requested date'} has been rejected.`,
+              dataPayload: {
+                category: 'preacher_appointment',
+                appointmentId: apptDoc._id.toString(),
+                status: 'REJECTED',
+              },
+            })
+            .catch((err) => console.error('Failed to send appointment rejection notification to student:', err));
+        }
+
         return { success: true, id, status: 'REJECTED' };
       }
     }
@@ -805,5 +870,21 @@ export class SadhanaService {
     );
     this.realtimeService?.emit('sadhana_update', 'update', entry, { studentId: dto.userId });
     return entry;
+  }
+
+  formatDateReadable(dateStr?: string): string {
+    if (!dateStr) return '';
+    const trimmed = dateStr.trim();
+    const match = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (match) {
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const year = match[1];
+      const monthIdx = parseInt(match[2], 10) - 1;
+      const day = parseInt(match[3], 10);
+      if (monthIdx >= 0 && monthIdx < 12) {
+        return `${day} ${months[monthIdx]} ${year}`;
+      }
+    }
+    return trimmed;
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'dart:convert';
 import '../../services/api_service.dart';
+import '../../utils/notification_helper.dart';
 
 class ResidencyTab extends StatefulWidget {
   final List<dynamic> folkBoys;
@@ -71,6 +72,14 @@ class _ResidencyTabState extends State<ResidencyTab> {
         } catch (pe) {
           debugPrint('Profile role update failed: $pe');
         }
+
+        NotificationHelper.sendApprovalNotification(
+          studentId: workerId.toString(),
+          preacherName: widget.preacherProfile?['name'] ?? 'Preacher',
+          category: 'residency_admission',
+          approved: true,
+          details: req,
+        ).catchError((_) {});
       }
 
       await widget.onRefresh();
@@ -138,6 +147,17 @@ class _ResidencyTabState extends State<ResidencyTab> {
         'points': 0,
         'created_at': DateTime.now().toIso8601String(),
       });
+
+      final workerId = req['worker_id'];
+      if (workerId != null) {
+        NotificationHelper.sendApprovalNotification(
+          studentId: workerId.toString(),
+          preacherName: widget.preacherProfile?['name'] ?? 'Preacher',
+          category: 'residency_admission',
+          approved: false,
+          details: req,
+        ).catchError((_) {});
+      }
 
       await widget.onRefresh();
       if (mounted) {

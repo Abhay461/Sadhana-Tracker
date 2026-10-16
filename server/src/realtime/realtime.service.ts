@@ -70,12 +70,23 @@ export class RealtimeService implements OnModuleInit {
   ) {
     if (this.clients.size === 0) return;
 
+    const resolvedStudentId =
+      metadata?.studentId ||
+      data?.studentId?.toString() ||
+      data?.userId?.toString() ||
+      data?.worker_id?.toString() ||
+      data?.workerId?.toString();
+    const resolvedPreacherId =
+      metadata?.preacherId ||
+      data?.preacherId?.toString() ||
+      data?.preacher_id?.toString();
+
     const payload = JSON.stringify({
       event,
       action,
       data,
-      preacherId: metadata?.preacherId,
-      studentId: metadata?.studentId,
+      preacherId: resolvedPreacherId,
+      studentId: resolvedStudentId,
       timestamp: new Date().toISOString(),
     });
 

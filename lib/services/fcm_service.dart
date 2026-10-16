@@ -16,7 +16,8 @@ class FcmService {
   static final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
 
-  // Android notification channel definition
+  // Android notification channel definitions:
+  // 1. _channel: Plays sound and shows heads-up notification banner
   static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
     'sadhana_tracker_notifications', // must match AndroidManifest meta-data
     'Sadhana Tracker Notifications',
@@ -26,7 +27,21 @@ class FcmService {
     enableVibration: true,
   );
 
+  // 2. _trayChannel: Preserves notification in drop-down tray silently without intrusive screen popup
+  static const AndroidNotificationChannel _trayChannel = AndroidNotificationChannel(
+    'sadhana_tracker_tray',
+    'Sadhana Tracker Tray Notifications',
+    description: 'Notifications displayed silently in the notification shade without popping up',
+    importance: Importance.defaultImportance,
+    playSound: false,
+    enableVibration: false,
+    showBadge: true,
+  );
+
   static bool _isInitialized = false;
+
+  /// IDs of notifications already clicked by the user
+  static final Set<int> _tappedNotificationIds = {};
 
   static Future<void> initialize() async {
     if (_isInitialized) {
@@ -39,7 +54,7 @@ class FcmService {
       // 0. Register background handler
       FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-      // 1. Create Android notification channel
+      // 1. Create Android notification channels
       await _setupLocalNotifications();
 
       // 2. Request Notification Permission
@@ -94,7 +109,7 @@ class FcmService {
   /// Deduplication cache: key -> timestamp (milliseconds). Prevents duplicate heads-up notifications.
   static final Map<String, int> _recentNotificationDedupe = {};
 
-  /// Set up flutter_local_notifications and create the Android channel.
+  /// Set up flutter_local_notifications and create the Android channels.
   static Future<void> _setupLocalNotifications() async {
     const androidSettings = AndroidInitializationSettings('@mipmap/launcher_icon');
     const darwinSettings = DarwinInitializationSettings(
@@ -108,16 +123,91 @@ class FcmService {
       macOS: darwinSettings,
     );
 
-    await _localNotifications.initialize(initSettings);
+    await _localNotifications.initialize(
+      initSettings,
+      onDidReceiveNotificationResponse: (NotificationResponse details) {
+        if (details.id != null) {
+          _tappedNotificationIds.add(details.id!);
+        }
+        debugPrint('[FCM] Notification tapped: id=${details.id}, payload=${details.payload}');
+      },
+    );
 
-    // Create the notification channel on Android
+    // Create the notification channels on Android
     final androidPlugin =
         _localNotifications.resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>();
     if (androidPlugin != null) {
       await androidPlugin.createNotificationChannel(_channel);
-      debugPrint('[FCM] Android notification channel created: ${_channel.id}');
+      await androidPlugin.createNotificationChannel(_trayChannel);
+      debugPrint('[FCM] Android notification channels created: ${_channel.id}, ${_trayChannel.id}');
     }
+  }
+
+  /// Formats YYYY-MM-DD or standard dates to readable format (e.g. 17 Oct 2026).
+  static String formatDateReadable(String? dateStr) {
+    if (dateStr == null || dateStr.trim().isEmpty) return '';
+    final trimmed = dateStr.trim();
+    final match = RegExp(r'^(\d{4})-(\d{1,2})-(\d{1,2})').firstMatch(trimmed);
+    if (match != null) {
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      final year = match.group(1);
+      final monthIdx = int.parse(match.group(2)!) - 1;
+      final day = int.parse(match.group(3)!);
+      if (monthIdx >= 0 && monthIdx < 12) {
+        return '$day ${months[monthIdx]} $year';
+      }
+    }
+    return trimmed;
+  }
+
+  /// Formats appointment notification body cleanly according to specification:
+  /// Line 1: "[Student Name] booked an appointment."
+  /// Line 2: "Date: [Date] • Time: [Time]"
+  /// Strictly removes any preacher name mentions.
+  static String formatAppointmentBody({
+    required String? studentName,
+    required String? date,
+    required String? time,
+    String? rawBody,
+  }) {
+    String sName = (studentName != null && studentName.trim().isNotEmpty) ? studentName.trim() : '';
+    String finalDate = date?.trim() ?? '';
+    String finalTime = time?.trim() ?? '';
+
+    if (rawBody != null && rawBody.isNotEmpty) {
+      // Remove any "Preacher: ..." text
+      final sanitized = rawBody.replaceAll(RegExp(r'Preacher:\s*([^\n\r•]+)[•\n\r]*', caseSensitive: false), '').trim();
+      
+      if (sName.isEmpty) {
+        final sMatch = RegExp(r'^(?:Student:\s*)?([^\n\r•]+?)(?:\s+booked|\s+requested|\n|$)', caseSensitive: false).firstMatch(sanitized);
+        if (sMatch != null) sName = sMatch.group(1)!.trim();
+      }
+      if (finalDate.isEmpty) {
+        final dateMatch = RegExp(r'Date:\s*([^\n\r•]+)', caseSensitive: false).firstMatch(sanitized);
+        if (dateMatch != null) finalDate = dateMatch.group(1)!.trim();
+      }
+      if (finalTime.isEmpty) {
+        final timeMatch = RegExp(r'Time:\s*([^\n\r•]+)', caseSensitive: false).firstMatch(sanitized);
+        if (timeMatch != null) finalTime = timeMatch.group(1)!.trim();
+      }
+      if (finalDate.isEmpty || finalTime.isEmpty) {
+        final atMatch = RegExp(r'(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}\s+[A-Za-z]+\s+\d{4})\s*@\s*([0-9:APMapm\s]+)').firstMatch(sanitized);
+        if (atMatch != null) {
+          if (finalDate.isEmpty) finalDate = atMatch.group(1)!.trim();
+          if (finalTime.isEmpty) finalTime = atMatch.group(2)!.trim();
+        }
+      }
+    }
+
+    if (sName.isEmpty) sName = 'Student';
+    final formattedDate = formatDateReadable(finalDate);
+    final formattedTime = finalTime.isNotEmpty ? finalTime : '10:00 AM';
+
+    if (formattedDate.isNotEmpty) {
+      return '$sName booked an appointment.\nDate: $formattedDate • Time: $formattedTime';
+    }
+    return '$sName booked an appointment.';
   }
 
   /// Formats accommodation request body to clean student name, arrival date, and departure date.
@@ -127,27 +217,60 @@ class FcmService {
     required String? departureDate,
     String? rawBody,
   }) {
-    if (studentName != null &&
-        studentName.isNotEmpty &&
-        arrivalDate != null &&
-        arrivalDate.isNotEmpty &&
-        departureDate != null &&
-        departureDate.isNotEmpty) {
-      return 'Student: $studentName\nArrival: $arrivalDate • Departure: $departureDate';
-    }
+    String sName = (studentName != null && studentName.trim().isNotEmpty) ? studentName.trim() : '';
+    String arr = arrivalDate?.trim() ?? '';
+    String dep = departureDate?.trim() ?? '';
 
     if (rawBody != null && rawBody.isNotEmpty) {
-      final arrMatch = RegExp(r'Arrival:\s*([^\n\r•]+)', caseSensitive: false).firstMatch(rawBody);
-      final depMatch = RegExp(r'Departure:\s*([^\n\r•]+)', caseSensitive: false).firstMatch(rawBody);
-      if (arrMatch != null && depMatch != null) {
+      if (sName.isEmpty) {
         final sMatch = RegExp(r'^(?:Student:\s*)?([^\n\r•]+?)(?:\s+requested|\n|$)', caseSensitive: false).firstMatch(rawBody);
-        final name = studentName ?? sMatch?.group(1)?.trim() ?? 'Student';
-        return 'Student: $name\nArrival: ${arrMatch.group(1)!.trim()} • Departure: ${depMatch.group(1)!.trim()}';
+        if (sMatch != null) sName = sMatch.group(1)!.trim();
       }
-      return rawBody;
+      if (arr.isEmpty) {
+        final arrMatch = RegExp(r'Arrival:\s*([^\n\r•]+)', caseSensitive: false).firstMatch(rawBody);
+        if (arrMatch != null) arr = arrMatch.group(1)!.trim();
+      }
+      if (dep.isEmpty) {
+        final depMatch = RegExp(r'Departure:\s*([^\n\r•]+)', caseSensitive: false).firstMatch(rawBody);
+        if (depMatch != null) dep = depMatch.group(1)!.trim();
+      }
     }
 
-    return 'Student: ${studentName ?? "Student"}\nNew accommodation booking requested';
+    if (sName.isEmpty) sName = 'Student';
+    final formattedArrival = formatDateReadable(arr);
+    final formattedDeparture = formatDateReadable(dep);
+
+    if (formattedArrival.isNotEmpty && formattedDeparture.isNotEmpty) {
+      return 'Student: $sName\nArrival: $formattedArrival • Departure: $formattedDeparture';
+    }
+    return 'Student: $sName\nNew accommodation request';
+  }
+
+  /// Resolves a stable event key from message metadata, payload ID, or stable event ID.
+  static String resolveEventKey({
+    String? messageId,
+    Map<String, dynamic>? data,
+    String? title,
+    String? body,
+  }) {
+    if (data != null) {
+      final apptId = data['appointmentId']?.toString();
+      if (apptId != null && apptId.isNotEmpty) {
+        return 'appointment_$apptId';
+      }
+      final accId = data['accommodationId']?.toString();
+      if (accId != null && accId.isNotEmpty) {
+        return 'accommodation_$accId';
+      }
+      final entityId = data['id']?.toString() ?? data['_id']?.toString() ?? data['eventId']?.toString();
+      if (entityId != null && entityId.isNotEmpty) {
+        return 'entity_$entityId';
+      }
+    }
+    if (messageId != null && messageId.isNotEmpty) {
+      return 'fcm_$messageId';
+    }
+    return '${title?.trim() ?? ""}_${body?.trim() ?? ""}';
   }
 
   /// Show a visible notification when FCM message arrives in foreground.
@@ -158,11 +281,28 @@ class FcmService {
     String? body = message.notification?.body ?? message.data['body']?.toString() ?? message.data['message']?.toString();
 
     final category = message.data['category']?.toString();
+    final isAppointment = category == 'preacher_appointment' ||
+        category == 'appointment' ||
+        title.toLowerCase().contains('appointment') ||
+        (body != null && body.toLowerCase().contains('appointment'));
+
     final isAccommodation = category == 'accommodation' ||
         title.toLowerCase().contains('accommodation') ||
         (body != null && body.toLowerCase().contains('accommodation'));
 
-    if (isAccommodation &&
+    if (isAppointment &&
+        !title.toLowerCase().contains('approved') &&
+        !title.toLowerCase().contains('rejected')) {
+      title = 'New Appointment';
+      body = formatAppointmentBody(
+        studentName: message.data['studentName']?.toString() ??
+            message.data['student_name']?.toString() ??
+            message.data['worker_name']?.toString(),
+        date: message.data['date']?.toString() ?? message.data['preferredDate']?.toString(),
+        time: message.data['time']?.toString() ?? message.data['preferredTime']?.toString(),
+        rawBody: body,
+      );
+    } else if (isAccommodation &&
         !title.toLowerCase().contains('approved') &&
         !title.toLowerCase().contains('rejected')) {
       title = 'New Accommodation Request';
@@ -179,47 +319,59 @@ class FcmService {
       return;
     }
 
+    final eventKey = resolveEventKey(
+      messageId: message.messageId,
+      data: message.data,
+      title: title,
+      body: body,
+    );
+
     showLocalNotification(
       title: title,
       body: body,
+      eventKey: eventKey,
       payload: message.data['category']?.toString(),
     );
   }
 
   /// Show a visible notification anytime (FCM foreground or WebSocket realtime update).
-  /// Automatically deduplicates identical messages within 10 seconds to avoid multi-popups.
+  /// Automatically deduplicates using stable event ID (e.g. appointmentId, accommodationId)
+  /// within 60 seconds to avoid multi-popups while allowing distinct events.
   static void showLocalNotification({
     required String title,
     required String body,
+    String? eventKey,
     String? payload,
     int? id,
   }) {
     final now = DateTime.now().millisecondsSinceEpoch;
-    // Purge entries older than 10 seconds
-    _recentNotificationDedupe.removeWhere((_, time) => now - time > 10000);
+    // Purge entries older than 60 seconds
+    _recentNotificationDedupe.removeWhere((_, time) => now - time > 60000);
 
     final cleanTitle = title.trim();
     final cleanBody = body.trim();
-    final dedupeKey = '${cleanTitle}_$cleanBody';
+    final dedupeKey = (eventKey != null && eventKey.isNotEmpty)
+        ? eventKey
+        : '${cleanTitle}_$cleanBody';
 
     if (_recentNotificationDedupe.containsKey(dedupeKey)) {
-      debugPrint('[FCM] Suppressed duplicate notification within 10s: "$cleanTitle" - "$cleanBody"');
+      debugPrint('[FCM] Suppressed duplicate notification for event key: "$dedupeKey"');
       return;
     }
     _recentNotificationDedupe[dedupeKey] = now;
 
-    // Use remainder to guarantee 32-bit int compatibility on Android
-    final notifId = id ?? (now ~/ 1000).remainder(100000);
+    // Use stable ID derived from eventKey if available, otherwise timestamp
+    final notifId = id ?? (eventKey != null ? eventKey.hashCode.abs().remainder(100000) : (now ~/ 1000).remainder(100000));
 
-    // BigTextStyleInformation for expandable notifications on Android
+    // BigTextStyleInformation without summaryText to prevent duplicate app name in header
     final bigTextStyleInformation = BigTextStyleInformation(
       cleanBody,
       contentTitle: cleanTitle,
-      summaryText: 'Sadhana Tracker',
       htmlFormatContent: false,
       htmlFormatContentTitle: false,
     );
 
+    // 1. Show initial heads-up banner with sound & vibration
     _localNotifications.show(
       notifId,
       cleanTitle,
@@ -229,13 +381,14 @@ class FcmService {
           _channel.id,
           _channel.name,
           channelDescription: _channel.description,
-          importance: Importance.max,
+          importance: Importance.high,
           priority: Priority.high,
           icon: '@mipmap/launcher_icon',
           color: const Color(0xFF3F51B5),
           styleInformation: bigTextStyleInformation,
           playSound: true,
           enableVibration: true,
+          tag: eventKey,
         ),
         iOS: const DarwinNotificationDetails(
           presentAlert: true,
@@ -245,7 +398,54 @@ class FcmService {
       ),
       payload: payload,
     );
-    debugPrint('[FCM] Local heads-up notification displayed (id=$notifId): "$cleanTitle" - "$cleanBody"');
+    debugPrint('[FCM] Local heads-up notification displayed (id=$notifId, tag=$eventKey): "$cleanTitle" - "$cleanBody"');
+
+    // 2. Auto-dismiss heads-up banner from screen after 2.2 seconds:
+    // Dismisses the intrusive floating banner from the user's screen,
+    // while seamlessly preserving the notification in the Android drop-down tray.
+    Future.delayed(const Duration(milliseconds: 2200), () async {
+      try {
+        if (_tappedNotificationIds.contains(notifId)) {
+          // User already interacted with notification
+          return;
+        }
+
+        // Remove the floating banner from the screen
+        await _localNotifications.cancel(notifId, tag: eventKey);
+
+        // Immediately re-post silently in the notification shade/tray
+        await _localNotifications.show(
+          notifId,
+          cleanTitle,
+          cleanBody,
+          NotificationDetails(
+            android: AndroidNotificationDetails(
+              _trayChannel.id,
+              _trayChannel.name,
+              channelDescription: _trayChannel.description,
+              importance: Importance.defaultImportance,
+              priority: Priority.defaultPriority,
+              icon: '@mipmap/launcher_icon',
+              color: const Color(0xFF3F51B5),
+              styleInformation: bigTextStyleInformation,
+              playSound: false,
+              enableVibration: false,
+              onlyAlertOnce: true,
+              tag: eventKey,
+            ),
+            iOS: const DarwinNotificationDetails(
+              presentAlert: false,
+              presentBadge: true,
+              presentSound: false,
+            ),
+          ),
+          payload: payload,
+        );
+        debugPrint('[FCM] Heads-up banner auto-dismissed from screen; preserved in tray (id=$notifId, tag=$eventKey)');
+      } catch (e) {
+        debugPrint('[FCM] Error auto-collapsing heads-up notification: $e');
+      }
+    });
   }
 
   static Future<void> registerTokenWithBackend({String? overrideToken}) async {

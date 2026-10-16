@@ -98,13 +98,14 @@ class _PaymentTabState extends State<PaymentTab> {
         'work_completed': 'PAID',
       });
 
-      final studentId = payment['worker_id'];
-      if (studentId != null) {
+      final studentId = (payment['userId'] ?? payment['worker_id'] ?? payment['studentId'] ?? (payment['user'] is Map ? (payment['user']['_id'] ?? payment['user']['id']) : null))?.toString();
+      if (studentId != null && studentId.isNotEmpty) {
         NotificationHelper.sendApprovalNotification(
           studentId: studentId,
           preacherName: payment['preacher_name'] ?? 'Preacher',
           category: 'payment',
           approved: true,
+          details: payment,
         ).catchError((_) {});
       }
 
