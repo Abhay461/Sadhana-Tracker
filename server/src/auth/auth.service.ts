@@ -126,7 +126,9 @@ export class AuthService {
         let assignedRole = 'folk_boy';
         if (dto.role) {
           if (dto.role.includes('residency')) assignedRole = 'residency';
-          else if (dto.role.includes('preacher')) assignedRole = 'preacher';
+          else if (dto.role.includes('preacher')) {
+            throw new ForbiddenException('Preacher accounts cannot be self-registered. Please contact an administrator.');
+          }
           else assignedRole = 'folk_boy';
         }
 
@@ -177,9 +179,11 @@ export class AuthService {
           }
         }
 
+        const cleanPhoneNumber = normalizedPhone || (whatsappNumber ? (this.normalizePhoneNumber(whatsappNumber) || whatsappNumber) : phoneToStore);
+
         user = await this.userModel.create({
           firebaseUid,
-          phoneNumber: phoneToStore,
+          phoneNumber: cleanPhoneNumber,
           whatsapp_number: whatsappNumber,
           dob: extractedDob,
           joiningDate: extractedJoiningDate,

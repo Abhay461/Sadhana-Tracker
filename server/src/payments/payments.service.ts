@@ -45,21 +45,32 @@ export class PaymentsService {
     return this.paymentModel.find({ userId }).sort({ createdAt: -1 });
   }
 
-  async getPreacherQueue(preacherId: string) {
+  async getPreacherQueue(preacher: any) {
+    const preacherId = (preacher?._id ?? preacher?.id ?? preacher).toString();
+    const canViewAll = Boolean(
+      preacher?.canViewAllStudents || preacher?.isHeadPreacher || preacher?.role === 'admin'
+    );
+    const filter = canViewAll ? {} : { preacherId };
+
     return this.paymentModel
-      .find({ preacherId })
+      .find(filter)
       .populate('userId', 'name email phoneNumber photoUrl')
       .sort({ createdAt: -1 });
   }
 
-  async verifyPayment(preacherId: string, id: string, dto: ApprovePaymentDto) {
+  async verifyPayment(preacher: any, id: string, dto: ApprovePaymentDto) {
     const payment = await this.paymentModel.findById(id);
 
     if (!payment) {
       throw new NotFoundException('Payment record not found.');
     }
 
-    if (payment.preacherId.toString() !== preacherId.toString()) {
+    const preacherId = (preacher?._id ?? preacher?.id ?? preacher).toString();
+    const canViewAll = Boolean(
+      preacher?.canViewAllStudents || preacher?.isHeadPreacher || preacher?.role === 'admin'
+    );
+
+    if (!canViewAll && payment.preacherId?.toString() !== preacherId) {
       throw new ForbiddenException('Access denied: Payment record is not in your preacher verification queue.');
     }
 
@@ -69,8 +80,8 @@ export class PaymentsService {
     }
     await payment.save();
 
-    this.realtimeService.emit('payment_update', 'update', payment, {
-      preacherId: preacherId.toString(),
+    this.realtimeService?.emit('payment_update', 'update', payment, {
+      preacherId: payment.preacherId?.toString() || preacherId,
       studentId: payment.userId?.toString(),
     });
 

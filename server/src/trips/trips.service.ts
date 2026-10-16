@@ -25,7 +25,7 @@ export class TripsService {
       createdBy: creatorUser._id,
       isActive: true,
     });
-    this.realtimeService.emit('trip_update', 'create', trip);
+    this.realtimeService?.emit('trip_update', 'create', trip);
     return trip;
   }
 
@@ -57,7 +57,7 @@ export class TripsService {
       registration,
       registrationLink: trip.registrationLink,
     };
-    this.realtimeService.emit('trip_update', 'register', result, { studentId: userId });
+    this.realtimeService?.emit('trip_update', 'register', result, { studentId: userId });
     return result;
   }
 

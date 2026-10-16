@@ -105,7 +105,7 @@ export class SadhanaService {
       { new: true, upsert: true, runValidators: false },
     );
 
-    this.realtimeService.emit('sadhana_update', 'create', updatedEntry, { studentId: userId });
+    this.realtimeService?.emit('sadhana_update', 'create', updatedEntry, { studentId: userId });
     return updatedEntry;
   }
 
@@ -221,7 +221,7 @@ export class SadhanaService {
       };
 
       const eventType = category === 'accommodation' ? 'accommodation_update' : (category === 'payment' ? 'payment_update' : 'sadhana_update');
-      this.realtimeService.emit(eventType, 'create', payload, { studentId: userId });
+      this.realtimeService?.emit(eventType, 'create', payload, { studentId: userId });
       return payload;
     }
 
@@ -508,7 +508,20 @@ export class SadhanaService {
     return [...mappedAppointments, ...mappedSadhana];
   }
 
-  async updateStudentUpdate(id: string, body: any) {
+  async updateStudentUpdate(userOrId: any, idOrBody: any, maybeBody?: any) {
+    let currentUser: any = null;
+    let id: string;
+    let body: any;
+
+    if (maybeBody !== undefined) {
+      currentUser = userOrId;
+      id = idOrBody;
+      body = maybeBody;
+    } else {
+      id = userOrId;
+      body = idOrBody;
+    }
+
     console.log(`📌 [BACKEND PATCH /sadhana/updates/${id}] Request Body:`, JSON.stringify(body));
 
     let status = 'APPROVED';
@@ -529,6 +542,22 @@ export class SadhanaService {
     if (Types.ObjectId.isValid(id)) {
       const existingAppt = await this.appointmentModel.findById(id);
       if (existingAppt) {
+        if (currentUser) {
+          const userRole = (currentUser?.role || '').toLowerCase();
+          const isAdmin = userRole === 'admin' || currentUser?.isAdmin === true;
+          const canViewAll = Boolean(isAdmin || currentUser?.canViewAllStudents || currentUser?.isHeadPreacher);
+          const currentUserIdStr = (currentUser?._id || currentUser?.id || '').toString();
+          const apptPreacherIdStr = existingAppt.preacherId?.toString() || '';
+          const apptStudentIdStr = existingAppt.userId?.toString() || '';
+
+          if (!canViewAll && apptPreacherIdStr !== currentUserIdStr) {
+            if (apptStudentIdStr === currentUserIdStr) {
+              throw new ForbiddenException('Students cannot approve or reject their own appointments.');
+            }
+            throw new ForbiddenException('Access denied: You are not authorized to update this appointment.');
+          }
+        }
+
         existingAppt.status = status;
 
         if (status === 'APPROVED') {
@@ -569,7 +598,7 @@ export class SadhanaService {
           ...body,
         };
         console.log(`📌 [APPOINTMENT APPROVE/REJECT RESPONSE]:`, JSON.stringify(response));
-        this.realtimeService.emit('appointment_update', 'update', response);
+        this.realtimeService?.emit('appointment_update', 'update', response);
         return response;
       }
     }
@@ -583,18 +612,45 @@ export class SadhanaService {
       work_completed: status,
       is_completed: true,
     };
-    this.realtimeService.emit('sadhana_update', 'update', fallbackRes);
+    this.realtimeService?.emit('sadhana_update', 'update', fallbackRes);
     return fallbackRes;
   }
 
-  async deleteUpdate(id: string, label?: string, activityKey?: string) {
+  async deleteUpdate(currentUserOrId: any, idOrLabel?: string, labelOrKey?: string, maybeKey?: string) {
+    let currentUser: any = null;
+    let id: string;
+    let label: string | undefined;
+    let activityKey: string | undefined;
+
+    if (typeof currentUserOrId === 'object' && currentUserOrId !== null) {
+      currentUser = currentUserOrId;
+      id = idOrLabel || '';
+      label = labelOrKey;
+      activityKey = maybeKey;
+    } else {
+      id = currentUserOrId;
+      label = idOrLabel;
+      activityKey = labelOrKey;
+    }
+
+    const currentUserId = (currentUser?._id || currentUser?.id || (typeof currentUser === 'string' ? currentUser : '')).toString();
+    const userRole = (currentUser?.role || '').toLowerCase();
+    const isAdmin = userRole === 'admin' || currentUser?.isAdmin === true;
+    const isPreacher = userRole === 'preacher' || isAdmin;
+    const canViewAll = Boolean(isAdmin || currentUser?.canViewAllStudents || currentUser?.isHeadPreacher);
+
     if (Types.ObjectId.isValid(id)) {
       const apptDoc = await this.appointmentModel.findById(id);
       if (apptDoc) {
+        const apptPreacherId = apptDoc.preacherId?.toString() || '';
+        const apptStudentId = apptDoc.userId?.toString() || '';
+        if (currentUser && !canViewAll && apptPreacherId !== currentUserId && apptStudentId !== currentUserId) {
+          throw new ForbiddenException('Access denied: You are not authorized to reject or delete this appointment.');
+        }
         apptDoc.status = 'REJECTED';
         await apptDoc.save();
         console.log(`📌 [APPOINTMENT MONGO UPDATED VIA DELETE]: ID=${id}, FinalStatus=REJECTED`);
-        this.realtimeService.emit('appointment_update', 'update', { id, appointmentId: id, status: 'REJECTED' });
+        this.realtimeService?.emit('appointment_update', 'update', { id, appointmentId: id, status: 'REJECTED' });
         return { success: true, id, status: 'REJECTED' };
       }
     }
@@ -603,7 +659,14 @@ export class SadhanaService {
     let entry: SadhanaEntryDocument | null = null;
 
     if (id.includes('-') && id.length <= 10) {
-      entry = await this.sadhanaModel.findOne({ dateString: id });
+      if (currentUserId) {
+        const userCondition: any = Types.ObjectId.isValid(currentUserId)
+          ? { $or: [{ userId: new Types.ObjectId(currentUserId) }, { userId: currentUserId }] }
+          : { userId: currentUserId };
+        entry = await this.sadhanaModel.findOne({ ...userCondition, dateString: id });
+      } else {
+        entry = await this.sadhanaModel.findOne({ dateString: id });
+      }
     } else {
       try {
         entry = await this.sadhanaModel.findById(id);
@@ -614,6 +677,10 @@ export class SadhanaService {
 
     if (!entry) {
       return { success: false, message: 'Record not found' };
+    }
+
+    if (currentUser && !canViewAll && !isPreacher && currentUserId && entry.userId?.toString() !== currentUserId) {
+      throw new ForbiddenException('Access denied: You cannot delete another user\'s sadhana entry.');
     }
 
     let key = activityKey || this.determineActivityKeyFromLabel(label || '');
@@ -677,7 +744,7 @@ export class SadhanaService {
       deleted = true;
     }
     const delResult = { success: true, id, deleted };
-    this.realtimeService.emit('sadhana_update', 'delete', delResult);
+    this.realtimeService?.emit('sadhana_update', 'delete', delResult);
     return delResult;
   }
 
@@ -736,7 +803,7 @@ export class SadhanaService {
       },
       { new: true, upsert: true },
     );
-    this.realtimeService.emit('sadhana_update', 'update', entry, { studentId: dto.userId });
+    this.realtimeService?.emit('sadhana_update', 'update', entry, { studentId: dto.userId });
     return entry;
   }
 }

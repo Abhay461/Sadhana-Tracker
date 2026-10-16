@@ -24,9 +24,11 @@ export class ActiveUserGuard implements CanActivate {
     const mongoUser = await this.userModel.findOne({ firebaseUid: firebaseUser.uid });
 
     if (!mongoUser) {
-      // User is authenticated via Firebase but profile not synced in MongoDB yet
-      request.mongoUser = null;
-      return true; // Allow /auth/sync endpoint to process registration
+      throw new UnauthorizedException({
+        statusCode: 401,
+        errorCode: 'PROFILE_NOT_SYNCED',
+        message: 'User profile not found in database. Please complete sync first.',
+      });
     }
 
     if (mongoUser.isBlocked || mongoUser.status === 'BLOCKED') {

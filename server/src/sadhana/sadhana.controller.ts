@@ -54,28 +54,30 @@ export class SadhanaController {
 
   @Patch('updates/:id')
   @ApiOperation({ summary: 'Update sadhana update log' })
-  async patchUpdate(@Param('id') id: string, @Body() body: any) {
-    return this.sadhanaService.updateStudentUpdate(id, body);
+  async patchUpdate(@CurrentUser() user: any, @Param('id') id: string, @Body() body: any) {
+    return this.sadhanaService.updateStudentUpdate(user, id, body);
   }
 
   @Delete('updates/:id')
   @ApiOperation({ summary: 'Delete sadhana update log' })
   async deleteUpdate(
+    @CurrentUser() user: any,
     @Param('id') id: string,
     @Query('label') label?: string,
     @Query('activityKey') activityKey?: string,
   ) {
-    return this.sadhanaService.deleteUpdate(id, label, activityKey);
+    return this.sadhanaService.deleteUpdate(user, id, label, activityKey);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete sadhana entry' })
   async deleteSadhanaById(
+    @CurrentUser() user: any,
     @Param('id') id: string,
     @Query('label') label?: string,
     @Query('activityKey') activityKey?: string,
   ) {
-    return this.sadhanaService.deleteUpdate(id, label, activityKey);
+    return this.sadhanaService.deleteUpdate(user, id, label, activityKey);
   }
 
   @Get('history')

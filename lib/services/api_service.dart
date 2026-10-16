@@ -8,6 +8,7 @@ import '../utils/notification_helper.dart';
 import '../utils/user_session.dart';
 import '../screens/preacher_dashboard.dart';
 import 'realtime_service.dart';
+import 'fcm_service.dart';
 
 class ApiService {
   static String get baseUrl => Constants.apiBaseUrl;
@@ -48,6 +49,7 @@ class ApiService {
 
   static Future<void> logout() async {
     clearTokenCache();
+    await FcmService.revokeTokenOnLogout().catchError((_) {});
     await NotificationHelper.logoutUser().catchError((_) {});
     await FirebaseAuth.instance.signOut().catchError((_) {});
   }

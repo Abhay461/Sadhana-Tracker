@@ -25,7 +25,7 @@ export class EventsService {
       createdBy: creatorUser._id,
       isActive: true,
     });
-    this.realtimeService.emit('event_update', 'create', event);
+    this.realtimeService?.emit('event_update', 'create', event);
     return event;
   }
 
@@ -57,7 +57,7 @@ export class EventsService {
       registration,
       registrationLink: event.registrationLink,
     };
-    this.realtimeService.emit('event_update', 'register', result, { studentId: userId });
+    this.realtimeService?.emit('event_update', 'register', result, { studentId: userId });
     return result;
   }
 

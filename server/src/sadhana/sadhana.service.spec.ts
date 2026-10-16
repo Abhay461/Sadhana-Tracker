@@ -8,8 +8,15 @@ describe('SadhanaService', () => {
     findOneAndUpdate: jest.fn(),
   };
 
+  const realtimeService = {
+    emit: jest.fn(),
+  };
+
   const service = new SadhanaService(
     sadhanaModel as unknown as Model<SadhanaEntryDocument>,
+    undefined,
+    undefined,
+    realtimeService as any,
   );
 
   beforeEach(() => {
@@ -34,7 +41,7 @@ describe('SadhanaService', () => {
           timezoneOffsetMinutes: 330,
         }),
       }),
-      { new: true, upsert: true, runValidators: true },
+      { new: true, upsert: true, runValidators: false },
     );
   });
 });

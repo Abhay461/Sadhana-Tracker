@@ -4,6 +4,7 @@ import {
   Delete,
   Body,
   UseGuards,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
@@ -46,7 +47,24 @@ export class NotificationsController {
   @UseGuards(RolesGuard)
   @Roles('admin', 'preacher', 'folk_boy', 'residency', 'student', 'user', 'member')
   @ApiOperation({ summary: 'Send targeted FCM push notification' })
-  async sendNotification(@Body() dto: SendNotificationDto) {
+  async sendNotification(
+    @CurrentUser() user: any,
+    @Body() dto: SendNotificationDto,
+  ) {
+    if (user?.role !== 'admin' && user?.role !== 'preacher') {
+      const allowedPreacherId = (user?.preacherId?._id || user?.preacherId)?.toString();
+      if (!allowedPreacherId) {
+        throw new ForbiddenException('You do not have an assigned preacher to notify');
+      }
+      const isOnlyPreacher =
+        Array.isArray(dto.targetUserIds) &&
+        dto.targetUserIds.length === 1 &&
+        dto.targetUserIds[0] === allowedPreacherId;
+
+      if (!isOnlyPreacher) {
+        throw new ForbiddenException('Non-preacher users can only send notifications to their assigned preacher');
+      }
+    }
     return this.notificationsService.sendMulticastNotification(dto);
   }
 }

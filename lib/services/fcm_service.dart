@@ -70,10 +70,22 @@ class FcmService {
     }
   }
 
+  /// Deduplication cache: key -> timestamp (milliseconds). Prevents duplicate heads-up notifications.
+  static final Map<String, int> _recentNotificationDedupe = {};
+
   /// Set up flutter_local_notifications and create the Android channel.
   static Future<void> _setupLocalNotifications() async {
     const androidSettings = AndroidInitializationSettings('@mipmap/launcher_icon');
-    const initSettings = InitializationSettings(android: androidSettings);
+    const darwinSettings = DarwinInitializationSettings(
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
+    );
+    const initSettings = InitializationSettings(
+      android: androidSettings,
+      iOS: darwinSettings,
+      macOS: darwinSettings,
+    );
 
     await _localNotifications.initialize(initSettings);
 
@@ -103,14 +115,32 @@ class FcmService {
   }
 
   /// Show a visible notification anytime (FCM foreground or WebSocket realtime update).
+  /// Automatically deduplicates identical messages within 10 seconds to avoid multi-popups.
   static void showLocalNotification({
     required String title,
     required String body,
   }) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    // Purge entries older than 10 seconds
+    _recentNotificationDedupe.removeWhere((_, time) => now - time > 10000);
+
+    final cleanTitle = title.trim();
+    final cleanBody = body.trim();
+    final dedupeKey = '${cleanTitle}_$cleanBody';
+
+    if (_recentNotificationDedupe.containsKey(dedupeKey)) {
+      debugPrint('[FCM] Suppressed duplicate notification within 10s: "$cleanTitle" - "$cleanBody"');
+      return;
+    }
+    _recentNotificationDedupe[dedupeKey] = now;
+
+    // Use remainder to guarantee 32-bit int compatibility on Android
+    final notifId = (now ~/ 1000).remainder(100000);
+
     _localNotifications.show(
-      DateTime.now().millisecondsSinceEpoch ~/ 1000,
-      title,
-      body,
+      notifId,
+      cleanTitle,
+      cleanBody,
       NotificationDetails(
         android: AndroidNotificationDetails(
           _channel.id,
@@ -122,9 +152,14 @@ class FcmService {
           playSound: true,
           enableVibration: true,
         ),
+        iOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
       ),
     );
-    debugPrint('[FCM] Local heads-up notification displayed: "$title" - "$body"');
+    debugPrint('[FCM] Local heads-up notification displayed (id=$notifId): "$cleanTitle" - "$cleanBody"');
   }
 
   static Future<void> registerTokenWithBackend({String? overrideToken}) async {
@@ -152,8 +187,13 @@ class FcmService {
     }
   }
 
-  static Future<void> revokeTokenOnLogout(String fcmToken) async {
+  static Future<void> revokeTokenOnLogout({String? token}) async {
     try {
+      final fcmToken = token ?? await _messaging.getToken();
+      if (fcmToken == null || fcmToken.isEmpty) {
+        debugPrint('[FCM] No token to revoke on logout');
+        return;
+      }
       await ApiService.delete('/notifications/device-token', body: {
         'fcmToken': fcmToken,
       });

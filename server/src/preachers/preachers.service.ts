@@ -163,7 +163,7 @@ export class PreachersService {
     const canViewAll = Boolean(
       preacher?.canViewAllStudents || preacher?.isHeadPreacher || preacher?.role === 'admin'
     );
-    const studentPreacherId = (student.preacherId ?? (student as any).preacher_id)?.toString() || '';
+    const studentPreacherId = (student.preacherId?._id ?? student.preacherId ?? (student as any).preacher_id)?.toString() || '';
     const extraUid = (preacher?.firebaseUid ?? preacher?.uid ?? '').toString();
 
     if (!canViewAll && studentPreacherId !== preacherId && (!extraUid || studentPreacherId !== extraUid)) {
@@ -178,7 +178,7 @@ export class PreachersService {
       name: student.name,
       status: student.status,
     };
-    this.realtimeService.emit('student_update', 'update', res, { preacherId, studentId });
+    this.realtimeService?.emit('student_update', 'update', res, { preacherId, studentId });
     return res;
   }
 

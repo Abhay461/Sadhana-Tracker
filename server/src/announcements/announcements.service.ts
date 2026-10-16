@@ -38,7 +38,7 @@ export class AnnouncementsService {
       createdBy: createdBy,
       isActive: true,
     });
-    this.realtimeService.emit('announcement_update', 'create', res);
+    this.realtimeService?.emit('announcement_update', 'create', res);
     return res;
   }
 
@@ -56,7 +56,7 @@ export class AnnouncementsService {
       await this.announcementModel.deleteOne({ _id: id });
     }
     const res = { success: true, id, message: 'Announcement deleted from database & Cloudinary' };
-    this.realtimeService.emit('announcement_update', 'delete', res);
+    this.realtimeService?.emit('announcement_update', 'delete', res);
     return res;
   }
 }

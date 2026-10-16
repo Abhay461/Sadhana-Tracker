@@ -199,15 +199,10 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
     _realtimeSub?.cancel();
     _realtimeSub = RealtimeService.instance.eventStream.listen(_handleRealtimeEvent);
 
-    // 2. FCM foreground message listener
+    // 2. FCM foreground message listener (auto-refresh data on incoming FCM message)
     _fcmForegroundSub?.cancel();
     _fcmForegroundSub = FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      debugPrint('🔔 [PREACHER] FCM foreground message: ${message.notification?.title ?? message.data.toString()}');
-      final title = message.notification?.title ?? message.data['title']?.toString() ?? 'Sadhana Tracker';
-      final body = message.notification?.body ?? message.data['body']?.toString() ?? message.data['message']?.toString();
-      if (body != null && body.trim().isNotEmpty) {
-        FcmService.showLocalNotification(title: title, body: body);
-      }
+      debugPrint('🔔 [PREACHER] FCM foreground message received: ${message.notification?.title ?? message.data.toString()}');
       _silentRefresh();
     });
   }
@@ -221,8 +216,7 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
         break;
       case 'accommodation_update':
         if (event.action == 'create') {
-          final payload = event.payload is Map ? event.payload as Map : {};
-          final desc = payload['requestDetails']?.toString().replaceAll('\n', ' • ') ?? 'New accommodation request submitted';
+          final desc = event.data['requestDetails']?.toString().replaceAll('\n', ' • ') ?? 'New accommodation request submitted';
           FcmService.showLocalNotification(
             title: 'Accommodation Request',
             body: desc,
@@ -232,9 +226,8 @@ class _PreacherDashboardState extends State<PreacherDashboard> with WidgetsBindi
         break;
       case 'appointment_update':
         if (event.action == 'create') {
-          final payload = event.payload is Map ? event.payload as Map : {};
-          final student = payload['worker_name']?.toString() ?? 'A student';
-          final desc = payload['work_started']?.toString() ?? 'Appointment booked';
+          final student = event.data['worker_name']?.toString() ?? 'A student';
+          final desc = event.data['work_started']?.toString() ?? 'Appointment booked';
           FcmService.showLocalNotification(
             title: 'Appointment Booked',
             body: '$student booked $desc',

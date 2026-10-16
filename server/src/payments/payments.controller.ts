@@ -43,7 +43,7 @@ export class PaymentsController {
   @Roles('preacher', 'admin')
   @ApiOperation({ summary: 'Get preacher payment verification queue' })
   async getPreacherQueue(@CurrentUser() preacher: any) {
-    return this.paymentsService.getPreacherQueue(preacher._id);
+    return this.paymentsService.getPreacherQueue(preacher);
   }
 
   @Patch(':id/verify')
@@ -54,6 +54,6 @@ export class PaymentsController {
     @Param('id') id: string,
     @Body() dto: ApprovePaymentDto,
   ) {
-    return this.paymentsService.verifyPayment(preacher._id, id, dto);
+    return this.paymentsService.verifyPayment(preacher, id, dto);
   }
 }

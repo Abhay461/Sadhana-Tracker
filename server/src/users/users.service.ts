@@ -48,8 +48,6 @@ export class UsersService {
     if (dto.college) updateData.college = dto.college;
     if (dto.courseYear) updateData.courseYear = dto.courseYear;
     if (dto.city) updateData.city = dto.city;
-    if (typeof dto.canViewAllStudents === 'boolean') updateData.canViewAllStudents = dto.canViewAllStudents;
-    if (typeof dto.isHeadPreacher === 'boolean') updateData.isHeadPreacher = dto.isHeadPreacher;
 
     const user = await this.userModel.findByIdAndUpdate(userId, { $set: updateData }, { new: true }).populate('preacherId', 'name email photoUrl phoneNumber whatsapp_number');
     if (!user) {
@@ -68,22 +66,6 @@ export class UsersService {
       .select('_id name email preacherCode photoUrl phoneNumber firebaseUid')
       .sort({ name: 1 })
       .lean();
-
-    // Verify orphans in background without blocking the HTTP response
-    setImmediate(async () => {
-      for (const p of preachers) {
-        if (p.firebaseUid) {
-          try {
-            await this.firebaseService.getAuth().getUser(p.firebaseUid);
-          } catch (err: any) {
-            if (err?.code === 'auth/user-not-found') {
-              this.logger.warn(`Preacher ${p.name} (${p._id}) not found in Firebase Auth. Deactivating orphan in MongoDB.`);
-              await this.userModel.findByIdAndUpdate(p._id, { status: 'DEACTIVATED', isBlocked: true });
-            }
-          }
-        }
-      }
-    });
 
     return preachers.map((p: any) => ({
       id: p._id.toString(),

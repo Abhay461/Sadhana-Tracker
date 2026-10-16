@@ -61,7 +61,7 @@ export class AccommodationsService {
 
     console.log(`📌 [ACCOMMODATION BOOKING CREATED]: BookingID=${accommodation._id}, StudentID=${user._id}, PreacherID=${preacherIdObj?.toString() || 'UNASSIGNED'}`);
 
-    this.realtimeService.emit('accommodation_update', 'create', accommodation, {
+    this.realtimeService?.emit('accommodation_update', 'create', accommodation, {
       preacherId: preacherIdObj?.toString(),
       studentId: user._id?.toString(),
     });
@@ -140,10 +140,16 @@ export class AccommodationsService {
       preacher.canViewAllStudents || preacher.isHeadPreacher || preacher.role === 'admin'
     );
 
-    if (!canViewAll && item.preacherId && item.preacherId.toString() !== preacherId) {
-      const student = await this.userModel.findById(item.userId).select('preacherId').lean();
-      if (!student || !student.preacherId || student.preacherId.toString() !== preacherId) {
+    if (!canViewAll) {
+      const itemPreacherIdStr = item.preacherId?.toString();
+      if (itemPreacherIdStr && itemPreacherIdStr !== preacherId) {
         throw new ForbiddenException('Access denied: Request is assigned to another preacher queue.');
+      }
+      if (!itemPreacherIdStr) {
+        const student = await this.userModel.findById(item.userId).select('preacherId').lean();
+        if (student?.preacherId && student.preacherId.toString() !== preacherId) {
+          throw new ForbiddenException('Access denied: Request is assigned to another preacher queue.');
+        }
       }
     }
 
@@ -155,7 +161,7 @@ export class AccommodationsService {
 
     console.log(`📌 [ACCOMMODATION STATUS UPDATED]: BookingID=${item._id}, PreacherID=${preacherId}, Status=${item.status}, AssignedRoom=${item.assignedRoom || 'NONE'}`);
 
-    this.realtimeService.emit('accommodation_update', 'update', item, {
+    this.realtimeService?.emit('accommodation_update', 'update', item, {
       preacherId: preacherId?.toString(),
       studentId: item.userId?.toString(),
     });

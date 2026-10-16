@@ -6619,7 +6619,7 @@ class _FolkAccommodationSheetState extends State<_FolkAccommodationSheet> with S
       } catch (accError) {
         debugPrint('Error saving to /accommodations endpoint: $accError');
       }
-      NotificationHelper.sendUpdateNotification(updateData).catchError((_) {});
+      // Note: Backend accommodations.service handles push notification dispatch to avoid duplicate alerts
 
       if (mounted) {
         setState(() {
@@ -7289,7 +7289,7 @@ class _PreacherAppointmentSheetState extends State<_PreacherAppointmentSheet> {
       debugPrint('📌 [STUDENT APPOINTMENT SUBMIT REQUEST]: $updateData');
       final resPayload = await ApiService.post('/sadhana/student-update', updateData);
       debugPrint('📌 [STUDENT APPOINTMENT CREATION RESPONSE]: $resPayload');
-      NotificationHelper.sendUpdateNotification(updateData).catchError((_) {});
+      // Note: Backend sadhana.service handles push notification dispatch to avoid duplicate alerts
 
       if (mounted) {
         FocusScope.of(context).unfocus();

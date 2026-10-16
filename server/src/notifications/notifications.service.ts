@@ -51,8 +51,11 @@ export class NotificationsService {
     return device;
   }
 
-  async removeDeviceToken(userId: string, fcmToken: string) {
-    await this.userDeviceModel.deleteOne({ fcmToken });
+  async removeDeviceToken(userId: string, fcmToken?: string) {
+    if (!fcmToken || typeof fcmToken !== 'string' || fcmToken.trim().length === 0) {
+      return { success: false, message: 'Invalid token' };
+    }
+    await this.userDeviceModel.deleteOne({ fcmToken: fcmToken.trim() });
     this.logger.log(`Revoked FCM token for user ${userId}`);
     return { success: true };
   }
@@ -75,17 +78,21 @@ export class NotificationsService {
       }
     }
 
-    const matchedUsers = await this.userModel
-      .find({
-        $or: [
-          { _id: { $in: Array.from(targetOids).map((id) => new Types.ObjectId(id)) } },
-          { firebaseUid: { $in: rawIds } },
-        ],
-      })
-      .select('_id')
-      .lean();
+    const matchedUsersQuery: any[] = [];
+    if (targetOids.size > 0) {
+      matchedUsersQuery.push({ _id: { $in: Array.from(targetOids).map((id) => new Types.ObjectId(id)) } });
+    }
+    if (rawIds.length > 0) {
+      matchedUsersQuery.push({ firebaseUid: { $in: rawIds } });
+    }
 
-    matchedUsers.forEach((u) => targetOids.add(u._id.toString()));
+    if (matchedUsersQuery.length > 0) {
+      const matchedUsers = await this.userModel
+        .find({ $or: matchedUsersQuery })
+        .select('_id')
+        .lean();
+      matchedUsers.forEach((u) => targetOids.add(u._id.toString()));
+    }
 
     const targetObjectIds = Array.from(targetOids).map((id) => new Types.ObjectId(id));
     const targetStringIds = Array.from(targetOids);
@@ -121,92 +128,101 @@ export class NotificationsService {
     sanitizedData['title'] = dto.title;
     sanitizedData['body'] = dto.body;
 
-    const message: any = {
-      tokens,
-      notification: {
-        title: dto.title,
-        body: dto.body,
-      },
-      data: sanitizedData,
-      android: {
-        priority: 'high',
+    const BATCH_SIZE = 500;
+    let totalSuccess = 0;
+    let totalFailure = 0;
+    const tokensToRemove: string[] = [];
+    const messaging = this.firebaseService.getMessaging();
+
+    for (let i = 0; i < tokens.length; i += BATCH_SIZE) {
+      const chunk = tokens.slice(i, i + BATCH_SIZE);
+      const message: any = {
+        tokens: chunk,
         notification: {
-          channelId: 'sadhana_tracker_notifications',
-          sound: 'default',
-          priority: 'high',
-          defaultSound: true,
-          defaultVibrateTimings: true,
+          title: dto.title,
+          body: dto.body,
         },
-      },
-      apns: {
-        payload: {
-          aps: {
+        data: sanitizedData,
+        android: {
+          priority: 'high',
+          notification: {
+            channelId: 'sadhana_tracker_notifications',
             sound: 'default',
-            badge: 1,
+            priority: 'high',
+            defaultSound: true,
+            defaultVibrateTimings: true,
           },
         },
-      },
-    };
+        apns: {
+          payload: {
+            aps: {
+              sound: 'default',
+              badge: 1,
+            },
+          },
+        },
+      };
 
-    try {
-      const messaging = this.firebaseService.getMessaging();
-      let response: any;
-
-      if (typeof (messaging as any).sendEachForMulticast === 'function') {
-        response = await (messaging as any).sendEachForMulticast(message);
-      } else if (typeof (messaging as any).sendMulticast === 'function') {
-        response = await (messaging as any).sendMulticast(message);
-      } else {
-        response = { successCount: 0, failureCount: 0, responses: [] };
-        for (const token of tokens) {
-          try {
-            await messaging.send({
-              token,
-              notification: { title: dto.title, body: dto.body },
-              data: sanitizedData,
-            });
-            response.successCount++;
-            response.responses.push({ success: true });
-          } catch (err: any) {
-            response.failureCount++;
-            response.responses.push({ success: false, error: err });
-          }
-        }
-      }
-
-      this.logger.log(
-        `FCM Multicast sent to ${tokens.length} devices: ${response.successCount} succeeded, ${response.failureCount} failed.`,
-      );
-
-      // Clean up invalid/unregistered tokens
-      if (response.failureCount > 0 && response.responses) {
-        const tokensToRemove: string[] = [];
-        response.responses.forEach((resp: any, idx: number) => {
-          if (!resp.success && resp.error) {
-            const code = resp.error.code;
-            this.logger.warn(`Device ${idx} error: ${resp.error.message} (${code})`);
-            if (
-              code === 'messaging/registration-token-not-registered' ||
-              code === 'messaging/invalid-registration-token'
-            ) {
-              tokensToRemove.push(tokens[idx]);
+      try {
+        let response: any;
+        if (typeof (messaging as any).sendEachForMulticast === 'function') {
+          response = await (messaging as any).sendEachForMulticast(message);
+        } else if (typeof (messaging as any).sendMulticast === 'function') {
+          response = await (messaging as any).sendMulticast(message);
+        } else {
+          response = { successCount: 0, failureCount: 0, responses: [] };
+          for (const token of chunk) {
+            try {
+              await messaging.send({
+                token,
+                notification: { title: dto.title, body: dto.body },
+                data: sanitizedData,
+              });
+              response.successCount++;
+              response.responses.push({ success: true });
+            } catch (err: any) {
+              response.failureCount++;
+              response.responses.push({ success: false, error: err });
             }
           }
-        });
-
-        if (tokensToRemove.length > 0) {
-          await this.userDeviceModel.deleteMany({ fcmToken: { $in: tokensToRemove } });
-          this.logger.log(`Purged ${tokensToRemove.length} stale/invalid FCM tokens from database.`);
         }
-      }
 
-      return {
-        successCount: response.successCount,
-        failureCount: response.failureCount,
-      };
-    } catch (e) {
-      this.logger.error(`FCM Multicast send exception: ${e.message}`);
-      return { successCount: 0, failureCount: tokens.length, error: e.message };
+        totalSuccess += response.successCount || 0;
+        totalFailure += response.failureCount || 0;
+
+        // Clean up invalid/unregistered tokens
+        if (response.failureCount > 0 && response.responses) {
+          response.responses.forEach((resp: any, idx: number) => {
+            if (!resp.success && resp.error) {
+              const code = resp.error.code;
+              this.logger.warn(`Device ${i + idx} error: ${resp.error.message} (${code})`);
+              if (
+                code === 'messaging/registration-token-not-registered' ||
+                code === 'messaging/invalid-registration-token'
+              ) {
+                tokensToRemove.push(chunk[idx]);
+              }
+            }
+          });
+        }
+      } catch (chunkError: any) {
+        this.logger.error(`FCM chunk multicast exception: ${chunkError.message}`);
+        totalFailure += chunk.length;
+      }
     }
+
+    if (tokensToRemove.length > 0) {
+      await this.userDeviceModel.deleteMany({ fcmToken: { $in: tokensToRemove } });
+      this.logger.log(`Purged ${tokensToRemove.length} stale/invalid FCM tokens from database.`);
+    }
+
+    this.logger.log(
+      `FCM Multicast sent to ${tokens.length} devices in total: ${totalSuccess} succeeded, ${totalFailure} failed.`,
+    );
+
+    return {
+      successCount: totalSuccess,
+      failureCount: totalFailure,
+    };
   }
 }
