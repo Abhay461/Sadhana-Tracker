@@ -13,6 +13,18 @@ jobs:
       - name: Ping Health Endpoint
         run: |
           echo "Pinging Render backend at $(date -u)"
-          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" --max-time 45 "https://sadhana-tracker-qq6m.onrender.com/api/v1/health")
+          # Render may need more than one request to wake a sleeping free-tier service.
+          RESPONSE=$(curl \
+            --fail-with-body \
+            --location \
+            --silent \
+            --show-error \
+            --retry 5 \
+            --retry-delay 10 \
+            --retry-max-time 180 \
+            --connect-timeout 10 \
+            --max-time 60 \
+            -w "\nHTTP_STATUS:%{http_code}" \
+            "https://sadhana-tracker-qq6m.onrender.com/api/v1/health")
           echo "$RESPONSE"
           echo "Keep-alive ping completed successfully!"
